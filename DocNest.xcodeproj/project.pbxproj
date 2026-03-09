@@ -1,0 +1,593 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0C0958A98ED0BC8389BBA0C9 /* DocumentRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF537CE863340AB823C51D5C /* DocumentRecord.swift */; };
+		2423CFECF69765FB09B4592A /* DocumentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051CE3481269CA75C84B0B72 /* DocumentListView.swift */; };
+		3C5C703826BEB50F7BCFF836 /* DocNestApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B34DF5ACFF5069169049C6 /* DocNestApp.swift */; };
+		4C1368A6F47101D34D33808A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBBA8006045ACAA798F6A49 /* RootView.swift */; };
+		6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */; };
+		9B1EA4B0472E2FA374348A7F /* DocNestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD39DB5ED19340D342B038E6 /* DocNestTests.swift */; };
+		A67C2A9BBA4BD3402F3871B7 /* LibrarySidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0AAAEB26F93E46DA446829E /* LibrarySidebarView.swift */; };
+		A702052A7EEBA5D0ED3DCFC3 /* LabelTag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23AC657950D272E01D18DE75 /* LabelTag.swift */; };
+		EB82992B3C2494D927CD3370 /* DocNestUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		2263271875D8DE410DCA5CAE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1F0FE423E24180DDC11B5BD1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 99C37ECAC7415029F5D34F92;
+			remoteInfo = DocNest;
+		};
+		5CA7964FEBBDB6CDD4BF65AB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1F0FE423E24180DDC11B5BD1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 99C37ECAC7415029F5D34F92;
+			remoteInfo = DocNest;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		051CE3481269CA75C84B0B72 /* DocumentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentListView.swift; sourceTree = "<group>"; };
+		0BBBA8006045ACAA798F6A49 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		23AC657950D272E01D18DE75 /* LabelTag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelTag.swift; sourceTree = "<group>"; };
+		3A92312359B8EE4691B36D8E /* DocNestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocNestTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		45B34DF5ACFF5069169049C6 /* DocNestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestApp.swift; sourceTree = "<group>"; };
+		4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInspectorView.swift; sourceTree = "<group>"; };
+		83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestUITests.swift; sourceTree = "<group>"; };
+		A28DA505FA162562D9E4D07F /* DocNest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DocNest.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0AAAEB26F93E46DA446829E /* LibrarySidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySidebarView.swift; sourceTree = "<group>"; };
+		DD39DB5ED19340D342B038E6 /* DocNestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestTests.swift; sourceTree = "<group>"; };
+		EE62ACE54DC0692F4109B0A5 /* DocNestUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocNestUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		EF537CE863340AB823C51D5C /* DocumentRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentRecord.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		04D496539C8F02D386DE2799 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				45B34DF5ACFF5069169049C6 /* DocNestApp.swift */,
+				0BBBA8006045ACAA798F6A49 /* RootView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		1F8FC622FDD062746E7DC3C6 /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				C0AAAEB26F93E46DA446829E /* LibrarySidebarView.swift */,
+			);
+			path = Library;
+			sourceTree = "<group>";
+		};
+		31002AB164F3A120C0EEDB9A = {
+			isa = PBXGroup;
+			children = (
+				6FACB24E3D38D5C34FD87BE7 /* DocNest */,
+				C118501F2CDBC76652611405 /* DocNestTests */,
+				9823D1E572EF262DCC4FC832 /* DocNestUITests */,
+				3419641354D309F2F9188E40 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		3419641354D309F2F9188E40 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A28DA505FA162562D9E4D07F /* DocNest.app */,
+				3A92312359B8EE4691B36D8E /* DocNestTests.xctest */,
+				EE62ACE54DC0692F4109B0A5 /* DocNestUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5E2B1DB5CA4FCAD7D11BA925 /* Documents */ = {
+			isa = PBXGroup;
+			children = (
+				4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */,
+				051CE3481269CA75C84B0B72 /* DocumentListView.swift */,
+			);
+			path = Documents;
+			sourceTree = "<group>";
+		};
+		6FACB24E3D38D5C34FD87BE7 /* DocNest */ = {
+			isa = PBXGroup;
+			children = (
+				04D496539C8F02D386DE2799 /* App */,
+				9CF5820AED9DA5236D87057E /* Domain */,
+				8519309182595678342B501A /* Features */,
+			);
+			path = DocNest;
+			sourceTree = "<group>";
+		};
+		8519309182595678342B501A /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				5E2B1DB5CA4FCAD7D11BA925 /* Documents */,
+				1F8FC622FDD062746E7DC3C6 /* Library */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		9823D1E572EF262DCC4FC832 /* DocNestUITests */ = {
+			isa = PBXGroup;
+			children = (
+				83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */,
+			);
+			path = DocNestUITests;
+			sourceTree = "<group>";
+		};
+		9CF5820AED9DA5236D87057E /* Domain */ = {
+			isa = PBXGroup;
+			children = (
+				AF55C1A192F3448EF4951786 /* Entities */,
+			);
+			path = Domain;
+			sourceTree = "<group>";
+		};
+		AF55C1A192F3448EF4951786 /* Entities */ = {
+			isa = PBXGroup;
+			children = (
+				EF537CE863340AB823C51D5C /* DocumentRecord.swift */,
+				23AC657950D272E01D18DE75 /* LabelTag.swift */,
+			);
+			path = Entities;
+			sourceTree = "<group>";
+		};
+		C118501F2CDBC76652611405 /* DocNestTests */ = {
+			isa = PBXGroup;
+			children = (
+				DD39DB5ED19340D342B038E6 /* DocNestTests.swift */,
+			);
+			path = DocNestTests;
+			sourceTree = "<group>";
+		};
+		"TEMP_1027AF63-4701-4E23-8FC0-BE3D351069C5" /* Infrastructure */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Infrastructure;
+			sourceTree = "<group>";
+		};
+		"TEMP_A5B8BF6E-6516-4491-B67A-A5788CC602AE" /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		9760FC18A985B497EDBE63A2 /* DocNestUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0CC5E348A3D8280846408E4C /* Build configuration list for PBXNativeTarget "DocNestUITests" */;
+			buildPhases = (
+				ECEBC8A3FA2D0BBC19C5C918 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8072C908AEE08BA6E149742C /* PBXTargetDependency */,
+			);
+			name = DocNestUITests;
+			packageProductDependencies = (
+			);
+			productName = DocNestUITests;
+			productReference = EE62ACE54DC0692F4109B0A5 /* DocNestUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		99C37ECAC7415029F5D34F92 /* DocNest */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B32371BEDEE830C5F8C32F9E /* Build configuration list for PBXNativeTarget "DocNest" */;
+			buildPhases = (
+				B38279D717F484C5C540CA1A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DocNest;
+			packageProductDependencies = (
+			);
+			productName = DocNest;
+			productReference = A28DA505FA162562D9E4D07F /* DocNest.app */;
+			productType = "com.apple.product-type.application";
+		};
+		FDE8EDAA41234DCBBB581739 /* DocNestTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 611ACD28C201B9892D5A1644 /* Build configuration list for PBXNativeTarget "DocNestTests" */;
+			buildPhases = (
+				34684EA0B0DC1C1ECA484905 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D938FE8B527F280303543E5B /* PBXTargetDependency */,
+			);
+			name = DocNestTests;
+			packageProductDependencies = (
+			);
+			productName = DocNestTests;
+			productReference = 3A92312359B8EE4691B36D8E /* DocNestTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1F0FE423E24180DDC11B5BD1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					9760FC18A985B497EDBE63A2 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+						TestTargetID = 99C37ECAC7415029F5D34F92;
+					};
+					99C37ECAC7415029F5D34F92 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					FDE8EDAA41234DCBBB581739 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 370ADEE3E5637A5BA4AEF87F /* Build configuration list for PBXProject "DocNest" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 31002AB164F3A120C0EEDB9A;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 3419641354D309F2F9188E40 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				99C37ECAC7415029F5D34F92 /* DocNest */,
+				FDE8EDAA41234DCBBB581739 /* DocNestTests */,
+				9760FC18A985B497EDBE63A2 /* DocNestUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		34684EA0B0DC1C1ECA484905 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9B1EA4B0472E2FA374348A7F /* DocNestTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B38279D717F484C5C540CA1A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3C5C703826BEB50F7BCFF836 /* DocNestApp.swift in Sources */,
+				6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */,
+				2423CFECF69765FB09B4592A /* DocumentListView.swift in Sources */,
+				0C0958A98ED0BC8389BBA0C9 /* DocumentRecord.swift in Sources */,
+				A702052A7EEBA5D0ED3DCFC3 /* LabelTag.swift in Sources */,
+				A67C2A9BBA4BD3402F3871B7 /* LibrarySidebarView.swift in Sources */,
+				4C1368A6F47101D34D33808A /* RootView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ECEBC8A3FA2D0BBC19C5C918 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EB82992B3C2494D927CD3370 /* DocNestUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8072C908AEE08BA6E149742C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 99C37ECAC7415029F5D34F92 /* DocNest */;
+			targetProxy = 5CA7964FEBBDB6CDD4BF65AB /* PBXContainerItemProxy */;
+		};
+		D938FE8B527F280303543E5B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 99C37ECAC7415029F5D34F92 /* DocNest */;
+			targetProxy = 2263271875D8DE410DCA5CAE /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		019A9E9561EE31E9D73D84B1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.10;
+			};
+			name = Release;
+		};
+		03969A89C7F3CF490140BD19 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = DocNest;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+		4360A90AC4F5EBA34C3F7FCB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = DocNest;
+			};
+			name = Release;
+		};
+		715CEF9BFA55AA737F195894 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = DocNest;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest;
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		73CF3E66EDA0DCBA9AC979D5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.uitests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = DocNest;
+			};
+			name = Debug;
+		};
+		857E800B2D254D7DCB21166A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.10;
+			};
+			name = Debug;
+		};
+		9425A72328EB9A24D3AAB00F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DocNest.app/Contents/MacOS/DocNest";
+			};
+			name = Debug;
+		};
+		B2C3075FB9DB09E29559FD7F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.tests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DocNest.app/Contents/MacOS/DocNest";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0CC5E348A3D8280846408E4C /* Build configuration list for PBXNativeTarget "DocNestUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				73CF3E66EDA0DCBA9AC979D5 /* Debug */,
+				4360A90AC4F5EBA34C3F7FCB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		370ADEE3E5637A5BA4AEF87F /* Build configuration list for PBXProject "DocNest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				857E800B2D254D7DCB21166A /* Debug */,
+				019A9E9561EE31E9D73D84B1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		611ACD28C201B9892D5A1644 /* Build configuration list for PBXNativeTarget "DocNestTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9425A72328EB9A24D3AAB00F /* Debug */,
+				B2C3075FB9DB09E29559FD7F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B32371BEDEE830C5F8C32F9E /* Build configuration list for PBXNativeTarget "DocNest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				715CEF9BFA55AA737F195894 /* Debug */,
+				03969A89C7F3CF490140BD19 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1F0FE423E24180DDC11B5BD1 /* Project object */;
+}
