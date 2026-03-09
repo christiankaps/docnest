@@ -12,6 +12,7 @@
 		3C5C703826BEB50F7BCFF836 /* DocNestApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B34DF5ACFF5069169049C6 /* DocNestApp.swift */; };
 		4C1368A6F47101D34D33808A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBBA8006045ACAA798F6A49 /* RootView.swift */; };
 		6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */; };
+		78C8D82942577262672EDDF2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0A020E71E4139D5C6236FCD /* Assets.xcassets */; };
 		9B1EA4B0472E2FA374348A7F /* DocNestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD39DB5ED19340D342B038E6 /* DocNestTests.swift */; };
 		A67C2A9BBA4BD3402F3871B7 /* LibrarySidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0AAAEB26F93E46DA446829E /* LibrarySidebarView.swift */; };
 		A702052A7EEBA5D0ED3DCFC3 /* LabelTag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23AC657950D272E01D18DE75 /* LabelTag.swift */; };
@@ -44,6 +45,7 @@
 		4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInspectorView.swift; sourceTree = "<group>"; };
 		83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestUITests.swift; sourceTree = "<group>"; };
 		A28DA505FA162562D9E4D07F /* DocNest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DocNest.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0A020E71E4139D5C6236FCD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C0AAAEB26F93E46DA446829E /* LibrarySidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySidebarView.swift; sourceTree = "<group>"; };
 		DD39DB5ED19340D342B038E6 /* DocNestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestTests.swift; sourceTree = "<group>"; };
 		EE62ACE54DC0692F4109B0A5 /* DocNestUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocNestUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -88,6 +90,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		574E3AA1DE04477D8D0EB337 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B0A020E71E4139D5C6236FCD /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		5E2B1DB5CA4FCAD7D11BA925 /* Documents */ = {
 			isa = PBXGroup;
 			children = (
@@ -103,6 +113,7 @@
 				04D496539C8F02D386DE2799 /* App */,
 				9CF5820AED9DA5236D87057E /* Domain */,
 				8519309182595678342B501A /* Features */,
+				574E3AA1DE04477D8D0EB337 /* Resources */,
 			);
 			path = DocNest;
 			sourceTree = "<group>";
@@ -149,18 +160,18 @@
 			path = DocNestTests;
 			sourceTree = "<group>";
 		};
-		"TEMP_1027AF63-4701-4E23-8FC0-BE3D351069C5" /* Infrastructure */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Infrastructure;
-			sourceTree = "<group>";
-		};
-		"TEMP_A5B8BF6E-6516-4491-B67A-A5788CC602AE" /* Shared */ = {
+		"TEMP_8752069A-9063-4710-88D0-846BECAF47BD" /* Shared */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		"TEMP_FBEC94E6-1D9C-4767-9F03-CA10DF9948A4" /* Infrastructure */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Infrastructure;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -189,6 +200,7 @@
 			buildConfigurationList = B32371BEDEE830C5F8C32F9E /* Build configuration list for PBXNativeTarget "DocNest" */;
 			buildPhases = (
 				B38279D717F484C5C540CA1A /* Sources */,
+				ED7A0499C9FCD44FEF845A85 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -263,6 +275,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		ED7A0499C9FCD44FEF845A85 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				78C8D82942577262672EDDF2 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		34684EA0B0DC1C1ECA484905 /* Sources */ = {

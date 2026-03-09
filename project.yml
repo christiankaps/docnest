@@ -21,6 +21,7 @@ targets:
       - path: DocNest
     settings:
       base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_BUNDLE_IDENTIFIER: com.kaps.docnest
         INFOPLIST_KEY_CFBundleDisplayName: DocNest
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
