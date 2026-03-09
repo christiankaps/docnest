@@ -101,6 +101,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Dokumente erhalten eine stabile interne ID.
 - Doppelte Dateien werden erkannt, mindestens hash-basiert.
 - Nutzer sieht beim Import, welche Dateien neu sind und welche Duplikate darstellen.
+- Nutzer erhaelt eine verstaendliche Rueckmeldung, wenn einzelne Dateien im Stapelimport fehlschlagen.
 
 #### Sollte
 - Stapelimport mehrerer Dateien.

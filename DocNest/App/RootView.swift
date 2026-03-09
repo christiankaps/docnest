@@ -1,24 +1,28 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
-import PDFKit
 
 struct RootView: View {
     let libraryURL: URL
     @State private var selectedSection: LibrarySection = .allDocuments
     @State private var selectedDocumentID: PersistentIdentifier?
     @State private var isImporting = false
+    @State private var importSummaryMessage: String?
     @Environment(\.modelContext) private var modelContext
 
     @Query(sort: \DocumentRecord.importedAt, order: .reverse)
     private var allDocuments: [DocumentRecord]
+
+    private var recentDocuments: [DocumentRecord] {
+        Array(allDocuments.prefix(10))
+    }
 
     private var filteredDocuments: [DocumentRecord] {
         switch selectedSection {
         case .allDocuments:
             allDocuments
         case .recent:
-            allDocuments
+            recentDocuments
         case .needsLabels:
             allDocuments.filter { $0.labels.isEmpty }
         }
@@ -56,47 +60,41 @@ struct RootView: View {
         ) { result in
             handleImportResult(result)
         }
+        .alert("Import Summary", isPresented: importSummaryBinding) {
+            Button("OK", role: .cancel) {
+                importSummaryMessage = nil
+            }
+        } message: {
+            Text(importSummaryMessage ?? "")
+        }
+    }
+
+    private var importSummaryBinding: Binding<Bool> {
+        Binding(
+            get: { importSummaryMessage != nil },
+            set: { newValue in
+                if !newValue {
+                    importSummaryMessage = nil
+                }
+            }
+        )
     }
 
     private func handleImportResult(_ result: Result<[URL], Error>) {
-        guard let urls = try? result.get() else { return }
-
-        for url in urls {
-            guard url.startAccessingSecurityScopedResource() else { continue }
-            defer { url.stopAccessingSecurityScopedResource() }
-
-            let docID = UUID()
-            let importedAt = Date.now
-            let fileName = url.lastPathComponent
-            let title = url.deletingPathExtension().lastPathComponent
-                .replacingOccurrences(of: "-", with: " ")
-                .replacingOccurrences(of: "_", with: " ")
-                .localizedCapitalized
-
-            var pageCount = 0
-            if let pdfDoc = PDFDocument(url: url) {
-                pageCount = pdfDoc.pageCount
-            }
-
-            guard let storedPath = try? DocumentStorageService.copyToStorage(
-                from: url,
-                documentID: docID,
-                importedAt: importedAt,
-                libraryURL: libraryURL
-            ) else { continue }
-
-            let record = DocumentRecord(
-                id: docID,
-                originalFileName: fileName,
-                title: title,
-                importedAt: importedAt,
-                pageCount: pageCount,
-                storedFilePath: storedPath
-            )
-            modelContext.insert(record)
+        guard let urls = try? result.get() else {
+            importSummaryMessage = "The selected files could not be read."
+            return
         }
 
-        try? modelContext.save()
+        let importResult = ImportPDFDocumentsUseCase.execute(
+            urls: urls,
+            into: libraryURL,
+            using: modelContext
+        )
+
+        if importResult.hasFailures {
+            importSummaryMessage = importResult.summaryMessage
+        }
     }
 }
 

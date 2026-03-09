@@ -125,6 +125,7 @@ private final class LibrarySessionController: ObservableObject {
     private func openLibrary(at libraryURL: URL) throws {
         modelContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
         selectedLibraryURL = libraryURL
+        DocumentLibraryService.persistLibraryURL(libraryURL)
         libraryErrorMessage = nil
     }
 }

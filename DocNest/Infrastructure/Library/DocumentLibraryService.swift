@@ -79,7 +79,6 @@ enum DocumentLibraryService {
         let manifestData = try JSONEncoder.prettyPrinted.encode(manifest)
         try manifestData.write(to: manifestURL(for: libraryURL), options: .atomic)
 
-        persistLibraryURL(libraryURL)
         return libraryURL
     }
 
@@ -101,7 +100,6 @@ enum DocumentLibraryService {
         let manifestData = try Data(contentsOf: manifestURL(for: libraryURL))
         _ = try JSONDecoder.libraryManifest.decode(DocumentLibraryManifest.self, from: manifestData)
 
-        persistLibraryURL(libraryURL)
         return libraryURL
     }
 
