@@ -4,6 +4,7 @@ import SwiftData
 @Model
 final class DocumentRecord {
     var id: UUID
+    var libraryPath: String?
     var originalFileName: String
     var title: String
     var importedAt: Date
@@ -15,6 +16,7 @@ final class DocumentRecord {
 
     init(
         id: UUID = UUID(),
+        libraryPath: String? = nil,
         originalFileName: String,
         title: String,
         importedAt: Date,
@@ -23,6 +25,7 @@ final class DocumentRecord {
         labels: [LabelTag] = []
     ) {
         self.id = id
+        self.libraryPath = libraryPath
         self.originalFileName = originalFileName
         self.title = title
         self.importedAt = importedAt

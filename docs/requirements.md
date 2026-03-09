@@ -84,6 +84,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 #### Muss
 - Nutzer kann eine neue Library anlegen.
 - Nutzer kann eine bestehende Library oeffnen.
+- App startet ohne offene Library in einem klaren Zustand mit Aktionen zum Anlegen oder Oeffnen einer Library.
 - App prueft beim Oeffnen, ob Struktur und Metadaten konsistent sind.
 - App zeigt Fehlerzustand verstaendlich an, falls eine Library beschaedigt oder unvollstaendig ist.
 
@@ -213,6 +214,7 @@ Fuer die erste Version ist eine dateisystemfreundliche Struktur sinnvoll, die te
 ```text
 Meine Dokumente.docnestlibrary/
   Metadata/
+    library.json
     library.sqlite
     search-index/
   Originals/

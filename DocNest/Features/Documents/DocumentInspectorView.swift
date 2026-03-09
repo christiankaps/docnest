@@ -4,6 +4,7 @@ import PDFKit
 
 struct DocumentInspectorView: View {
     let document: DocumentRecord?
+    let libraryURL: URL?
 
     var body: some View {
         Group {
@@ -47,8 +48,9 @@ struct DocumentInspectorView: View {
     @ViewBuilder
     private func pdfPreviewSection(for document: DocumentRecord) -> some View {
         if let path = document.storedFilePath,
-           DocumentStorageService.fileExists(at: path) {
-            PDFViewRepresentable(url: DocumentStorageService.fileURL(for: path))
+           let libraryURL,
+           DocumentStorageService.fileExists(at: path, libraryURL: libraryURL) {
+            PDFViewRepresentable(url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         } else if document.storedFilePath != nil {
             RoundedRectangle(cornerRadius: 16)
@@ -111,6 +113,6 @@ struct DocumentInspectorView: View {
     )
     container.mainContext.insert(doc)
 
-    return DocumentInspectorView(document: doc)
+    return DocumentInspectorView(document: doc, libraryURL: nil)
         .modelContainer(container)
 }

@@ -1,42 +1,46 @@
 import Foundation
 
 enum DocumentStorageService {
-    static var storageDirectory: URL {
-        let appSupport = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first!
-        return appSupport
-            .appendingPathComponent("com.kaps.docnest", isDirectory: true)
-            .appendingPathComponent("Documents", isDirectory: true)
-    }
-
-    static func ensureStorageDirectoryExists() throws {
+    static func copyToStorage(
+        from sourceURL: URL,
+        documentID: UUID,
+        importedAt: Date,
+        libraryURL: URL
+    ) throws -> String {
+        let destinationDirectory = storageDirectory(for: importedAt, libraryURL: libraryURL)
         try FileManager.default.createDirectory(
-            at: storageDirectory,
+            at: destinationDirectory,
             withIntermediateDirectories: true
         )
-    }
 
-    static func copyToStorage(from sourceURL: URL, documentID: UUID) throws -> String {
-        try ensureStorageDirectoryExists()
         let ext = sourceURL.pathExtension
-        let destinationURL = storageDirectory
+        let destinationURL = destinationDirectory
             .appendingPathComponent(documentID.uuidString)
             .appendingPathExtension(ext)
+
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
-        return destinationURL.path
+        return destinationURL.path.replacingOccurrences(of: libraryURL.path + "/", with: "")
     }
 
-    static func deleteStoredFile(at path: String) {
-        try? FileManager.default.removeItem(atPath: path)
+    static func deleteStoredFile(at path: String, libraryURL: URL) {
+        try? FileManager.default.removeItem(at: fileURL(for: path, libraryURL: libraryURL))
     }
 
-    static func fileURL(for path: String) -> URL {
-        URL(fileURLWithPath: path)
+    static func fileURL(for path: String, libraryURL: URL) -> URL {
+        libraryURL.appendingPathComponent(path, isDirectory: false)
     }
 
-    static func fileExists(at path: String) -> Bool {
-        FileManager.default.fileExists(atPath: path)
+    static func fileExists(at path: String, libraryURL: URL) -> Bool {
+        FileManager.default.fileExists(atPath: fileURL(for: path, libraryURL: libraryURL).path)
+    }
+
+    private static func storageDirectory(for importedAt: Date, libraryURL: URL) -> URL {
+        let components = Calendar.current.dateComponents([.year, .month], from: importedAt)
+        let year = String(components.year ?? 0)
+        let month = String(format: "%02d", components.month ?? 1)
+
+        return DocumentLibraryService.originalsDirectory(for: libraryURL)
+            .appendingPathComponent(year, isDirectory: true)
+            .appendingPathComponent(month, isDirectory: true)
     }
 }

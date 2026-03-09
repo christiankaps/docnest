@@ -3,6 +3,11 @@ import SwiftData
 @testable import DocNest
 
 final class DocNestTests: XCTestCase {
+    override func tearDown() {
+        super.tearDown()
+        DocumentLibraryService.persistLibraryURL(nil)
+    }
+
     @MainActor
     func testSampleDataCanBeSeeded() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -49,5 +54,39 @@ final class DocNestTests: XCTestCase {
 
         let fetched = try context.fetch(FetchDescriptor<DocumentRecord>())
         XCTAssertEqual(fetched.first?.storedFilePath, "/tmp/test-path.pdf")
+    }
+
+    func testCreateLibraryCreatesRequiredStructure() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Test Library")
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryURL = try DocumentLibraryService.createLibrary(at: libraryURL)
+
+        XCTAssertEqual(createdLibraryURL.pathExtension, DocumentLibraryService.packageExtension)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("Metadata", isDirectory: true).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("Originals", isDirectory: true).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("Metadata/library.json").path))
+    }
+
+    func testValidateLibraryRejectsMissingManifest() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Broken Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: libraryURL.appendingPathComponent("Metadata", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: libraryURL.appendingPathComponent("Originals", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: libraryURL.appendingPathComponent("Previews", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: libraryURL.appendingPathComponent("Diagnostics", isDirectory: true), withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try DocumentLibraryService.validateLibrary(at: libraryURL))
     }
 }
