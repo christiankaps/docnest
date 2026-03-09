@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftData
 
 struct DocumentLibraryManifest: Codable {
     let formatVersion: Int
@@ -106,6 +107,30 @@ enum DocumentLibraryService {
 
     static func originalsDirectory(for libraryURL: URL) -> URL {
         libraryURL.appendingPathComponent("Originals", isDirectory: true)
+    }
+
+    static func metadataDirectory(for libraryURL: URL) -> URL {
+        libraryURL.appendingPathComponent("Metadata", isDirectory: true)
+    }
+
+    static func metadataStoreURL(for libraryURL: URL) -> URL {
+        metadataDirectory(for: libraryURL)
+            .appendingPathComponent("library")
+            .appendingPathExtension("sqlite")
+    }
+
+    static func openModelContainer(for libraryURL: URL) throws -> ModelContainer {
+        let configuration = ModelConfiguration(
+            "DocNestLibrary",
+            url: metadataStoreURL(for: libraryURL),
+            cloudKitDatabase: .none
+        )
+
+        return try ModelContainer(
+            for: DocumentRecord.self,
+            LabelTag.self,
+            configurations: configuration
+        )
     }
 
     private static func normalizedLibraryURL(from url: URL) -> URL {

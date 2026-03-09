@@ -87,6 +87,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - App startet ohne offene Library in einem klaren Zustand mit Aktionen zum Anlegen oder Oeffnen einer Library.
 - App prueft beim Oeffnen, ob Struktur und Metadaten konsistent sind.
 - App zeigt Fehlerzustand verstaendlich an, falls eine Library beschaedigt oder unvollstaendig ist.
+- Der aktive Metadaten-Store ist library-lokal und liegt fuer v1 in `Metadata/library.sqlite`.
 
 #### Sollte
 - Library kann als macOS Package umgesetzt werden, damit sie im Finder wie eine einzelne Datei wirkt, bei Bedarf aber geoeffnet werden kann.

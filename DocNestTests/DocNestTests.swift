@@ -89,4 +89,42 @@ final class DocNestTests: XCTestCase {
 
         XCTAssertThrowsError(try DocumentLibraryService.validateLibrary(at: libraryURL))
     }
+
+    @MainActor
+    func testLibraryContainersStayIsolated() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryAURL = tempRoot.appendingPathComponent("Library A")
+        let libraryBURL = tempRoot.appendingPathComponent("Library B")
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryAURL = try DocumentLibraryService.createLibrary(at: libraryAURL)
+        let createdLibraryBURL = try DocumentLibraryService.createLibrary(at: libraryBURL)
+
+        let containerA = try DocumentLibraryService.openModelContainer(for: createdLibraryAURL)
+        let contextA = containerA.mainContext
+        contextA.insert(
+            DocumentRecord(
+                originalFileName: "invoice.pdf",
+                title: "Invoice",
+                importedAt: .now,
+                pageCount: 1,
+                storedFilePath: "Originals/2026/03/test.pdf"
+            )
+        )
+        try contextA.save()
+
+        let containerB = try DocumentLibraryService.openModelContainer(for: createdLibraryBURL)
+        let documentsInLibraryB = try containerB.mainContext.fetch(FetchDescriptor<DocumentRecord>())
+        XCTAssertTrue(documentsInLibraryB.isEmpty)
+
+        let reopenedContainerA = try DocumentLibraryService.openModelContainer(for: createdLibraryAURL)
+        let documentsInLibraryA = try reopenedContainerA.mainContext.fetch(FetchDescriptor<DocumentRecord>())
+        XCTAssertEqual(documentsInLibraryA.count, 1)
+        XCTAssertEqual(documentsInLibraryA.first?.title, "Invoice")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: DocumentLibraryService.metadataStoreURL(for: createdLibraryAURL).path))
+    }
 }
