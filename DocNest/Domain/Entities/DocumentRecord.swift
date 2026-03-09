@@ -8,6 +8,7 @@ final class DocumentRecord {
     var title: String
     var importedAt: Date
     var pageCount: Int
+    var storedFilePath: String?
 
     @Relationship(deleteRule: .nullify, inverse: \LabelTag.documents)
     var labels: [LabelTag] = []
@@ -18,6 +19,7 @@ final class DocumentRecord {
         title: String,
         importedAt: Date,
         pageCount: Int,
+        storedFilePath: String? = nil,
         labels: [LabelTag] = []
     ) {
         self.id = id
@@ -25,6 +27,7 @@ final class DocumentRecord {
         self.title = title
         self.importedAt = importedAt
         self.pageCount = pageCount
+        self.storedFilePath = storedFilePath
         self.labels = labels
     }
 }
