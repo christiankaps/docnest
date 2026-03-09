@@ -1,8 +1,11 @@
 import Foundation
+import SwiftData
 
-struct LabelTag: Identifiable, Hashable {
-    let id: UUID
-    let name: String
+@Model
+final class LabelTag {
+    var id: UUID
+    var name: String
+    var documents: [DocumentRecord] = []
 
     init(id: UUID = UUID(), name: String) {
         self.id = id
@@ -11,7 +14,10 @@ struct LabelTag: Identifiable, Hashable {
 }
 
 extension LabelTag {
-    static let finance = LabelTag(name: "Finance")
-    static let tax = LabelTag(name: "Tax")
-    static let contracts = LabelTag(name: "Contracts")
+    static func makeSamples() -> (finance: LabelTag, tax: LabelTag, contracts: LabelTag) {
+        let finance = LabelTag(name: "Finance")
+        let tax = LabelTag(name: "Tax")
+        let contracts = LabelTag(name: "Contracts")
+        return (finance, tax, contracts)
+    }
 }

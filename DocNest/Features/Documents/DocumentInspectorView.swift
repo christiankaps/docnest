@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct DocumentInspectorView: View {
     let document: DocumentRecord?
@@ -63,5 +64,22 @@ struct DocumentInspectorView: View {
 }
 
 #Preview {
-    DocumentInspectorView(document: DocumentRecord.samples.first)
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: DocumentRecord.self, configurations: config)
+
+    let labels = LabelTag.makeSamples()
+    container.mainContext.insert(labels.finance)
+    container.mainContext.insert(labels.tax)
+
+    let doc = DocumentRecord(
+        originalFileName: "invoice-march-2026.pdf",
+        title: "Invoice March 2026",
+        importedAt: .now,
+        pageCount: 4,
+        labels: [labels.finance, labels.tax]
+    )
+    container.mainContext.insert(doc)
+
+    return DocumentInspectorView(document: doc)
+        .modelContainer(container)
 }

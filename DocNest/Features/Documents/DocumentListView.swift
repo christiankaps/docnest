@@ -1,8 +1,9 @@
 import SwiftUI
+import SwiftData
 
 struct DocumentListView: View {
     let documents: [DocumentRecord]
-    @Binding var selectedDocumentID: DocumentRecord.ID?
+    @Binding var selectedDocumentID: PersistentIdentifier?
 
     var body: some View {
         List(documents, selection: $selectedDocumentID) { document in
@@ -23,7 +24,7 @@ struct DocumentListView: View {
                 .foregroundStyle(.secondary)
             }
             .padding(.vertical, 4)
-            .tag(document.id)
+            .tag(document.persistentModelID)
         }
         .navigationTitle("Documents")
     }
@@ -38,8 +39,22 @@ struct DocumentListView: View {
 }
 
 #Preview {
-    DocumentListView(
-        documents: DocumentRecord.samples,
-        selectedDocumentID: .constant(DocumentRecord.samples.first?.id)
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: DocumentRecord.self, configurations: config)
+
+    let labels = LabelTag.makeSamples()
+    container.mainContext.insert(labels.finance)
+    container.mainContext.insert(labels.tax)
+    container.mainContext.insert(labels.contracts)
+
+    let samples = DocumentRecord.makeSamples(labels: labels)
+    for sample in samples {
+        container.mainContext.insert(sample)
+    }
+
+    return DocumentListView(
+        documents: samples,
+        selectedDocumentID: .constant(samples.first?.id)
     )
+    .modelContainer(container)
 }

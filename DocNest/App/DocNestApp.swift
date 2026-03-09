@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct DocNestApp: App {
@@ -9,5 +10,6 @@ struct DocNestApp: App {
         }
         .defaultSize(width: 1280, height: 800)
         .windowResizability(.contentMinSize)
+        .modelContainer(for: DocumentRecord.self)
     }
 }

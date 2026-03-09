@@ -1,24 +1,27 @@
 import SwiftUI
+import SwiftData
 
 struct RootView: View {
     @State private var selectedSection: LibrarySection = .allDocuments
-    @State private var selectedDocumentID: DocumentRecord.ID?
+    @State private var selectedDocumentID: PersistentIdentifier?
+    @Environment(\.modelContext) private var modelContext
 
-    private let documents = DocumentRecord.samples
+    @Query(sort: \DocumentRecord.importedAt, order: .reverse)
+    private var allDocuments: [DocumentRecord]
 
     private var filteredDocuments: [DocumentRecord] {
         switch selectedSection {
         case .allDocuments:
-            documents
+            allDocuments
         case .recent:
-            documents.sorted { $0.importedAt > $1.importedAt }
+            allDocuments
         case .needsLabels:
-            documents.filter { $0.labels.isEmpty }
+            allDocuments.filter { $0.labels.isEmpty }
         }
     }
 
     private var selectedDocument: DocumentRecord? {
-        filteredDocuments.first { $0.id == selectedDocumentID } ?? filteredDocuments.first
+        filteredDocuments.first { $0.persistentModelID == selectedDocumentID } ?? filteredDocuments.first
     }
 
     var body: some View {
@@ -33,9 +36,13 @@ struct RootView: View {
             DocumentInspectorView(document: selectedDocument)
         }
         .navigationSplitViewStyle(.balanced)
+        .task {
+            try? SampleDataSeeder.seedIfNeeded(using: modelContext)
+        }
     }
 }
 
 #Preview {
     RootView()
+        .modelContainer(for: DocumentRecord.self, inMemory: true)
 }
