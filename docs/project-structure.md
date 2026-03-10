@@ -37,26 +37,31 @@ docs/
 ## Verantwortlichkeiten
 
 ### App
+
 - App-Einstiegspunkt
 - globale Navigation
 - Window- und Scene-Konfiguration
 
 ### Domain
+
 - fachliche Kerntypen wie Dokument, Label und spaetere Filtermodelle
 - spaetere Use Cases fuer Import, Labeling, Suche und Library-Operationen
 
 ### Features
+
 - UI und Ablauf pro Fachbereich
 - Startaufteilung nach Library, Import, Documents, Labels und Search
 - jedes Feature kann spaeter eigene ViewModels, Commands und Unteransichten enthalten
 
 ### Infrastructure
+
 - Dateisystemzugriff fuer die Library
 - Persistenzlayer
 - Suchindex
 - PDF-Vorschau und spaetere Thumbnail-Erzeugung
 
 ### Shared
+
 - wiederverwendbare UI-Bausteine, Theme-Definitionen und Utilities
 - kein unklarer Sammelplatz fuer Fachlogik
 
@@ -64,7 +69,6 @@ docs/
 
 - Das Repository enthaelt eine versionierte Projektdefinition in [project.yml](project.yml).
 - Daraus wird [DocNest.xcodeproj](DocNest.xcodeproj) generiert.
-- [Package.swift](Package.swift) bleibt als zusaetzlicher SwiftPM-Einstieg fuer einfache Build-Validierung erhalten.
 - Die bestehende Ordnerstruktur wird direkt als Group- und Source-Struktur im Xcode-Projekt verwendet.
 
 ## Naechste sinnvolle Schritte

@@ -42,6 +42,19 @@ final class DocumentRecord {
 }
 
 extension DocumentRecord {
+    var formattedFileSize: String {
+        ByteCountFormatter.documentFileSize.string(fromByteCount: fileSize)
+    }
+
+    func labelSummary(emptyText: String) -> String {
+        let labelNames = labels.map(\.name).sorted()
+        if labelNames.isEmpty {
+            return emptyText
+        }
+
+        return labelNames.joined(separator: ", ")
+    }
+
     static func makeSamples(labels: (finance: LabelTag, tax: LabelTag, contracts: LabelTag)) -> [DocumentRecord] {
         [
             DocumentRecord(
@@ -76,4 +89,13 @@ extension DocumentRecord {
             )
         ]
     }
+}
+
+private extension ByteCountFormatter {
+    static let documentFileSize: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB]
+        formatter.countStyle = .file
+        return formatter
+    }()
 }

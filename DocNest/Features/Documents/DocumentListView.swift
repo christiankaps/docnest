@@ -71,10 +71,10 @@ struct DocumentListView: View {
                     Text("\(document.pageCount)")
                         .frame(width: 60, alignment: .leading)
 
-                    Text(Self.fileSizeFormatter.string(fromByteCount: document.fileSize))
+                    Text(document.formattedFileSize)
                         .frame(width: 90, alignment: .leading)
 
-                    Text(labelSummary(for: document))
+                    Text(document.labelSummary(emptyText: "No labels"))
                         .foregroundStyle(.secondary)
                         .frame(width: 180, alignment: .leading)
                 }
@@ -84,13 +84,6 @@ struct DocumentListView: View {
         }
         .navigationTitle("Documents")
     }
-
-    private static let fileSizeFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useKB, .useMB]
-        formatter.countStyle = .file
-        return formatter
-    }()
 
     private func sortButton(_ title: String, column: SortColumn) -> some View {
         Button {
@@ -152,14 +145,6 @@ struct DocumentListView: View {
         }
 
         return .orderedSame
-    }
-
-    private func labelSummary(for document: DocumentRecord) -> String {
-        if document.labels.isEmpty {
-            return "No labels"
-        }
-
-        return document.labels.map(\.name).joined(separator: ", ")
     }
 }
 

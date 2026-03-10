@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import SwiftData
-import PDFKit
 
 struct DocumentInspectorView: View {
     let document: DocumentRecord?
@@ -33,10 +32,10 @@ struct DocumentInspectorView: View {
                         Text("\(document.pageCount) pages")
                             .foregroundStyle(.secondary)
 
-                        Text(Self.fileSizeFormatter.string(fromByteCount: document.fileSize))
+                        Text(document.formattedFileSize)
                             .foregroundStyle(.secondary)
 
-                        Text("Labels: \(labelsText(for: document))")
+                        Text("Labels: \(document.labelSummary(emptyText: "None"))")
                             .foregroundStyle(.secondary)
                     }
 
@@ -125,25 +124,16 @@ struct DocumentInspectorView: View {
         }
     }
 
-    private func labelsText(for document: DocumentRecord) -> String {
-        if document.labels.isEmpty {
-            return "None"
-        }
-
-        return document.labels.map(\.name).joined(separator: ", ")
-    }
-
     private func originalFileURL(for document: DocumentRecord) -> URL? {
         guard let path = document.storedFilePath, let libraryURL else {
             return nil
         }
 
-        let fileURL = DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+        guard DocumentStorageService.fileExists(at: path, libraryURL: libraryURL) else {
             return nil
         }
 
-        return fileURL
+        return DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
     }
 
     private func openOriginalFile(for document: DocumentRecord) {
@@ -161,35 +151,37 @@ struct DocumentInspectorView: View {
 
         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
     }
+}
 
-    private static let fileSizeFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useKB, .useMB]
-        formatter.countStyle = .file
-        return formatter
-    }()
+private enum DocumentInspectorPreviewData {
+    @MainActor
+    static func make() -> (container: ModelContainer, document: DocumentRecord) {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try! ModelContainer(for: DocumentRecord.self, configurations: config)
+
+        let labels = LabelTag.makeSamples()
+        container.mainContext.insert(labels.finance)
+        container.mainContext.insert(labels.tax)
+
+        let document = DocumentRecord(
+            originalFileName: "invoice-march-2026.pdf",
+            title: "Invoice March 2026",
+            sourceCreatedAt: .now.addingTimeInterval(-86_400 * 2),
+            importedAt: .now,
+            pageCount: 4,
+            fileSize: 182_144,
+            contentHash: UUID().uuidString.replacingOccurrences(of: "-", with: ""),
+            labels: [labels.finance, labels.tax]
+        )
+        container.mainContext.insert(document)
+
+        return (container, document)
+    }
 }
 
 #Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: DocumentRecord.self, configurations: config)
+    let previewData = DocumentInspectorPreviewData.make()
 
-    let labels = LabelTag.makeSamples()
-    container.mainContext.insert(labels.finance)
-    container.mainContext.insert(labels.tax)
-
-    let doc = DocumentRecord(
-        originalFileName: "invoice-march-2026.pdf",
-        title: "Invoice March 2026",
-        sourceCreatedAt: .now.addingTimeInterval(-86_400 * 2),
-        importedAt: .now,
-        pageCount: 4,
-        fileSize: 182_144,
-        contentHash: UUID().uuidString.replacingOccurrences(of: "-", with: ""),
-        labels: [labels.finance, labels.tax]
-    )
-    container.mainContext.insert(doc)
-
-    return DocumentInspectorView(document: doc, libraryURL: nil)
-        .modelContainer(container)
+    DocumentInspectorView(document: previewData.document, libraryURL: nil)
+        .modelContainer(previewData.container)
 }

@@ -80,7 +80,7 @@ enum ImportPDFDocumentsUseCase {
         var importedStoredPaths: [String] = []
         var duplicates: [ImportPDFDocumentsResult.Duplicate] = []
         var failures: [ImportPDFDocumentsResult.Failure] = []
-        var knownHashes = existingHashes(using: modelContext)
+        var batchHashes: Set<String> = []
 
         for url in urls {
             let accessedSecurityScope = url.startAccessingSecurityScopedResource()
@@ -94,7 +94,7 @@ enum ImportPDFDocumentsUseCase {
                 let importedAt = Date.now
                 let metadata = try importMetadata(for: url)
 
-                if knownHashes.contains(metadata.contentHash) {
+                if batchHashes.contains(metadata.contentHash) || documentExists(withContentHash: metadata.contentHash, using: modelContext) {
                     duplicates.append(.init(fileName: url.lastPathComponent))
                     continue
                 }
@@ -110,7 +110,7 @@ enum ImportPDFDocumentsUseCase {
                 if let storedFilePath = record.storedFilePath {
                     importedStoredPaths.append(storedFilePath)
                 }
-                knownHashes.insert(metadata.contentHash)
+                batchHashes.insert(metadata.contentHash)
             } catch {
                 failures.append(
                     .init(
@@ -178,24 +178,38 @@ enum ImportPDFDocumentsUseCase {
         )
     }
 
-    private static func existingHashes(using modelContext: ModelContext) -> Set<String> {
-        let descriptor = FetchDescriptor<DocumentRecord>()
-        let documents = (try? modelContext.fetch(descriptor)) ?? []
-        return Set(documents.map(\.contentHash).filter { !$0.isEmpty })
+    private static func documentExists(withContentHash contentHash: String, using modelContext: ModelContext) -> Bool {
+        let predicate = #Predicate<DocumentRecord> { document in
+            document.contentHash == contentHash
+        }
+        let descriptor = FetchDescriptor<DocumentRecord>(predicate: predicate)
+        return (try? modelContext.fetchCount(descriptor)) ?? 0 > 0
     }
 
     private static func importMetadata(for url: URL) throws -> ImportMetadata {
         let resourceValues = try url.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
-        let fileData = try Data(contentsOf: url)
-        let digest = SHA256.hash(data: fileData)
-        let contentHash = digest.compactMap { String(format: "%02x", $0) }.joined()
+        let contentHash = try hashFile(at: url)
 
         return ImportMetadata(
             contentHash: contentHash,
-            fileSize: Int64(resourceValues.fileSize ?? fileData.count),
-            pageCount: PDFDocument(data: fileData)?.pageCount ?? 0,
+            fileSize: Int64(resourceValues.fileSize ?? 0),
+            pageCount: PDFDocument(url: url)?.pageCount ?? 0,
             sourceCreatedAt: resourceValues.creationDate
         )
+    }
+
+    private static func hashFile(at url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer {
+            try? handle.close()
+        }
+
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1_048_576), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     private static func normalizedTitle(for url: URL) -> String {
