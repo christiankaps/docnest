@@ -8,7 +8,7 @@ final class DocNestUITests: XCTestCase {
     @MainActor
     func testApplicationLaunches() throws {
         let app = XCUIApplication()
-        app.launch()
-        XCTAssertNotNil(app)
+        app.activate()
+        XCTAssertNotEqual(app.state, .notRunning)
     }
 }

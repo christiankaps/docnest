@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0C0958A98ED0BC8389BBA0C9 /* DocumentRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF537CE863340AB823C51D5C /* DocumentRecord.swift */; };
+		170B20CCF25397F2320894BF /* LabelManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1191C90F44EA0DB73C127B53 /* LabelManagementView.swift */; };
 		2423CFECF69765FB09B4592A /* DocumentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051CE3481269CA75C84B0B72 /* DocumentListView.swift */; };
 		3C5C703826BEB50F7BCFF836 /* DocNestApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B34DF5ACFF5069169049C6 /* DocNestApp.swift */; };
 		4C1368A6F47101D34D33808A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBBA8006045ACAA798F6A49 /* RootView.swift */; };
@@ -19,6 +20,7 @@
 		A67C2A9BBA4BD3402F3871B7 /* LibrarySidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0AAAEB26F93E46DA446829E /* LibrarySidebarView.swift */; };
 		A702052A7EEBA5D0ED3DCFC3 /* LabelTag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23AC657950D272E01D18DE75 /* LabelTag.swift */; };
 		BAD3422FCC9D99B891471458 /* DocumentLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B0FFAF2C02193A2F504BDB3 /* DocumentLibraryService.swift */; };
+		BB6346F3461319B78849AE57 /* ManageLabelsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD49D19B314A1AF377BCD069 /* ManageLabelsUseCase.swift */; };
 		EB82992B3C2494D927CD3370 /* DocNestUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */; };
 		FE3E50539F4B142C71550969 /* ImportPDFDocumentsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC772C7F97D15E871FCAB48C /* ImportPDFDocumentsUseCase.swift */; };
 /* End PBXBuildFile section */
@@ -43,6 +45,7 @@
 /* Begin PBXFileReference section */
 		051CE3481269CA75C84B0B72 /* DocumentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentListView.swift; sourceTree = "<group>"; };
 		0BBBA8006045ACAA798F6A49 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		1191C90F44EA0DB73C127B53 /* LabelManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelManagementView.swift; sourceTree = "<group>"; };
 		23AC657950D272E01D18DE75 /* LabelTag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelTag.swift; sourceTree = "<group>"; };
 		3A92312359B8EE4691B36D8E /* DocNestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocNestTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B0FFAF2C02193A2F504BDB3 /* DocumentLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentLibraryService.swift; sourceTree = "<group>"; };
@@ -58,6 +61,7 @@
 		EE62ACE54DC0692F4109B0A5 /* DocNestUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocNestUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EF537CE863340AB823C51D5C /* DocumentRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentRecord.swift; sourceTree = "<group>"; };
 		F35D29609AD07395CE3098C2 /* DocumentStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentStorageService.swift; sourceTree = "<group>"; };
+		FD49D19B314A1AF377BCD069 /* ManageLabelsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageLabelsUseCase.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -74,6 +78,7 @@
 			isa = PBXGroup;
 			children = (
 				CC772C7F97D15E871FCAB48C /* ImportPDFDocumentsUseCase.swift */,
+				FD49D19B314A1AF377BCD069 /* ManageLabelsUseCase.swift */,
 			);
 			path = UseCases;
 			sourceTree = "<group>";
@@ -85,6 +90,14 @@
 				38435D2BDC8C055FF1387640 /* Preview */,
 			);
 			path = Infrastructure;
+			sourceTree = "<group>";
+		};
+		0A9CCDDC3EAFE730D0557290 /* Labels */ = {
+			isa = PBXGroup;
+			children = (
+				1191C90F44EA0DB73C127B53 /* LabelManagementView.swift */,
+			);
+			path = Labels;
 			sourceTree = "<group>";
 		};
 		1F8FC622FDD062746E7DC3C6 /* Library */ = {
@@ -156,6 +169,7 @@
 			isa = PBXGroup;
 			children = (
 				5E2B1DB5CA4FCAD7D11BA925 /* Documents */,
+				0A9CCDDC3EAFE730D0557290 /* Labels */,
 				1F8FC622FDD062746E7DC3C6 /* Library */,
 			);
 			path = Features;
@@ -204,7 +218,7 @@
 			path = Library;
 			sourceTree = "<group>";
 		};
-		"TEMP_34BC1CDD-CE0E-4CFA-B40D-C07661F1C00C" /* Shared */ = {
+		"TEMP_9620B8C6-AD41-4553-A1AD-589D31BB237C" /* Shared */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -344,8 +358,10 @@
 				0C0958A98ED0BC8389BBA0C9 /* DocumentRecord.swift in Sources */,
 				A35D8B1AEE7796BDCF11A938 /* DocumentStorageService.swift in Sources */,
 				FE3E50539F4B142C71550969 /* ImportPDFDocumentsUseCase.swift in Sources */,
+				170B20CCF25397F2320894BF /* LabelManagementView.swift in Sources */,
 				A702052A7EEBA5D0ED3DCFC3 /* LabelTag.swift in Sources */,
 				A67C2A9BBA4BD3402F3871B7 /* LibrarySidebarView.swift in Sources */,
+				BB6346F3461319B78849AE57 /* ManageLabelsUseCase.swift in Sources */,
 				8D1FC626EFC093CBE2FF7636 /* PDFViewRepresentable.swift in Sources */,
 				4C1368A6F47101D34D33808A /* RootView.swift in Sources */,
 			);
@@ -408,7 +424,8 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
@@ -441,10 +458,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = "";
 				INFOPLIST_KEY_CFBundleDisplayName = DocNest;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -463,11 +477,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
-				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -485,10 +496,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = "";
 				INFOPLIST_KEY_CFBundleDisplayName = DocNest;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -507,11 +515,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
-				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -558,7 +563,8 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
@@ -598,10 +604,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -618,10 +621,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

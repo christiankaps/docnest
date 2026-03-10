@@ -319,4 +319,89 @@ final class DocNestTests: XCTestCase {
         XCTAssertTrue(importResult.summaryMessage.contains("unsupported"))
         XCTAssertEqual(documents.count, 1)
     }
+
+    @MainActor
+    func testCreateAndAssignLabelCreatesSingleNormalizedLabel() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let document = DocumentRecord(
+            originalFileName: "contract.pdf",
+            title: "Contract",
+            importedAt: .now,
+            pageCount: 1
+        )
+        context.insert(document)
+
+        let firstLabel = try ManageLabelsUseCase.createAndAssignLabel(named: "  Finance   Team  ", to: document, using: context)
+        let secondLabel = try ManageLabelsUseCase.createAndAssignLabel(named: "finance team", to: document, using: context)
+
+        let labels = try context.fetch(FetchDescriptor<LabelTag>())
+        XCTAssertEqual(labels.count, 1)
+        XCTAssertEqual(firstLabel.persistentModelID, secondLabel.persistentModelID)
+        XCTAssertEqual(document.labels.count, 1)
+        XCTAssertEqual(document.labels.first?.name, "Finance Team")
+    }
+
+    @MainActor
+    func testRenameLabelMergesAssignmentsIntoExistingLabel() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let finance = LabelTag(name: "Finance")
+        let archive = LabelTag(name: "Archive")
+        let documentA = DocumentRecord(originalFileName: "a.pdf", title: "A", importedAt: .now, pageCount: 1, labels: [finance])
+        let documentB = DocumentRecord(originalFileName: "b.pdf", title: "B", importedAt: .now, pageCount: 1, labels: [archive])
+
+        context.insert(finance)
+        context.insert(archive)
+        context.insert(documentA)
+        context.insert(documentB)
+        try context.save()
+
+        let survivingLabel = try ManageLabelsUseCase.rename(archive, to: "Finance", using: context)
+        let labels = try context.fetch(FetchDescriptor<LabelTag>())
+
+        XCTAssertEqual(labels.count, 1)
+        XCTAssertEqual(survivingLabel.name, "Finance")
+        XCTAssertEqual(documentA.labels.first?.name, "Finance")
+        XCTAssertEqual(documentB.labels.first?.name, "Finance")
+    }
+
+    @MainActor
+    func testDeleteLabelRemovesAssignmentsButKeepsDocuments() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Receipts")
+        let document = DocumentRecord(originalFileName: "receipt.pdf", title: "Receipt", importedAt: .now, pageCount: 1, labels: [label])
+        context.insert(label)
+        context.insert(document)
+        try context.save()
+
+        try ManageLabelsUseCase.delete(label, using: context)
+
+        let remainingDocuments = try context.fetch(FetchDescriptor<DocumentRecord>())
+        let remainingLabels = try context.fetch(FetchDescriptor<LabelTag>())
+
+        XCTAssertEqual(remainingDocuments.count, 1)
+        XCTAssertTrue(remainingDocuments[0].labels.isEmpty)
+        XCTAssertTrue(remainingLabels.isEmpty)
+    }
+
+    @MainActor
+    func testLabelFilterRequiresAllSelectedLabels() throws {
+        let finance = LabelTag(name: "Finance")
+        let archive = LabelTag(name: "Archive")
+        let matchingDocument = DocumentRecord(originalFileName: "both.pdf", title: "Both", importedAt: .now, pageCount: 1, labels: [finance, archive])
+        let partialDocument = DocumentRecord(originalFileName: "finance.pdf", title: "Finance Only", importedAt: .now, pageCount: 1, labels: [finance])
+
+        let matchingIDs = Set([finance.persistentModelID, archive.persistentModelID])
+
+        XCTAssertTrue(ManageLabelsUseCase.matchingAllSelectedLabels(matchingDocument, selectedLabelIDs: matchingIDs))
+        XCTAssertFalse(ManageLabelsUseCase.matchingAllSelectedLabels(partialDocument, selectedLabelIDs: matchingIDs))
+    }
 }

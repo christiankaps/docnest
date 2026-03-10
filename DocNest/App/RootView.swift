@@ -5,27 +5,36 @@ import UniformTypeIdentifiers
 struct RootView: View {
     let libraryURL: URL
     @State private var selectedSection: LibrarySection = .allDocuments
+    @State private var selectedLabelIDs: Set<PersistentIdentifier> = []
     @State private var selectedDocumentID: PersistentIdentifier?
     @State private var isImporting = false
     @State private var isDropTargeted = false
+    @State private var isShowingLabelManager = false
     @State private var importSummaryMessage: String?
     @Environment(\.modelContext) private var modelContext
 
     @Query(sort: \DocumentRecord.importedAt, order: .reverse)
     private var allDocuments: [DocumentRecord]
 
+    @Query(sort: \LabelTag.name, order: .forward)
+    private var allLabels: [LabelTag]
+
     private var recentDocuments: [DocumentRecord] {
         Array(allDocuments.prefix(10))
     }
 
     private var filteredDocuments: [DocumentRecord] {
-        switch selectedSection {
+        let sectionDocuments: [DocumentRecord] = switch selectedSection {
         case .allDocuments:
             allDocuments
         case .recent:
             recentDocuments
         case .needsLabels:
             allDocuments.filter { $0.labels.isEmpty }
+        }
+
+        return sectionDocuments.filter {
+            ManageLabelsUseCase.matchingAllSelectedLabels($0, selectedLabelIDs: selectedLabelIDs)
         }
     }
 
@@ -35,7 +44,11 @@ struct RootView: View {
 
     var body: some View {
         NavigationSplitView {
-            LibrarySidebarView(selectedSection: $selectedSection)
+            LibrarySidebarView(
+                selectedSection: $selectedSection,
+                labels: allLabels,
+                selectedLabelIDs: $selectedLabelIDs
+            )
         } content: {
             ZStack {
                 DocumentListView(
@@ -57,7 +70,13 @@ struct RootView: View {
                 isDropTargeted = isTargeted
             }
         } detail: {
-            DocumentInspectorView(document: selectedDocument, libraryURL: libraryURL)
+            DocumentInspectorView(
+                document: selectedDocument,
+                libraryURL: libraryURL,
+                onManageLabels: {
+                    isShowingLabelManager = true
+                }
+            )
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar {
@@ -68,6 +87,17 @@ struct RootView: View {
                     Label("Import", systemImage: "plus")
                 }
             }
+
+            ToolbarItem {
+                Button {
+                    isShowingLabelManager = true
+                } label: {
+                    Label("Manage Labels", systemImage: "tag")
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingLabelManager) {
+            LabelManagementView()
         }
         .fileImporter(
             isPresented: $isImporting,
@@ -82,6 +112,9 @@ struct RootView: View {
             }
         } message: {
             Text(importSummaryMessage ?? "")
+        }
+        .onChange(of: allLabels.map(\.persistentModelID)) { _, labelIDs in
+            selectedLabelIDs.formIntersection(Set(labelIDs))
         }
     }
 

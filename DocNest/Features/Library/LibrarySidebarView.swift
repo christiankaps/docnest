@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 enum LibrarySection: String, CaseIterable, Identifiable {
     case allDocuments = "All Documents"
@@ -10,13 +11,67 @@ enum LibrarySection: String, CaseIterable, Identifiable {
 
 struct LibrarySidebarView: View {
     @Binding var selectedSection: LibrarySection
+    let labels: [LabelTag]
+    @Binding var selectedLabelIDs: Set<PersistentIdentifier>
 
     var body: some View {
-        List(LibrarySection.allCases, selection: $selectedSection) { section in
-            Label(section.rawValue, systemImage: iconName(for: section))
-                .tag(section)
+        List {
+            Section("Library") {
+                ForEach(LibrarySection.allCases) { section in
+                    Button {
+                        selectedSection = section
+                    } label: {
+                        HStack {
+                            Label(section.rawValue, systemImage: iconName(for: section))
+                            Spacer()
+                            if selectedSection == section {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Section("Label Filters") {
+                if labels.isEmpty {
+                    Text("No labels yet")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button("Clear Label Filters") {
+                        selectedLabelIDs.removeAll()
+                    }
+                    .disabled(selectedLabelIDs.isEmpty)
+
+                    ForEach(labels) { label in
+                        Button {
+                            toggleLabelSelection(label)
+                        } label: {
+                            HStack {
+                                Label(label.name, systemImage: selectedLabelIDs.contains(label.persistentModelID) ? "tag.fill" : "tag")
+                                Spacer()
+                                if selectedLabelIDs.contains(label.persistentModelID) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
         .navigationTitle("Library")
+    }
+
+    private func toggleLabelSelection(_ label: LabelTag) {
+        let labelID = label.persistentModelID
+        if selectedLabelIDs.contains(labelID) {
+            selectedLabelIDs.remove(labelID)
+        } else {
+            selectedLabelIDs.insert(labelID)
+        }
     }
 
     private func iconName(for section: LibrarySection) -> String {
@@ -32,5 +87,10 @@ struct LibrarySidebarView: View {
 }
 
 #Preview {
-    LibrarySidebarView(selectedSection: .constant(.allDocuments))
+    let labels = LabelTag.makeSamples()
+    LibrarySidebarView(
+        selectedSection: .constant(.allDocuments),
+        labels: [labels.finance, labels.tax, labels.contracts],
+        selectedLabelIDs: .constant([])
+    )
 }

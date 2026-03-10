@@ -366,6 +366,13 @@ Ziel: Nutzer kann Dokumente sinnvoll organisieren.
 - Filter nach Labels.
 - Gute Tastatur- und Multi-Select-Flows.
 
+Aktueller Stand:
+- Labels koennen global angelegt, umbenannt, zusammengefuehrt und geloescht werden.
+- Die Dokument-Detailansicht erlaubt direkte Zuweisung und Entfernung bestehender Labels sowie das Anlegen und sofortige Zuweisen neuer Labels per Tastatur oder Direktaktion.
+- Die Seitenleiste bietet Mehrfachfilter ueber Labels. Wenn mehrere Labels aktiv sind, zeigt die Liste nur Dokumente, die alle ausgewaehlten Labels enthalten.
+- Das Loeschen eines Labels entfernt nur die Zuordnung. Dokumente und Originaldateien bleiben unveraendert in der Library.
+- Batch-Zuweisung fuer Mehrfachselektion ist noch offen, solange die Dokumentliste nur Einzelauswahl unterstuetzt.
+
 ### Phase 5: Suche und Wiederfinden
 Ziel: Dokumente lassen sich schnell wiederfinden.
 

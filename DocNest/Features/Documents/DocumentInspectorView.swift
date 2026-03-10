@@ -5,6 +5,12 @@ import SwiftData
 struct DocumentInspectorView: View {
     let document: DocumentRecord?
     let libraryURL: URL?
+    let onManageLabels: () -> Void
+
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \LabelTag.name, order: .forward) private var allLabels: [LabelTag]
+    @State private var newLabelName = ""
+    @State private var labelErrorMessage: String?
 
     var body: some View {
         Group {
@@ -34,10 +40,9 @@ struct DocumentInspectorView: View {
 
                         Text(document.formattedFileSize)
                             .foregroundStyle(.secondary)
-
-                        Text("Labels: \(document.labelSummary(emptyText: "None"))")
-                            .foregroundStyle(.secondary)
                     }
+
+                    labelSection(for: document)
 
                     if !document.contentHash.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
@@ -76,9 +81,16 @@ struct DocumentInspectorView: View {
                 ContentUnavailableView(
                     "No Document Selected",
                     systemImage: "doc.text",
-                    description: Text("Choose a document from the list to inspect its metadata and preview.")
+                    description: Text("Choose a document from the list to inspect its metadata, labels, and preview.")
                 )
             }
+        }
+        .alert("Label Error", isPresented: labelErrorBinding) {
+            Button("OK", role: .cancel) {
+                labelErrorMessage = nil
+            }
+        } message: {
+            Text(labelErrorMessage ?? "Unknown label error.")
         }
     }
 
@@ -151,6 +163,123 @@ struct DocumentInspectorView: View {
 
         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
     }
+
+    @ViewBuilder
+    private func labelSection(for document: DocumentRecord) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Labels")
+                    .font(.headline)
+                Spacer()
+                Button("Manage Labels", action: onManageLabels)
+            }
+
+            if document.labels.isEmpty {
+                Text("No labels assigned")
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(document.labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { label in
+                        HStack {
+                            LabelChip(name: label.name)
+                            Spacer()
+                            Button {
+                                removeLabel(label, from: document)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            Menu("Assign Existing Label") {
+                if allLabels.isEmpty {
+                    Text("No labels available")
+                } else {
+                    ForEach(allLabels) { label in
+                        Button {
+                            toggleLabel(label, for: document)
+                        } label: {
+                            HStack {
+                                Text(label.name)
+                                if document.labels.contains(where: { $0.persistentModelID == label.persistentModelID }) {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                TextField("Create and assign label", text: $newLabelName)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        createAndAssignLabel(to: document)
+                    }
+
+                Button("Add") {
+                    createAndAssignLabel(to: document)
+                }
+                .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+
+    private var labelErrorBinding: Binding<Bool> {
+        Binding(
+            get: { labelErrorMessage != nil },
+            set: { newValue in
+                if !newValue {
+                    labelErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func toggleLabel(_ label: LabelTag, for document: DocumentRecord) {
+        do {
+            if document.labels.contains(where: { $0.persistentModelID == label.persistentModelID }) {
+                try ManageLabelsUseCase.remove(label, from: document, using: modelContext)
+            } else {
+                try ManageLabelsUseCase.assign(label, to: document, using: modelContext)
+            }
+        } catch {
+            labelErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func removeLabel(_ label: LabelTag, from document: DocumentRecord) {
+        do {
+            try ManageLabelsUseCase.remove(label, from: document, using: modelContext)
+        } catch {
+            labelErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func createAndAssignLabel(to document: DocumentRecord) {
+        do {
+            _ = try ManageLabelsUseCase.createAndAssignLabel(named: newLabelName, to: document, using: modelContext)
+            newLabelName = ""
+        } catch {
+            labelErrorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct LabelChip: View {
+    let name: String
+
+    var body: some View {
+        Text(name)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Color.accentColor.opacity(0.14)))
+    }
 }
 
 private enum DocumentInspectorPreviewData {
@@ -182,6 +311,6 @@ private enum DocumentInspectorPreviewData {
 #Preview {
     let previewData = DocumentInspectorPreviewData.make()
 
-    DocumentInspectorView(document: previewData.document, libraryURL: nil)
+    DocumentInspectorView(document: previewData.document, libraryURL: nil, onManageLabels: {})
         .modelContainer(previewData.container)
 }
