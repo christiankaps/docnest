@@ -110,6 +110,19 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 #### Entscheidung fuer die aktuelle Implementierung
 - Hash-basierte Duplikate werden fuer v1 nicht erneut importiert, sondern im Importstatus als uebersprungen ausgewiesen.
 
+#### Drag-and-drop Anforderungen fuer v1
+- Drag-and-drop nutzt dieselbe Import-Pipeline wie der Dateidialog; Validierung, Duplikaterkennung, Dateikopie und Rueckmeldung verhalten sich identisch.
+- Solange eine Library geoeffnet ist, koennen PDFs aus Finder oder anderen Apps mit Datei-URLs auf das Hauptfenster gezogen werden.
+- Der Hauptinhalt zeigt waehrend eines gueltigen Drag-Vorgangs eine klare visuelle Drop-Zone; ungueltige Inhalte werden nicht als akzeptabler Drop dargestellt.
+- Mehrere PDFs koennen in einem einzigen Drop-Vorgang importiert werden.
+- Nicht-PDF-Dateien im Drop werden fuer v1 nicht importiert und in der Rueckmeldung als uebersprungen oder fehlgeschlagen ausgewiesen.
+- Ein Drop ohne geoeffnete Library darf keinen stillen Importversuch ausloesen; die App muss stattdessen den Library-Zustand erklaeren.
+- Der Drop soll auf die Dokumentliste und den leeren Bibliothekszustand wirken; Nutzer muessen kein spezielles kleines Ziel treffen.
+
+#### Explizite Abgrenzung fuer v1
+- Finder-Datei-URLs und normale Datei-Drops sind Teil von v1.
+- Fortgeschrittene Drag-Quellen wie File Promises, Mail-Anhaenge ohne lokale Datei-URL oder externe Provider mit asynchroner Materialisierung sind nicht Teil dieses ersten Schritts.
+
 ### 6.3 Dokumentdarstellung
 
 #### Muss
@@ -283,6 +296,12 @@ Meine Dokumente.docnestlibrary/
 - Labels per Shortcut oder Inspector zuweisen.
 - Trefferliste live beim Tippen filtern.
 
+### 10.4 Drag-and-drop UX
+- Bei einem gueltigen PDF-Drop ist die aktive Drop-Zone sofort erkennbar.
+- Die visuelle Rueckmeldung darf Listen- oder Inspector-Inhalte nicht unnoetig verdecken.
+- Nach erfolgreichem Drop bleibt der Nutzer im aktuellen Fensterkontext; der Import soll keine neue Library oder kein neues Fenster oeffnen.
+- Nach einem abgeschlossenen Drop sieht der Nutzer dieselbe Importzusammenfassung wie beim Dateidialog.
+
 ### 10.3 Kritische UX-Regeln
 - Nutzer muss jederzeit erkennen koennen, ob er ein Originaldokument, Metadaten oder nur die Sicht auf die Daten veraendert.
 - Zerstoererische Aktionen brauchen klare Sprache und Undo, wenn moeglich.
@@ -310,10 +329,21 @@ Ziel: PDFs kommen robust in die Library.
 - Kopieren in `Originals/`.
 - Metadatenerfassung beim Import.
 - Fehlerbehandlung und Importstatus.
+- Drag-and-drop an die bestehende Import-Pipeline anschliessen.
 
 Aktueller Stand:
 - Import speichert Dateiname, Dateigroesse, Dateierstellungsdatum, Seitenanzahl, Importzeitpunkt und Content-Hash im Dokumentmodell.
 - Hash-basierte Duplikate werden uebersprungen und im Importstatus explizit ausgewiesen.
+- Dateidialog-Import und Drag-and-drop verwenden denselben Importpfad und dieselbe Rueckmeldung.
+- Die Dokumentliste dient als grosszuegige Drop-Zone; bei geschlossenener Library erklaert die App den fehlenden Importkontext statt still zu scheitern.
+
+Implementierungsplan fuer Drag-and-drop:
+1. In der Hauptansicht einen grosszuegigen Drop-Bereich auf dem Content-Bereich einfuehren, nicht nur auf einem einzelnen Unterelement.
+2. Drop nur fuer PDFs bzw. Datei-URLs akzeptieren und die visuelle Aktivierung an gueltige Inhalte koppeln.
+3. Den Drop-Handler auf dieselbe Import-Use-Case-Schnittstelle wie den Dateidialog routen, damit kein zweiter Importpfad entsteht.
+4. Gemischte Drops mit PDFs und ungueltigen Dateien sauber in eine gemeinsame Rueckmeldung uebersetzen.
+5. Den leeren Bibliothekszustand und die Dokumentliste als Drop-Ziel testen, einschliesslich Mehrfachdrop, Duplikaten und Fehlerfaellen.
+6. UI-Tests fuer erfolgreichen Drop und fuer abgelehnte Inhalte nachziehen, sobald die Drop-Mechanik stabil ist.
 
 ### Phase 3: Lesen und Anzeigen
 Ziel: Dokumente werden in der App wirklich nutzbar.

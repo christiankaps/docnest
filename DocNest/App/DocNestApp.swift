@@ -15,6 +15,7 @@ struct DocNestApp: App {
 
 private struct AppRootView: View {
     @StateObject private var librarySession = LibrarySessionController()
+    @State private var isClosedLibraryDropTargeted = false
 
     var body: some View {
         Group {
@@ -32,6 +33,20 @@ private struct AppRootView: View {
                         Button("Create Library", action: librarySession.createLibrary)
                         Button("Open Library", action: librarySession.openLibrary)
                     }
+                }
+                .overlay {
+                    if isClosedLibraryDropTargeted {
+                        DocumentImportDropOverlay(
+                            title: "Open a Library First",
+                            message: "Create or open a DocNest library before dropping PDFs into the app."
+                        )
+                        .padding(32)
+                    }
+                }
+                .dropDestination(for: URL.self) { urls, _ in
+                    handleDroppedURLsWithoutLibrary(urls)
+                } isTargeted: { isTargeted in
+                    isClosedLibraryDropTargeted = isTargeted
                 }
             }
         }
@@ -67,6 +82,19 @@ private struct AppRootView: View {
                 }
             }
         )
+    }
+
+    private func handleDroppedURLsWithoutLibrary(_ urls: [URL]) -> Bool {
+        guard !urls.isEmpty else {
+            return false
+        }
+
+        if ImportPDFDocumentsUseCase.containsImportableDocuments(in: urls) {
+            librarySession.libraryErrorMessage = "Create or open a DocNest library before importing PDFs via drag and drop."
+            return true
+        }
+
+        return false
     }
 }
 

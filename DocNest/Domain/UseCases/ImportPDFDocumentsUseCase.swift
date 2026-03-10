@@ -2,9 +2,14 @@ import Foundation
 import CryptoKit
 import PDFKit
 import SwiftData
+import UniformTypeIdentifiers
 
 struct ImportPDFDocumentsResult {
     struct Duplicate {
+        let fileName: String
+    }
+
+    struct Unsupported {
         let fileName: String
     }
 
@@ -15,10 +20,15 @@ struct ImportPDFDocumentsResult {
 
     let importedCount: Int
     let duplicates: [Duplicate]
+    let unsupportedFiles: [Unsupported]
     let failures: [Failure]
 
     var hasDuplicates: Bool {
         !duplicates.isEmpty
+    }
+
+    var hasUnsupportedFiles: Bool {
+        !unsupportedFiles.isEmpty
     }
 
     var hasFailures: Bool {
@@ -26,7 +36,7 @@ struct ImportPDFDocumentsResult {
     }
 
     var hasUserMessage: Bool {
-        hasDuplicates || hasFailures
+        hasDuplicates || hasUnsupportedFiles || hasFailures
     }
 
     var summaryMessage: String {
@@ -43,6 +53,11 @@ struct ImportPDFDocumentsResult {
         if hasDuplicates {
             lines.append(duplicates.count == 1 ? "Skipped 1 duplicate:" : "Skipped \(duplicates.count) duplicates:")
             lines.append(contentsOf: duplicates.map { "- \($0.fileName)" })
+        }
+
+        if hasUnsupportedFiles {
+            lines.append(unsupportedFiles.count == 1 ? "Skipped 1 unsupported file:" : "Skipped \(unsupportedFiles.count) unsupported files:")
+            lines.append(contentsOf: unsupportedFiles.map { "- \($0.fileName)" })
         }
 
         let failureLines = failures.map { failure in
@@ -79,10 +94,16 @@ enum ImportPDFDocumentsUseCase {
         var importedRecords: [DocumentRecord] = []
         var importedStoredPaths: [String] = []
         var duplicates: [ImportPDFDocumentsResult.Duplicate] = []
+        var unsupportedFiles: [ImportPDFDocumentsResult.Unsupported] = []
         var failures: [ImportPDFDocumentsResult.Failure] = []
         var batchHashes: Set<String> = []
 
         for url in urls {
+            guard isSupportedDocumentURL(url) else {
+                unsupportedFiles.append(.init(fileName: url.lastPathComponent))
+                continue
+            }
+
             let accessedSecurityScope = url.startAccessingSecurityScopedResource()
             defer {
                 if accessedSecurityScope {
@@ -139,14 +160,24 @@ enum ImportPDFDocumentsUseCase {
                 )
             )
 
-            return ImportPDFDocumentsResult(importedCount: 0, duplicates: duplicates, failures: failures)
+            return ImportPDFDocumentsResult(
+                importedCount: 0,
+                duplicates: duplicates,
+                unsupportedFiles: unsupportedFiles,
+                failures: failures
+            )
         }
 
         return ImportPDFDocumentsResult(
             importedCount: importedRecords.count,
             duplicates: duplicates,
+            unsupportedFiles: unsupportedFiles,
             failures: failures
         )
+    }
+
+    static func containsImportableDocuments(in urls: [URL]) -> Bool {
+        urls.contains(where: isSupportedDocumentURL)
     }
 
     private static func importDocument(
@@ -210,6 +241,23 @@ enum ImportPDFDocumentsUseCase {
         }
 
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func isSupportedDocumentURL(_ url: URL) -> Bool {
+        guard url.isFileURL else {
+            return false
+        }
+
+        let pathExtension = url.pathExtension
+        guard !pathExtension.isEmpty else {
+            return false
+        }
+
+        if let fileType = UTType(filenameExtension: pathExtension) {
+            return fileType.conforms(to: .pdf)
+        }
+
+        return pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
     }
 
     private static func normalizedTitle(for url: URL) -> String {

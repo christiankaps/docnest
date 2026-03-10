@@ -282,4 +282,41 @@ final class DocNestTests: XCTestCase {
         XCTAssertFalse(secondImport.summaryMessage.isEmpty)
         XCTAssertEqual(documents.count, 1)
     }
+
+    @MainActor
+    func testImportUseCaseReportsUnsupportedFilesAndImportsValidPDFs() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let validPDFURL = tempRoot.appendingPathComponent("invoice.pdf")
+        let unsupportedTextURL = tempRoot.appendingPathComponent("notes.txt")
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Mixed Import Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let pdfDocument = PDFDocument()
+        pdfDocument.insert(PDFPage(), at: 0)
+        XCTAssertTrue(pdfDocument.write(to: validPDFURL))
+        try "hello".write(to: unsupportedTextURL, atomically: true, encoding: .utf8)
+
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let importResult = ImportPDFDocumentsUseCase.execute(
+            urls: [validPDFURL, unsupportedTextURL],
+            into: libraryURL,
+            using: context
+        )
+
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        XCTAssertEqual(importResult.importedCount, 1)
+        XCTAssertEqual(importResult.unsupportedFiles.count, 1)
+        XCTAssertEqual(importResult.unsupportedFiles.first?.fileName, "notes.txt")
+        XCTAssertTrue(importResult.summaryMessage.contains("unsupported"))
+        XCTAssertEqual(documents.count, 1)
+    }
 }
