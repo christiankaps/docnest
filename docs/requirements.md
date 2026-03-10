@@ -107,6 +107,9 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Stapelimport mehrerer Dateien.
 - Optionales Kopieren in die Library statt Referenzieren externer Dateien; fuer v1 wird Kopieren in die Library empfohlen.
 
+#### Entscheidung fuer die aktuelle Implementierung
+- Hash-basierte Duplikate werden fuer v1 nicht erneut importiert, sondern im Importstatus als uebersprungen ausgewiesen.
+
 ### 6.3 Dokumentdarstellung
 
 #### Muss
@@ -308,6 +311,10 @@ Ziel: PDFs kommen robust in die Library.
 - Metadatenerfassung beim Import.
 - Fehlerbehandlung und Importstatus.
 
+Aktueller Stand:
+- Import speichert Dateiname, Dateigroesse, Dateierstellungsdatum, Seitenanzahl, Importzeitpunkt und Content-Hash im Dokumentmodell.
+- Hash-basierte Duplikate werden uebersprungen und im Importstatus explizit ausgewiesen.
+
 ### Phase 3: Lesen und Anzeigen
 Ziel: Dokumente werden in der App wirklich nutzbar.
 
@@ -316,6 +323,10 @@ Ziel: Dokumente werden in der App wirklich nutzbar.
 - PDF-Vorschau mit PDFKit.
 - Detailansicht fuer Metadaten.
 - Finder-Aktionen.
+
+Aktueller Stand:
+- Die Dokumentliste bietet sortierbare Spalten fuer Titel, Importdatum, Seitenzahl und Dateigroesse.
+- Der Inspector bietet Finder-Aktionen fuer Originaldatei und Library.
 
 ### Phase 4: Labels als primaeres Ordnungssystem
 Ziel: Nutzer kann Dokumente sinnvoll organisieren.

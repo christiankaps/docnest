@@ -22,6 +22,10 @@ enum DocumentStorageService {
         return destinationURL.path.replacingOccurrences(of: libraryURL.path + "/", with: "")
     }
 
+    static func deleteStoredFile(at path: String, libraryURL: URL) {
+        try? FileManager.default.removeItem(at: fileURL(for: path, libraryURL: libraryURL))
+    }
+
     static func fileURL(for path: String, libraryURL: URL) -> URL {
         libraryURL.appendingPathComponent(path, isDirectory: false)
     }

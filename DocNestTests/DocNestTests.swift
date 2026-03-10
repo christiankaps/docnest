@@ -67,8 +67,11 @@ final class DocNestTests: XCTestCase {
         let doc = DocumentRecord(
             originalFileName: "test.pdf",
             title: "Test",
+            sourceCreatedAt: .now.addingTimeInterval(-86_400),
             importedAt: .now,
             pageCount: 1,
+            fileSize: 8_192,
+            contentHash: "abc123",
             storedFilePath: "/tmp/test-path.pdf"
         )
         context.insert(doc)
@@ -76,6 +79,8 @@ final class DocNestTests: XCTestCase {
 
         let fetched = try context.fetch(FetchDescriptor<DocumentRecord>())
         XCTAssertEqual(fetched.first?.storedFilePath, "/tmp/test-path.pdf")
+        XCTAssertEqual(fetched.first?.fileSize, 8_192)
+        XCTAssertEqual(fetched.first?.contentHash, "abc123")
     }
 
     func testCreateLibraryCreatesRequiredStructure() throws {
@@ -134,6 +139,8 @@ final class DocNestTests: XCTestCase {
                 title: "Invoice",
                 importedAt: .now,
                 pageCount: 1,
+                fileSize: 4_096,
+                contentHash: "seededhash",
                 storedFilePath: "Originals/2026/03/test.pdf"
             )
         )
@@ -184,6 +191,9 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(documents.count, 1)
         XCTAssertEqual(documents.first?.title, "Invoice March 2026")
         XCTAssertEqual(documents.first?.pageCount, 1)
+        XCTAssertFalse(documents.first?.contentHash.isEmpty ?? true)
+        XCTAssertGreaterThan(documents.first?.fileSize ?? 0, 0)
+        XCTAssertNotNil(documents.first?.sourceCreatedAt)
 
         guard let storedFilePath = documents.first?.storedFilePath else {
             XCTFail("Expected imported document to include a stored file path")
@@ -224,8 +234,52 @@ final class DocNestTests: XCTestCase {
 
         let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
         XCTAssertEqual(importResult.importedCount, 1)
+        XCTAssertFalse(importResult.hasDuplicates)
         XCTAssertEqual(importResult.failures.count, 1)
         XCTAssertEqual(documents.count, 1)
         XCTAssertEqual(documents.first?.originalFileName, "valid.pdf")
+    }
+
+    @MainActor
+    func testImportUseCaseSkipsDuplicatePdfByHash() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sourcePDFURL = tempRoot.appendingPathComponent("original.pdf")
+        let duplicatePDFURL = tempRoot.appendingPathComponent("duplicate-copy.pdf")
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Import Duplicate Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let pdfDocument = PDFDocument()
+        pdfDocument.insert(PDFPage(), at: 0)
+        XCTAssertTrue(pdfDocument.write(to: sourcePDFURL))
+        try FileManager.default.copyItem(at: sourcePDFURL, to: duplicatePDFURL)
+
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let firstImport = ImportPDFDocumentsUseCase.execute(
+            urls: [sourcePDFURL],
+            into: libraryURL,
+            using: context
+        )
+        XCTAssertEqual(firstImport.importedCount, 1)
+
+        let secondImport = ImportPDFDocumentsUseCase.execute(
+            urls: [duplicatePDFURL],
+            into: libraryURL,
+            using: context
+        )
+
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        XCTAssertEqual(secondImport.importedCount, 0)
+        XCTAssertEqual(secondImport.duplicates.count, 1)
+        XCTAssertFalse(secondImport.summaryMessage.isEmpty)
+        XCTAssertEqual(documents.count, 1)
     }
 }

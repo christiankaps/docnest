@@ -92,7 +92,7 @@ struct RootView: View {
             using: modelContext
         )
 
-        if importResult.hasFailures {
+        if importResult.hasUserMessage {
             importSummaryMessage = importResult.summaryMessage
         }
     }

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftData
 import PDFKit
@@ -24,11 +25,48 @@ struct DocumentInspectorView: View {
                         Text("Imported \(document.importedAt.formatted(date: .abbreviated, time: .omitted))")
                             .foregroundStyle(.secondary)
 
+                        if let sourceCreatedAt = document.sourceCreatedAt {
+                            Text("Created \(sourceCreatedAt.formatted(date: .abbreviated, time: .omitted))")
+                                .foregroundStyle(.secondary)
+                        }
+
                         Text("\(document.pageCount) pages")
+                            .foregroundStyle(.secondary)
+
+                        Text(Self.fileSizeFormatter.string(fromByteCount: document.fileSize))
                             .foregroundStyle(.secondary)
 
                         Text("Labels: \(labelsText(for: document))")
                             .foregroundStyle(.secondary)
+                    }
+
+                    if !document.contentHash.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Content Hash")
+                                .font(.headline)
+                            Text(document.contentHash)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    HStack(spacing: 12) {
+                        Button("Open Original") {
+                            openOriginalFile(for: document)
+                        }
+                        .disabled(originalFileURL(for: document) == nil)
+
+                        Button("Show in Finder") {
+                            showOriginalFileInFinder(for: document)
+                        }
+                        .disabled(originalFileURL(for: document) == nil)
+
+                        if let libraryURL {
+                            Button("Show Library") {
+                                NSWorkspace.shared.activateFileViewerSelecting([libraryURL])
+                            }
+                        }
                     }
 
                     Spacer()
@@ -94,6 +132,42 @@ struct DocumentInspectorView: View {
 
         return document.labels.map(\.name).joined(separator: ", ")
     }
+
+    private func originalFileURL(for document: DocumentRecord) -> URL? {
+        guard let path = document.storedFilePath, let libraryURL else {
+            return nil
+        }
+
+        let fileURL = DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return nil
+        }
+
+        return fileURL
+    }
+
+    private func openOriginalFile(for document: DocumentRecord) {
+        guard let fileURL = originalFileURL(for: document) else {
+            return
+        }
+
+        NSWorkspace.shared.open(fileURL)
+    }
+
+    private func showOriginalFileInFinder(for document: DocumentRecord) {
+        guard let fileURL = originalFileURL(for: document) else {
+            return
+        }
+
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+    }
+
+    private static let fileSizeFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB]
+        formatter.countStyle = .file
+        return formatter
+    }()
 }
 
 #Preview {
@@ -107,8 +181,11 @@ struct DocumentInspectorView: View {
     let doc = DocumentRecord(
         originalFileName: "invoice-march-2026.pdf",
         title: "Invoice March 2026",
+        sourceCreatedAt: .now.addingTimeInterval(-86_400 * 2),
         importedAt: .now,
         pageCount: 4,
+        fileSize: 182_144,
+        contentHash: UUID().uuidString.replacingOccurrences(of: "-", with: ""),
         labels: [labels.finance, labels.tax]
     )
     container.mainContext.insert(doc)
