@@ -117,6 +117,44 @@ final class DocNestTests: XCTestCase {
         XCTAssertThrowsError(try DocumentLibraryService.validateLibrary(at: libraryURL))
     }
 
+    func testPersistedLibraryURLRoundTripsNormalizedPath() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Remember Me")
+
+        defer {
+            DocumentLibraryService.persistLibraryURL(nil)
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryURL = try DocumentLibraryService.createLibrary(at: libraryURL)
+
+        DocumentLibraryService.persistLibraryURL(createdLibraryURL)
+
+        XCTAssertEqual(
+            DocumentLibraryService.restorePersistedLibraryURL(),
+            createdLibraryURL.standardizedFileURL
+        )
+    }
+
+    func testClearingPersistedLibraryURLRemovesStartupRestoreTarget() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Forget Me")
+
+        defer {
+            DocumentLibraryService.persistLibraryURL(nil)
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryURL = try DocumentLibraryService.createLibrary(at: libraryURL)
+        DocumentLibraryService.persistLibraryURL(createdLibraryURL)
+
+        DocumentLibraryService.persistLibraryURL(nil)
+
+        XCTAssertNil(DocumentLibraryService.restorePersistedLibraryURL())
+    }
+
     @MainActor
     func testLibraryContainersStayIsolated() throws {
         let tempRoot = FileManager.default.temporaryDirectory

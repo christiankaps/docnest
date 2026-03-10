@@ -137,7 +137,6 @@ private final class LibrarySessionController: ObservableObject {
     func closeLibrary() {
         selectedLibraryURL = nil
         modelContainer = nil
-        DocumentLibraryService.persistLibraryURL(nil)
     }
 
     private func openValidatedLibrary(at url: URL) {
@@ -146,6 +145,7 @@ private final class LibrarySessionController: ObservableObject {
             try openLibrary(at: validatedURL)
         } catch {
             closeLibrary()
+            DocumentLibraryService.persistLibraryURL(nil)
             libraryErrorMessage = error.localizedDescription
         }
     }
