@@ -6,7 +6,7 @@ struct RootView: View {
     let libraryURL: URL
     @State private var selectedSection: LibrarySection = .allDocuments
     @State private var selectedLabelIDs: Set<PersistentIdentifier> = []
-    @State private var selectedDocumentID: PersistentIdentifier?
+    @State private var selectedDocumentIDs: Set<PersistentIdentifier> = []
     @State private var isImporting = false
     @State private var isDropTargeted = false
     @State private var isShowingLabelManager = false
@@ -38,8 +38,14 @@ struct RootView: View {
         }
     }
 
-    private var selectedDocument: DocumentRecord? {
-        filteredDocuments.first { $0.persistentModelID == selectedDocumentID } ?? filteredDocuments.first
+    private var selectedDocuments: [DocumentRecord] {
+        let explicitSelection = filteredDocuments.filter { selectedDocumentIDs.contains($0.persistentModelID) }
+
+        if !explicitSelection.isEmpty {
+            return explicitSelection
+        }
+
+        return filteredDocuments.first.map { [$0] } ?? []
     }
 
     var body: some View {
@@ -53,7 +59,7 @@ struct RootView: View {
             ZStack {
                 DocumentListView(
                     documents: filteredDocuments,
-                    selectedDocumentID: $selectedDocumentID
+                    selectedDocumentIDs: $selectedDocumentIDs
                 )
 
                 if isDropTargeted {
@@ -71,7 +77,7 @@ struct RootView: View {
             }
         } detail: {
             DocumentInspectorView(
-                document: selectedDocument,
+                documents: selectedDocuments,
                 libraryURL: libraryURL,
                 onManageLabels: {
                     isShowingLabelManager = true
@@ -115,6 +121,9 @@ struct RootView: View {
         }
         .onChange(of: allLabels.map(\.persistentModelID)) { _, labelIDs in
             selectedLabelIDs.formIntersection(Set(labelIDs))
+        }
+        .onChange(of: filteredDocuments.map(\.persistentModelID)) { _, documentIDs in
+            selectedDocumentIDs.formIntersection(Set(documentIDs))
         }
     }
 

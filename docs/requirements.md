@@ -371,7 +371,8 @@ Aktueller Stand:
 - Die Dokument-Detailansicht erlaubt direkte Zuweisung und Entfernung bestehender Labels sowie das Anlegen und sofortige Zuweisen neuer Labels per Tastatur oder Direktaktion.
 - Die Seitenleiste bietet Mehrfachfilter ueber Labels. Wenn mehrere Labels aktiv sind, zeigt die Liste nur Dokumente, die alle ausgewaehlten Labels enthalten.
 - Das Loeschen eines Labels entfernt nur die Zuordnung. Dokumente und Originaldateien bleiben unveraendert in der Library.
-- Batch-Zuweisung fuer Mehrfachselektion ist noch offen, solange die Dokumentliste nur Einzelauswahl unterstuetzt.
+- Die Dokumentliste unterstuetzt Mehrfachselektion. Der Inspector kann Labels fuer die gesamte Auswahl hinzufügen oder von der gesamten Auswahl entfernen.
+- Bei gemischten Label-Zustaenden zeigt der Inspector gemeinsame Labels getrennt von partiell vergebenen Labels an und bietet Aktionen wie "zu verbleibenden Dokumenten hinzufuegen" an.
 
 ### Phase 5: Suche und Wiederfinden
 Ziel: Dokumente lassen sich schnell wiederfinden.

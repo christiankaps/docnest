@@ -3,7 +3,7 @@ import SwiftUI
 import SwiftData
 
 struct DocumentInspectorView: View {
-    let document: DocumentRecord?
+    let documents: [DocumentRecord]
     let libraryURL: URL?
     let onManageLabels: () -> Void
 
@@ -12,9 +12,13 @@ struct DocumentInspectorView: View {
     @State private var newLabelName = ""
     @State private var labelErrorMessage: String?
 
+    private var singleSelectedDocument: DocumentRecord? {
+        documents.count == 1 ? documents.first : nil
+    }
+
     var body: some View {
         Group {
-            if let document {
+            if let document = singleSelectedDocument {
                 VStack(alignment: .leading, spacing: 20) {
                     pdfPreviewSection(for: document)
                         .frame(maxHeight: 360)
@@ -77,6 +81,10 @@ struct DocumentInspectorView: View {
                 }
                 .padding(24)
                 .navigationTitle("Preview")
+            } else if !documents.isEmpty {
+                multiSelectionInspector
+                    .padding(24)
+                    .navigationTitle("Selection")
             } else {
                 ContentUnavailableView(
                     "No Document Selected",
@@ -229,6 +237,92 @@ struct DocumentInspectorView: View {
         }
     }
 
+    private var multiSelectionInspector: some View {
+        let selectionSummary = BatchLabelSelectionSummary(documents: documents, availableLabels: allLabels)
+
+        return VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("\(documents.count) Documents Selected")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                Text("Use this inspector to add or remove labels across the current selection without changing the imported originals.")
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Shared Labels")
+                        .font(.headline)
+                    Spacer()
+                    Button("Manage Labels", action: onManageLabels)
+                }
+
+                if selectionSummary.labelsOnAllSelectedDocuments.isEmpty {
+                    Text("No label is currently assigned to every selected document.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(selectionSummary.labelsOnAllSelectedDocuments) { label in
+                            HStack {
+                                LabelChip(name: label.name)
+                                Spacer()
+                                Button("Remove from Selection") {
+                                    removeLabel(label, from: documents)
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !selectionSummary.partiallyAssignedLabels.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Partially Assigned")
+                        .font(.headline)
+
+                    Text(selectionSummary.partiallyAssignedLabels.map(\.name).joined(separator: ", "))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Menu("Apply or Remove Existing Label") {
+                if allLabels.isEmpty {
+                    Text("No labels available")
+                } else {
+                    ForEach(allLabels) { label in
+                        Button {
+                            toggleLabel(label, for: documents)
+                        } label: {
+                            HStack {
+                                Text(label.name)
+                                Spacer()
+                                Text(selectionSummary.actionTitle(for: label))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                TextField("Create and assign label to selection", text: $newLabelName)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        createAndAssignLabel(to: documents)
+                    }
+
+                Button("Add to Selection") {
+                    createAndAssignLabel(to: documents)
+                }
+                .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+            Spacer()
+        }
+    }
+
     private var labelErrorBinding: Binding<Bool> {
         Binding(
             get: { labelErrorMessage != nil },
@@ -241,11 +335,17 @@ struct DocumentInspectorView: View {
     }
 
     private func toggleLabel(_ label: LabelTag, for document: DocumentRecord) {
+        toggleLabel(label, for: [document])
+    }
+
+    private func toggleLabel(_ label: LabelTag, for documents: [DocumentRecord]) {
         do {
-            if document.labels.contains(where: { $0.persistentModelID == label.persistentModelID }) {
-                try ManageLabelsUseCase.remove(label, from: document, using: modelContext)
+            if documents.allSatisfy({ document in
+                document.labels.contains(where: { $0.persistentModelID == label.persistentModelID })
+            }) {
+                try ManageLabelsUseCase.remove(label, from: documents, using: modelContext)
             } else {
-                try ManageLabelsUseCase.assign(label, to: document, using: modelContext)
+                try ManageLabelsUseCase.assign(label, to: documents, using: modelContext)
             }
         } catch {
             labelErrorMessage = error.localizedDescription
@@ -253,20 +353,92 @@ struct DocumentInspectorView: View {
     }
 
     private func removeLabel(_ label: LabelTag, from document: DocumentRecord) {
+        removeLabel(label, from: [document])
+    }
+
+    private func removeLabel(_ label: LabelTag, from documents: [DocumentRecord]) {
         do {
-            try ManageLabelsUseCase.remove(label, from: document, using: modelContext)
+            try ManageLabelsUseCase.remove(label, from: documents, using: modelContext)
         } catch {
             labelErrorMessage = error.localizedDescription
         }
     }
 
     private func createAndAssignLabel(to document: DocumentRecord) {
+        createAndAssignLabel(to: [document])
+    }
+
+    private func createAndAssignLabel(to documents: [DocumentRecord]) {
         do {
-            _ = try ManageLabelsUseCase.createAndAssignLabel(named: newLabelName, to: document, using: modelContext)
+            _ = try ManageLabelsUseCase.createAndAssignLabel(named: newLabelName, to: documents, using: modelContext)
             newLabelName = ""
         } catch {
             labelErrorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct BatchLabelSelectionSummary {
+    let documents: [DocumentRecord]
+    let availableLabels: [LabelTag]
+
+    var labelsOnAllSelectedDocuments: [LabelTag] {
+        labelStates.filter(\.isAssignedToAllSelectedDocuments).map(\.label)
+    }
+
+    var partiallyAssignedLabels: [LabelTag] {
+        labelStates.filter(\.isPartiallyAssigned).map(\.label)
+    }
+
+    func actionTitle(for label: LabelTag) -> String {
+        guard let state = labelStates.first(where: { $0.label.persistentModelID == label.persistentModelID }) else {
+            return "Add to all"
+        }
+
+        if state.isAssignedToAllSelectedDocuments {
+            return "Remove from all"
+        }
+
+        if state.isPartiallyAssigned {
+            return "Add to remaining"
+        }
+
+        return "Add to all"
+    }
+
+    private var labelStates: [BatchLabelState] {
+        availableLabels.compactMap { label in
+            let assignedDocumentCount = documents.reduce(into: 0) { count, document in
+                if document.labels.contains(where: { $0.persistentModelID == label.persistentModelID }) {
+                    count += 1
+                }
+            }
+
+            guard assignedDocumentCount > 0 else {
+                return nil
+            }
+
+            return BatchLabelState(
+                label: label,
+                assignedDocumentCount: assignedDocumentCount,
+                selectedDocumentCount: documents.count
+            )
+        }
+        .sorted { $0.label.name.localizedCaseInsensitiveCompare($1.label.name) == .orderedAscending }
+    }
+}
+
+private struct BatchLabelState {
+    let label: LabelTag
+    let assignedDocumentCount: Int
+    let selectedDocumentCount: Int
+
+    var isAssignedToAllSelectedDocuments: Bool {
+        assignedDocumentCount == selectedDocumentCount
+    }
+
+    var isPartiallyAssigned: Bool {
+        assignedDocumentCount > 0 && assignedDocumentCount < selectedDocumentCount
     }
 }
 
@@ -311,6 +483,6 @@ private enum DocumentInspectorPreviewData {
 #Preview {
     let previewData = DocumentInspectorPreviewData.make()
 
-    DocumentInspectorView(document: previewData.document, libraryURL: nil, onManageLabels: {})
+    DocumentInspectorView(documents: [previewData.document], libraryURL: nil, onManageLabels: {})
         .modelContainer(previewData.container)
 }

@@ -404,4 +404,70 @@ final class DocNestTests: XCTestCase {
         XCTAssertTrue(ManageLabelsUseCase.matchingAllSelectedLabels(matchingDocument, selectedLabelIDs: matchingIDs))
         XCTAssertFalse(ManageLabelsUseCase.matchingAllSelectedLabels(partialDocument, selectedLabelIDs: matchingIDs))
     }
+
+    @MainActor
+    func testAssignLabelToMultipleDocumentsAddsItToAllSelectedDocuments() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Travel")
+        let documentA = DocumentRecord(originalFileName: "a.pdf", title: "A", importedAt: .now, pageCount: 1)
+        let documentB = DocumentRecord(originalFileName: "b.pdf", title: "B", importedAt: .now, pageCount: 1, labels: [label])
+        context.insert(label)
+        context.insert(documentA)
+        context.insert(documentB)
+        try context.save()
+
+        try ManageLabelsUseCase.assign(label, to: [documentA, documentB], using: context)
+
+        XCTAssertEqual(documentA.labels.map(\.name), ["Travel"])
+        XCTAssertEqual(documentB.labels.map(\.name), ["Travel"])
+    }
+
+    @MainActor
+    func testRemoveLabelFromMultipleDocumentsRemovesItFromSelectionOnly() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Legal")
+        let retainedLabel = LabelTag(name: "Archive")
+        let documentA = DocumentRecord(originalFileName: "a.pdf", title: "A", importedAt: .now, pageCount: 1, labels: [label])
+        let documentB = DocumentRecord(originalFileName: "b.pdf", title: "B", importedAt: .now, pageCount: 1, labels: [label, retainedLabel])
+        let documentC = DocumentRecord(originalFileName: "c.pdf", title: "C", importedAt: .now, pageCount: 1, labels: [label])
+        context.insert(label)
+        context.insert(retainedLabel)
+        context.insert(documentA)
+        context.insert(documentB)
+        context.insert(documentC)
+        try context.save()
+
+        try ManageLabelsUseCase.remove(label, from: [documentA, documentB], using: context)
+
+        XCTAssertTrue(documentA.labels.isEmpty)
+        XCTAssertEqual(documentB.labels.map(\.name), ["Archive"])
+        XCTAssertEqual(documentC.labels.map(\.name), ["Legal"])
+    }
+
+    @MainActor
+    func testCreateAndAssignLabelToMultipleDocumentsCreatesOneSharedLabel() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let documentA = DocumentRecord(originalFileName: "a.pdf", title: "A", importedAt: .now, pageCount: 1)
+        let documentB = DocumentRecord(originalFileName: "b.pdf", title: "B", importedAt: .now, pageCount: 1)
+        context.insert(documentA)
+        context.insert(documentB)
+        try context.save()
+
+        let label = try ManageLabelsUseCase.createAndAssignLabel(named: " Batch   Review ", to: [documentA, documentB], using: context)
+        let labels = try context.fetch(FetchDescriptor<LabelTag>())
+
+        XCTAssertEqual(labels.count, 1)
+        XCTAssertEqual(label.name, "Batch Review")
+        XCTAssertEqual(documentA.labels.map(\.name), ["Batch Review"])
+        XCTAssertEqual(documentB.labels.map(\.name), ["Batch Review"])
+    }
 }

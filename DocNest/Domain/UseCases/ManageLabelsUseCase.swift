@@ -24,8 +24,13 @@ enum ManageLabelsUseCase {
 
     @discardableResult
     static func createAndAssignLabel(named name: String, to document: DocumentRecord, using modelContext: ModelContext) throws -> LabelTag {
+        try createAndAssignLabel(named: name, to: [document], using: modelContext)
+    }
+
+    @discardableResult
+    static func createAndAssignLabel(named name: String, to documents: [DocumentRecord], using modelContext: ModelContext) throws -> LabelTag {
         let result = try createOrFetchLabel(named: name, using: modelContext)
-        let didChangeAssignments = assign(result.label, to: document)
+        let didChangeAssignments = assign(result.label, to: documents)
 
         if result.didCreateLabel || didChangeAssignments {
             try modelContext.save()
@@ -35,16 +40,21 @@ enum ManageLabelsUseCase {
     }
 
     static func assign(_ label: LabelTag, to document: DocumentRecord, using modelContext: ModelContext) throws {
-        if assign(label, to: document) {
+        try assign(label, to: [document], using: modelContext)
+    }
+
+    static func assign(_ label: LabelTag, to documents: [DocumentRecord], using modelContext: ModelContext) throws {
+        if assign(label, to: documents) {
             try modelContext.save()
         }
     }
 
     static func remove(_ label: LabelTag, from document: DocumentRecord, using modelContext: ModelContext) throws {
-        let originalCount = document.labels.count
-        document.labels.removeAll { $0.persistentModelID == label.persistentModelID }
+        try remove(label, from: [document], using: modelContext)
+    }
 
-        if document.labels.count != originalCount {
+    static func remove(_ label: LabelTag, from documents: [DocumentRecord], using modelContext: ModelContext) throws {
+        if remove(label, from: documents) {
             try modelContext.save()
         }
     }
@@ -131,6 +141,22 @@ enum ManageLabelsUseCase {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
         return true
+    }
+
+    @discardableResult
+    private static func assign(_ label: LabelTag, to documents: [DocumentRecord]) -> Bool {
+        documents.reduce(false) { didChange, document in
+            assign(label, to: document) || didChange
+        }
+    }
+
+    @discardableResult
+    private static func remove(_ label: LabelTag, from documents: [DocumentRecord]) -> Bool {
+        documents.reduce(false) { didChange, document in
+            let originalCount = document.labels.count
+            document.labels.removeAll { $0.persistentModelID == label.persistentModelID }
+            return document.labels.count != originalCount || didChange
+        }
     }
 }
 

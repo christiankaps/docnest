@@ -3,7 +3,7 @@ import SwiftData
 
 struct DocumentListView: View {
     let documents: [DocumentRecord]
-    @Binding var selectedDocumentID: PersistentIdentifier?
+    @Binding var selectedDocumentIDs: Set<PersistentIdentifier>
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
 
@@ -44,7 +44,7 @@ struct DocumentListView: View {
             .padding(.vertical, 8)
             .background(Color.secondary.opacity(0.08))
 
-            List(sortedDocuments, selection: $selectedDocumentID) { document in
+            List(sortedDocuments, selection: $selectedDocumentIDs) { document in
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(document.title)
@@ -186,7 +186,7 @@ private enum SortDirection {
 
     return DocumentListView(
         documents: samples,
-        selectedDocumentID: .constant(samples.first?.persistentModelID)
+        selectedDocumentIDs: .constant(Set(samples.first.map { [$0.persistentModelID] } ?? []))
     )
     .modelContainer(container)
 }
