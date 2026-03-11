@@ -22,6 +22,7 @@ struct DocNestApp: App {
 private struct AppRootView: View {
     @StateObject private var librarySession = LibrarySessionController()
     @State private var isClosedLibraryDropTargeted = false
+    @State private var isShowingLibraryPrompt = false
 
     var body: some View {
         Group {
@@ -70,18 +71,36 @@ private struct AppRootView: View {
             }
         }
         .task {
-            librarySession.restoreOrPromptForLibrary()
+            librarySession.restorePersistedLibrary()
+            if librarySession.selectedLibraryURL == nil && librarySession.libraryErrorMessage == nil {
+                isShowingLibraryPrompt = true
+            }
         }
         .alert("Library Error", isPresented: libraryErrorBinding) {
             Button("Open Library") {
                 librarySession.libraryErrorMessage = nil
                 librarySession.openLibrary()
             }
+            Button("Create Library") {
+                librarySession.libraryErrorMessage = nil
+                librarySession.createLibrary()
+            }
             Button("Cancel", role: .cancel) {
                 librarySession.libraryErrorMessage = nil
             }
         } message: {
             Text(librarySession.libraryErrorMessage ?? "Unknown library error.")
+        }
+        .alert("Welcome to DocNest", isPresented: $isShowingLibraryPrompt) {
+            Button("Open Library") {
+                librarySession.openLibrary()
+            }
+            Button("Create Library") {
+                librarySession.createLibrary()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Open an existing library or create a new one to get started.")
         }
     }
 
@@ -123,14 +142,6 @@ private final class LibrarySessionController: ObservableObject {
         }
 
         openValidatedLibrary(at: persistedLibraryURL)
-    }
-
-    func restoreOrPromptForLibrary() {
-        restorePersistedLibrary()
-
-        if selectedLibraryURL == nil && libraryErrorMessage == nil {
-            openLibrary()
-        }
     }
 
     func createLibrary() {

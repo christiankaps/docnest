@@ -58,9 +58,11 @@ enum DocumentLibraryService {
     static func promptForNewLibraryURL() -> URL? {
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "My Documents.\(packageExtension)"
+        panel.nameFieldStringValue = "My Documents"
         panel.prompt = "Create Library"
         panel.message = "Choose where the new DocNest library should be created."
+        panel.allowedContentTypes = [.folder]
+        panel.isExtensionHidden = true
 
         guard panel.runModal() == .OK, let url = panel.url else {
             return nil

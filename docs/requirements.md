@@ -85,7 +85,8 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Nutzer kann eine neue Library anlegen.
 - Nutzer kann eine bestehende Library oeffnen.
 - App merkt sich die zuletzt erfolgreich geoeffnete Library und versucht sie beim naechsten Start automatisch wieder zu oeffnen.
-- Wenn keine zuletzt geoeffnete Library bekannt ist oder die gespeicherte Library nicht mehr validiert werden kann, zeigt die App automatisch den Oeffnen-Dialog und laesst den Nutzer direkt eine Library waehlen, statt nur einen leeren Zustand anzuzeigen.
+- Wenn keine zuletzt geoeffnete Library bekannt ist oder die gespeicherte Library nicht mehr validiert werden kann, zeigt die App einen Willkommensdialog mit den Optionen "Library oeffnen" und "Library erstellen", damit Nutzer sofort starten koennen.
+- Der Save-Dialog zum Erstellen einer Library zeigt nur den Bibliotheksnamen ohne die interne Dateiendung (.docnestlibrary); die App haengt die Endung automatisch an.
 - App prueft beim Oeffnen, ob Struktur und Metadaten konsistent sind.
 - App zeigt Fehlerzustand verstaendlich an, falls eine Library beschaedigt oder unvollstaendig ist.
 - Der aktive Metadaten-Store ist library-lokal und liegt fuer v1 in `Metadata/library.sqlite`.
