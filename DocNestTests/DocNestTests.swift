@@ -155,6 +155,24 @@ final class DocNestTests: XCTestCase {
         XCTAssertNil(DocumentLibraryService.restorePersistedLibraryURL())
     }
 
+    func testSelectedLibraryURLReadsLaunchArgumentOverride() {
+        let expectedURL = URL(fileURLWithPath: "/tmp/Test Library.docnestlibrary").standardizedFileURL
+
+        let restoredURL = DocumentLibraryService.selectedLibraryURL(
+            from: ["DocNest", "-selectedLibraryPath", expectedURL.path]
+        )
+
+        XCTAssertEqual(restoredURL, expectedURL)
+    }
+
+    func testSelectedLibraryURLIgnoresMissingLaunchArgumentValue() {
+        XCTAssertNil(
+            DocumentLibraryService.selectedLibraryURL(
+                from: ["DocNest", "-selectedLibraryPath"]
+            )
+        )
+    }
+
     @MainActor
     func testLibraryContainersStayIsolated() throws {
         let tempRoot = FileManager.default.temporaryDirectory

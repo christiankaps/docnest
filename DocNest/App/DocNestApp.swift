@@ -23,6 +23,7 @@ private struct AppRootView: View {
                let modelContainer = librarySession.modelContainer {
                 RootView(libraryURL: libraryURL)
                     .modelContainer(modelContainer)
+                    .accessibilityIdentifier("library-open-root")
             } else {
                 ContentUnavailableView {
                     Label("No Library Open", systemImage: "books.vertical")
@@ -48,6 +49,7 @@ private struct AppRootView: View {
                 } isTargeted: { isTargeted in
                     isClosedLibraryDropTargeted = isTargeted
                 }
+                .accessibilityIdentifier("library-closed-root")
             }
         }
         .toolbar {

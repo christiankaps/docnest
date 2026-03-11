@@ -11,6 +11,7 @@ enum DocumentLibraryService {
     static let packageExtension = "docnestlibrary"
 
     private static let persistedLibraryPathKey = "selectedLibraryPath"
+    private static let launchArgumentSelectedLibraryPath = "-selectedLibraryPath"
     private static let manifestFileName = "library.json"
     private static let requiredDirectories = [
         "Metadata",
@@ -20,6 +21,10 @@ enum DocumentLibraryService {
     ]
 
     static func restorePersistedLibraryURL() -> URL? {
+        if let launchArgumentLibraryURL = selectedLibraryURL(from: ProcessInfo.processInfo.arguments) {
+            return launchArgumentLibraryURL
+        }
+
         guard let path = UserDefaults.standard.string(forKey: persistedLibraryPathKey) else {
             return nil
         }
@@ -129,6 +134,24 @@ enum DocumentLibraryService {
             LabelTag.self,
             configurations: configuration
         )
+    }
+
+    static func selectedLibraryURL(from launchArguments: [String]) -> URL? {
+        guard let argumentIndex = launchArguments.firstIndex(of: launchArgumentSelectedLibraryPath) else {
+            return nil
+        }
+
+        let valueIndex = launchArguments.index(after: argumentIndex)
+        guard valueIndex < launchArguments.endIndex else {
+            return nil
+        }
+
+        let path = launchArguments[valueIndex]
+        guard !path.hasPrefix("-") else {
+            return nil
+        }
+
+        return URL(fileURLWithPath: path).standardizedFileURL
     }
 
     private static func normalizedLibraryURL(from url: URL) -> URL {
