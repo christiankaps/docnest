@@ -189,10 +189,6 @@ enum SearchDocumentsUseCase {
     private static func searchableValues(for document: DocumentRecord) -> [String] {
         var values = [document.title, document.originalFileName]
 
-        if !document.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            values.append(document.notes)
-        }
-
         values.append(contentsOf: document.labels.map(\.name))
         return values
     }

@@ -67,7 +67,6 @@ final class DocNestTests: XCTestCase {
         let doc = DocumentRecord(
             originalFileName: "test.pdf",
             title: "Test",
-            notes: "Quarterly planning note",
             sourceCreatedAt: .now.addingTimeInterval(-86_400),
             importedAt: .now,
             pageCount: 1,
@@ -80,7 +79,6 @@ final class DocNestTests: XCTestCase {
 
         let fetched = try context.fetch(FetchDescriptor<DocumentRecord>())
         XCTAssertEqual(fetched.first?.storedFilePath, "/tmp/test-path.pdf")
-        XCTAssertEqual(fetched.first?.notes, "Quarterly planning note")
         XCTAssertEqual(fetched.first?.fileSize, 8_192)
         XCTAssertEqual(fetched.first?.contentHash, "abc123")
     }
@@ -468,7 +466,6 @@ final class DocNestTests: XCTestCase {
         let document = DocumentRecord(
             originalFileName: "invoice-march-2026.pdf",
             title: "March Invoice",
-            notes: "VAT filing ready for accountant review",
             importedAt: .now,
             pageCount: 1,
             labels: [finance]
@@ -476,7 +473,7 @@ final class DocNestTests: XCTestCase {
 
         XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "march"))
         XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "invoice-march-2026"))
-        XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "accountant"))
+        XCTAssertFalse(SearchDocumentsUseCase.matches(document, query: "accountant"))
         XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "finance"))
     }
 
@@ -485,7 +482,6 @@ final class DocNestTests: XCTestCase {
         let document = DocumentRecord(
             originalFileName: "invoice.pdf",
             title: "March Invoice",
-            notes: "VAT filing ready",
             importedAt: .now,
             pageCount: 1,
             labels: [finance]
@@ -501,7 +497,6 @@ final class DocNestTests: XCTestCase {
         let matchingDocument = DocumentRecord(
             originalFileName: "invoice.pdf",
             title: "March Invoice",
-            notes: "VAT filing ready",
             importedAt: .now,
             pageCount: 1,
             labels: [finance]
@@ -509,7 +504,6 @@ final class DocNestTests: XCTestCase {
         let wrongLabelDocument = DocumentRecord(
             originalFileName: "invoice.pdf",
             title: "March Invoice",
-            notes: "VAT filing ready",
             importedAt: .now,
             pageCount: 1,
             labels: [archive]
@@ -517,7 +511,6 @@ final class DocNestTests: XCTestCase {
         let wrongTextDocument = DocumentRecord(
             originalFileName: "contract.pdf",
             title: "Client Contract",
-            notes: "Signed agreement",
             importedAt: .now,
             pageCount: 1,
             labels: [finance]
@@ -525,7 +518,7 @@ final class DocNestTests: XCTestCase {
 
         let filteredDocuments = SearchDocumentsUseCase.filter(
             [matchingDocument, wrongLabelDocument, wrongTextDocument],
-            query: "vat invoice",
+            query: "march invoice",
             selectedLabelIDs: Set([finance.persistentModelID])
         )
 

@@ -68,13 +68,6 @@ struct DocumentListView: View {
                                 Text(document.title)
                                     .font(.system(size: 13, weight: .semibold))
                                     .lineLimit(1)
-
-                                if !document.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    Text(document.notes)
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
                             }
                         }
                         .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)

@@ -260,7 +260,6 @@ Meine Dokumente.docnestlibrary/
 - `storedFilePath`
 - `contentHash`
 - `title`
-- `notes`
 - `documentDate`
 - `importedAt`
 - `pageCount`

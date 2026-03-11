@@ -6,7 +6,6 @@ final class DocumentRecord {
     var id: UUID
     var originalFileName: String
     var title: String
-    var notes: String
     var sourceCreatedAt: Date?
     var importedAt: Date
     var pageCount: Int
@@ -21,7 +20,6 @@ final class DocumentRecord {
         id: UUID = UUID(),
         originalFileName: String,
         title: String,
-        notes: String = "",
         sourceCreatedAt: Date? = nil,
         importedAt: Date,
         pageCount: Int,
@@ -33,7 +31,6 @@ final class DocumentRecord {
         self.id = id
         self.originalFileName = originalFileName
         self.title = title
-        self.notes = notes
         self.sourceCreatedAt = sourceCreatedAt
         self.importedAt = importedAt
         self.pageCount = pageCount
@@ -63,7 +60,6 @@ extension DocumentRecord {
             DocumentRecord(
                 originalFileName: "invoice-march-2026.pdf",
                 title: "Invoice March 2026",
-                notes: "Quarterly VAT filing reference and payment confirmation.",
                 sourceCreatedAt: .now.addingTimeInterval(-86_400 * 2),
                 importedAt: .now,
                 pageCount: 4,
@@ -74,7 +70,6 @@ extension DocumentRecord {
             DocumentRecord(
                 originalFileName: "consulting-contract.pdf",
                 title: "Consulting Contract",
-                notes: "Signed client agreement for annual retainer.",
                 sourceCreatedAt: .now.addingTimeInterval(-86_400 * 14),
                 importedAt: .now.addingTimeInterval(-86_400 * 8),
                 pageCount: 12,

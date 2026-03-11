@@ -128,8 +128,6 @@ struct DocumentInspectorView: View {
                     .foregroundStyle(.secondary)
             }
 
-            notesSection(for: document)
-
             labelSection(for: document)
 
             if !document.contentHash.isEmpty {
@@ -189,38 +187,6 @@ struct DocumentInspectorView: View {
         }
 
         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-    }
-
-    private func notesBinding(for document: DocumentRecord) -> Binding<String> {
-        Binding(
-            get: { document.notes },
-            set: { newValue in
-                document.notes = newValue
-
-                do {
-                    try modelContext.save()
-                } catch {
-                    inspectorErrorMessage = error.localizedDescription
-                }
-            }
-        )
-    }
-
-    @ViewBuilder
-    private func notesSection(for document: DocumentRecord) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Notes")
-                .font(.headline)
-
-            TextEditor(text: notesBinding(for: document))
-                .font(.body)
-                .frame(minHeight: 96)
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.secondary.opacity(0.08))
-                )
-        }
     }
 
     @ViewBuilder
@@ -518,7 +484,6 @@ private enum DocumentInspectorPreviewData {
         let document = DocumentRecord(
             originalFileName: "invoice-march-2026.pdf",
             title: "Invoice March 2026",
-            notes: "Quarterly VAT filing reference and payment confirmation.",
             sourceCreatedAt: .now.addingTimeInterval(-86_400 * 2),
             importedAt: .now,
             pageCount: 4,
