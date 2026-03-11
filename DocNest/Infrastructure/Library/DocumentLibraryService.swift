@@ -1,6 +1,11 @@
 import AppKit
 import Foundation
 import SwiftData
+import UniformTypeIdentifiers
+
+extension UTType {
+    static let docNestLibrary = UTType("com.kaps.docnest.library")!
+}
 
 struct DocumentLibraryManifest: Codable {
     let formatVersion: Int
@@ -42,9 +47,10 @@ enum DocumentLibraryService {
 
     static func promptForExistingLibrary() -> URL? {
         let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.docNestLibrary]
         panel.prompt = "Open Library"
         panel.message = "Choose an existing DocNest library."
 
@@ -61,7 +67,7 @@ enum DocumentLibraryService {
         panel.nameFieldStringValue = "My Documents"
         panel.prompt = "Create Library"
         panel.message = "Choose where the new DocNest library should be created."
-        panel.allowedContentTypes = [.folder]
+        panel.allowedContentTypes = [.docNestLibrary]
         panel.isExtensionHidden = true
 
         guard panel.runModal() == .OK, let url = panel.url else {

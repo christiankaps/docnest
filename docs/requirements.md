@@ -92,8 +92,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Der aktive Metadaten-Store ist library-lokal und liegt fuer v1 in `Metadata/library.sqlite`.
 
 #### Sollte
-- Library kann als macOS Package umgesetzt werden, damit sie im Finder wie eine einzelne Datei wirkt, bei Bedarf aber geoeffnet werden kann.
-- App bietet eine Funktion "Im Finder anzeigen" fuer Library und einzelne Dokumente.
+- Library wird als macOS Package behandelt (UTExportedTypeDeclarations mit com.apple.package-Konformitaet); im Finder und in den Dateidialogen der App erscheint sie wie eine einzelne Datei, nicht wie ein Ordner.\n- App bietet eine Funktion \"Im Finder anzeigen\" fuer Library und einzelne Dokumente.
 
 ### 6.2 Dokumentimport
 
