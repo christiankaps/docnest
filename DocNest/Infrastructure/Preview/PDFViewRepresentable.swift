@@ -9,12 +9,14 @@ struct PDFViewRepresentable: NSViewRepresentable {
         pdfView.autoScales = true
         pdfView.displayMode = .singlePageContinuous
         pdfView.document = PDFDocument(url: url)
+        pdfView.goToFirstPage(nil)
         return pdfView
     }
 
     func updateNSView(_ pdfView: PDFView, context: Context) {
         if pdfView.document?.documentURL != url {
             pdfView.document = PDFDocument(url: url)
+            pdfView.goToFirstPage(nil)
         }
     }
 }
