@@ -19,70 +19,22 @@ struct DocumentInspectorView: View {
     var body: some View {
         Group {
             if let document = singleSelectedDocument {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        pdfPreviewSection(for: document)
-                            .frame(minHeight: 520, idealHeight: 640)
-                            .frame(maxWidth: .infinity)
+                VSplitView {
+                    pdfPreviewSection(for: document)
+                        .frame(minHeight: 420, idealHeight: 620)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 24)
+                        .padding(.bottom, 12)
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(document.title)
-                                .font(.title2)
-                                .fontWeight(.semibold)
-
-                            Text(document.originalFileName)
-                                .foregroundStyle(.secondary)
-
-                            Text("Imported \(document.importedAt.formatted(date: .abbreviated, time: .omitted))")
-                                .foregroundStyle(.secondary)
-
-                            if let sourceCreatedAt = document.sourceCreatedAt {
-                                Text("Created \(sourceCreatedAt.formatted(date: .abbreviated, time: .omitted))")
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Text("\(document.pageCount) pages")
-                                .foregroundStyle(.secondary)
-
-                            Text(document.formattedFileSize)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        notesSection(for: document)
-
-                        labelSection(for: document)
-
-                        if !document.contentHash.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Content Hash")
-                                    .font(.headline)
-                                Text(document.contentHash)
-                                    .font(.caption.monospaced())
-                                    .foregroundStyle(.secondary)
-                                    .textSelection(.enabled)
-                            }
-                        }
-
-                        HStack(spacing: 12) {
-                            Button("Open Original") {
-                                openOriginalFile(for: document)
-                            }
-                            .disabled(originalFileURL(for: document) == nil)
-
-                            Button("Show in Finder") {
-                                showOriginalFileInFinder(for: document)
-                            }
-                            .disabled(originalFileURL(for: document) == nil)
-
-                            if let libraryURL {
-                                Button("Show Library") {
-                                    NSWorkspace.shared.activateFileViewerSelecting([libraryURL])
-                                }
-                            }
-                        }
+                    ScrollView {
+                        documentMetadataSection(for: document)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 12)
+                            .padding(.bottom, 24)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(24)
+                    .frame(minHeight: 240, idealHeight: 320)
                 }
                 .navigationTitle("Preview")
             } else if !documents.isEmpty {
@@ -123,9 +75,11 @@ struct DocumentInspectorView: View {
                             .foregroundStyle(.red.opacity(0.6))
                         Text("File not found")
                             .font(.headline)
-                        Text("The stored PDF file could not be located.")
+                        Text("The stored PDF file for \"\(document.originalFileName)\" could not be located.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 360)
                     }
                     .padding()
                 }
@@ -145,6 +99,67 @@ struct DocumentInspectorView: View {
                     }
                     .padding()
                 }
+        }
+    }
+
+    @ViewBuilder
+    private func documentMetadataSection(for document: DocumentRecord) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(document.title)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                Text(document.originalFileName)
+                    .foregroundStyle(.secondary)
+
+                Text("Imported \(document.importedAt.formatted(date: .abbreviated, time: .omitted))")
+                    .foregroundStyle(.secondary)
+
+                if let sourceCreatedAt = document.sourceCreatedAt {
+                    Text("Created \(sourceCreatedAt.formatted(date: .abbreviated, time: .omitted))")
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("\(document.pageCount) pages")
+                    .foregroundStyle(.secondary)
+
+                Text(document.formattedFileSize)
+                    .foregroundStyle(.secondary)
+            }
+
+            notesSection(for: document)
+
+            labelSection(for: document)
+
+            if !document.contentHash.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Content Hash")
+                        .font(.headline)
+                    Text(document.contentHash)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button("Open Original") {
+                    openOriginalFile(for: document)
+                }
+                .disabled(originalFileURL(for: document) == nil)
+
+                Button("Show in Finder") {
+                    showOriginalFileInFinder(for: document)
+                }
+                .disabled(originalFileURL(for: document) == nil)
+
+                if let libraryURL {
+                    Button("Show Library") {
+                        NSWorkspace.shared.activateFileViewerSelecting([libraryURL])
+                    }
+                }
+            }
         }
     }
 

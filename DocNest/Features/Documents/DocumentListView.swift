@@ -26,11 +26,11 @@ struct DocumentListView: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 sortButton("Document", column: .title)
-                    .frame(width: 220, alignment: .leading)
+                    .frame(width: 230, alignment: .leading)
                 Text("File Name")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 260, alignment: .leading)
+                    .frame(width: 270, alignment: .leading)
                 sortButton("Imported", column: .importedAt)
                     .frame(width: 110, alignment: .leading)
                 sortButton("Created", column: .createdAt)
@@ -42,10 +42,10 @@ struct DocumentListView: View {
                 Text("Labels")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 180, alignment: .leading)
+                    .frame(width: 220, alignment: .leading)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.vertical, 7)
             .background(Color.secondary.opacity(0.08))
 
             if sortedDocuments.isEmpty {
@@ -61,34 +61,37 @@ struct DocumentListView: View {
                         HStack(spacing: 10) {
                             RoundedRectangle(cornerRadius: 8)
                                 .fill(Color.accentColor.opacity(0.12))
-                                .frame(width: 34, height: 34)
+                                .frame(width: 30, height: 30)
                                 .overlay {
                                     Image(systemName: "doc.richtext")
                                         .foregroundStyle(.tint)
+                                        .font(.system(size: 13, weight: .semibold))
                                 }
 
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(document.title)
-                                    .font(.headline)
+                                    .font(.system(size: 13, weight: .semibold))
                                     .lineLimit(1)
 
                                 if !document.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     Text(document.notes)
-                                        .font(.caption)
+                                        .font(.system(size: 11))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
                             }
                         }
-                        .frame(width: 220, alignment: .leading)
+                        .frame(width: 230, alignment: .leading)
 
                         Text(document.originalFileName)
-                            .font(.subheadline)
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .frame(width: 260, alignment: .leading)
+                            .textSelection(.enabled)
+                            .frame(width: 270, alignment: .leading)
 
                         Text(document.importedAt, format: .dateTime.year().month().day())
+                            .font(.system(size: 12).monospacedDigit())
                             .frame(width: 110, alignment: .leading)
 
                         Group {
@@ -99,20 +102,21 @@ struct DocumentListView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        .font(.system(size: 12).monospacedDigit())
                         .frame(width: 110, alignment: .leading)
 
                         Text("\(document.pageCount)")
+                            .font(.system(size: 12).monospacedDigit())
                             .frame(width: 60, alignment: .leading)
 
                         Text(document.formattedFileSize)
+                            .font(.system(size: 12).monospacedDigit())
                             .frame(width: 90, alignment: .leading)
 
-                        Text(document.labelSummary(emptyText: "No labels"))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .frame(width: 180, alignment: .leading)
+                        DocumentLabelStrip(labels: document.labels)
+                            .frame(width: 220, alignment: .leading)
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 4)
                     .tag(document.persistentModelID)
                 }
             }
@@ -203,6 +207,90 @@ private enum SortColumn: Equatable {
 private enum SortDirection {
     case ascending
     case descending
+}
+
+private struct DocumentLabelStrip: View {
+    let labels: [LabelTag]
+
+    private var sortedLabels: [LabelTag] {
+        labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private var visibleLabels: [LabelTag] {
+        Array(sortedLabels.prefix(2))
+    }
+
+    private var hiddenLabelCount: Int {
+        max(sortedLabels.count - visibleLabels.count, 0)
+    }
+
+    var body: some View {
+        if sortedLabels.isEmpty {
+            Text("No labels")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        } else {
+            HStack(spacing: 6) {
+                ForEach(visibleLabels) { label in
+                    DocumentListLabelChip(name: label.name)
+                }
+
+                if hiddenLabelCount > 0 {
+                    Text("+\(hiddenLabelCount)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .lineLimit(1)
+        }
+    }
+}
+
+private struct DocumentListLabelChip: View {
+    let name: String
+
+    var body: some View {
+        Text(name)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(labelForegroundColor)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(labelBackgroundColor))
+    }
+
+    private var labelBackgroundColor: Color {
+        switch abs(name.hashValue) % 6 {
+        case 0:
+            Color.blue.opacity(0.16)
+        case 1:
+            Color.green.opacity(0.16)
+        case 2:
+            Color.orange.opacity(0.18)
+        case 3:
+            Color.red.opacity(0.14)
+        case 4:
+            Color.teal.opacity(0.16)
+        default:
+            Color.indigo.opacity(0.16)
+        }
+    }
+
+    private var labelForegroundColor: Color {
+        switch abs(name.hashValue) % 6 {
+        case 0:
+            Color.blue
+        case 1:
+            Color.green
+        case 2:
+            Color.orange
+        case 3:
+            Color.red
+        case 4:
+            Color.teal
+        default:
+            Color.indigo
+        }
+    }
 }
 
 #Preview {
