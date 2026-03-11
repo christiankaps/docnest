@@ -10,6 +10,12 @@ struct DocNestApp: App {
         }
         .defaultSize(width: 1280, height: 800)
         .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(replacing: .newItem) { }
+            CommandGroup(replacing: .saveItem) { }
+            CommandGroup(replacing: .importExport) { }
+            CommandGroup(replacing: .printItem) { }
+        }
     }
 }
 
