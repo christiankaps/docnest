@@ -70,10 +70,14 @@ private struct AppRootView: View {
             }
         }
         .task {
-            librarySession.restorePersistedLibrary()
+            librarySession.restoreOrPromptForLibrary()
         }
         .alert("Library Error", isPresented: libraryErrorBinding) {
-            Button("OK", role: .cancel) {
+            Button("Open Library") {
+                librarySession.libraryErrorMessage = nil
+                librarySession.openLibrary()
+            }
+            Button("Cancel", role: .cancel) {
                 librarySession.libraryErrorMessage = nil
             }
         } message: {
@@ -119,6 +123,14 @@ private final class LibrarySessionController: ObservableObject {
         }
 
         openValidatedLibrary(at: persistedLibraryURL)
+    }
+
+    func restoreOrPromptForLibrary() {
+        restorePersistedLibrary()
+
+        if selectedLibraryURL == nil && libraryErrorMessage == nil {
+            openLibrary()
+        }
     }
 
     func createLibrary() {

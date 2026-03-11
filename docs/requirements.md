@@ -85,7 +85,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Nutzer kann eine neue Library anlegen.
 - Nutzer kann eine bestehende Library oeffnen.
 - App merkt sich die zuletzt erfolgreich geoeffnete Library und versucht sie beim naechsten Start automatisch wieder zu oeffnen.
-- Wenn keine zuletzt geoeffnete Library bekannt ist oder die gespeicherte Library nicht mehr validiert werden kann, startet die App in einem klaren Zustand mit Aktionen zum Anlegen oder Oeffnen einer Library.
+- Wenn keine zuletzt geoeffnete Library bekannt ist oder die gespeicherte Library nicht mehr validiert werden kann, zeigt die App automatisch den Oeffnen-Dialog und laesst den Nutzer direkt eine Library waehlen, statt nur einen leeren Zustand anzuzeigen.
 - App prueft beim Oeffnen, ob Struktur und Metadaten konsistent sind.
 - App zeigt Fehlerzustand verstaendlich an, falls eine Library beschaedigt oder unvollstaendig ist.
 - Der aktive Metadaten-Store ist library-lokal und liegt fuer v1 in `Metadata/library.sqlite`.
