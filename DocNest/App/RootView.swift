@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct RootView: View {
     let libraryURL: URL
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var selectedSection: LibrarySection = .allDocuments
     @State private var selectedLabelIDs: Set<PersistentIdentifier> = []
     @State private var selectedDocumentIDs: Set<PersistentIdentifier> = []
@@ -52,13 +53,13 @@ struct RootView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             LibrarySidebarView(
                 selectedSection: $selectedSection,
                 labels: allLabels,
                 selectedLabelIDs: $selectedLabelIDs
             )
-            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 300)
         } content: {
             ZStack {
                 DocumentListView(
@@ -79,7 +80,7 @@ struct RootView: View {
             } isTargeted: { isTargeted in
                 isDropTargeted = isTargeted
             }
-            .navigationSplitViewColumnWidth(min: 700, ideal: 860)
+            .navigationSplitViewColumnWidth(min: 560, ideal: 740)
         } detail: {
             DocumentInspectorView(
                 documents: selectedDocuments,
@@ -88,10 +89,13 @@ struct RootView: View {
                     isShowingLabelManager = true
                 }
             )
-            .navigationSplitViewColumnWidth(min: 420, ideal: 560, max: 760)
+            .navigationSplitViewColumnWidth(min: 380, ideal: 520, max: 760)
         }
         .navigationSplitViewStyle(.balanced)
         .searchable(text: $searchText, prompt: "Search title, file name, notes, or labels")
+        .onAppear {
+            columnVisibility = .all
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {

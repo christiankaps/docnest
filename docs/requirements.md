@@ -363,6 +363,7 @@ Aktueller Stand:
 - Der Inspector bietet Finder-Aktionen fuer Originaldatei und Library.
 - Die Split-View reserviert mehr Breite fuer Seitenleiste und Detailbereich, damit Library-Namen und die PDF-Vorschau im Alltagsbetrieb besser lesbar bleiben.
 - Die Detailansicht trennt PDF-Vorschau und Metadaten ueber einen vertikal verschiebbaren Splitter, damit Nutzer die Vorschauhoehe direkt anpassen koennen.
+- Die App startet mit einer Fensterbreite und Split-View-Konfiguration, in der die linke Seitenleiste standardmaessig sichtbar bleibt; Nutzer sollen die Library-Navigation nicht erst durch manuelles Verbreitern des Fensters wiederherstellen muessen.
 
 ### Phase 4: Labels als primaeres Ordnungssystem
 Ziel: Nutzer kann Dokumente sinnvoll organisieren.

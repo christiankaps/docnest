@@ -6,9 +6,9 @@ struct DocNestApp: App {
     var body: some Scene {
         WindowGroup {
             AppRootView()
-                .frame(minWidth: 960, minHeight: 600)
+                .frame(minWidth: 1240, minHeight: 700)
         }
-        .defaultSize(width: 1280, height: 800)
+        .defaultSize(width: 1440, height: 860)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
