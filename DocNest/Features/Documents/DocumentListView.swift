@@ -214,7 +214,7 @@ private struct DocumentLabelStrip: View {
         } else {
             HStack(spacing: 6) {
                 ForEach(visibleLabels) { label in
-                    DocumentListLabelChip(name: label.name)
+                    DocumentListLabelChip(name: label.name, color: label.labelColor)
                 }
 
                 if hiddenLabelCount > 0 {
@@ -230,48 +230,15 @@ private struct DocumentLabelStrip: View {
 
 private struct DocumentListLabelChip: View {
     let name: String
+    let color: LabelColor
 
     var body: some View {
         Text(name)
             .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(labelForegroundColor)
+            .foregroundStyle(color.color)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(Capsule().fill(labelBackgroundColor))
-    }
-
-    private var labelBackgroundColor: Color {
-        switch abs(name.hashValue) % 6 {
-        case 0:
-            Color.blue.opacity(0.16)
-        case 1:
-            Color.green.opacity(0.16)
-        case 2:
-            Color.orange.opacity(0.18)
-        case 3:
-            Color.red.opacity(0.14)
-        case 4:
-            Color.teal.opacity(0.16)
-        default:
-            Color.indigo.opacity(0.16)
-        }
-    }
-
-    private var labelForegroundColor: Color {
-        switch abs(name.hashValue) % 6 {
-        case 0:
-            Color.blue
-        case 1:
-            Color.green
-        case 2:
-            Color.orange
-        case 3:
-            Color.red
-        case 4:
-            Color.teal
-        default:
-            Color.indigo
-        }
+            .background(Capsule().fill(color.color.opacity(0.16)))
     }
 }
 

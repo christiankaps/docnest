@@ -54,6 +54,29 @@ struct LabelManagementView: View {
                             .textFieldStyle(.roundedBorder)
                             .onSubmit(renameSelectedLabel)
 
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Color")
+                                .font(.subheadline.weight(.medium))
+
+                            LazyVGrid(columns: Array(repeating: GridItem(.fixed(28), spacing: 8), count: 5), spacing: 8) {
+                                ForEach(LabelColor.allCases) { labelColor in
+                                    Circle()
+                                        .fill(labelColor.color)
+                                        .frame(width: 28, height: 28)
+                                        .overlay {
+                                            if selectedLabel.labelColor == labelColor {
+                                                Image(systemName: "checkmark")
+                                                    .font(.system(size: 12, weight: .bold))
+                                                    .foregroundStyle(.white)
+                                            }
+                                        }
+                                        .onTapGesture {
+                                            changeColor(of: selectedLabel, to: labelColor)
+                                        }
+                                }
+                            }
+                        }
+
                         HStack(spacing: 12) {
                             Button("Rename", action: renameSelectedLabel)
                                 .disabled(editedLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -152,6 +175,15 @@ struct LabelManagementView: View {
             let renamedLabel = try ManageLabelsUseCase.rename(selectedLabel, to: editedLabelName, using: modelContext)
             selectedLabelID = renamedLabel.persistentModelID
             editedLabelName = renamedLabel.name
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func changeColor(of label: LabelTag, to color: LabelColor) {
+        label.labelColor = color
+        do {
+            try modelContext.save()
         } catch {
             errorMessage = error.localizedDescription
         }

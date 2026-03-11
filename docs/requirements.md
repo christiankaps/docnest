@@ -375,6 +375,7 @@ Ziel: Nutzer kann Dokumente sinnvoll organisieren.
 
 Aktueller Stand:
 - Labels koennen global angelegt, umbenannt, zusammengefuehrt und geloescht werden.
+- Jedes Label hat eine vom Nutzer waehlbare Farbe aus einem festen Farbkatalog (10 Optionen). Die Farbe wird in Seitenleiste, Dokumentliste und Inspector konsistent als farbiger Chip dargestellt.
 - Die Dokument-Detailansicht erlaubt direkte Zuweisung und Entfernung bestehender Labels sowie das Anlegen und sofortige Zuweisen neuer Labels per Tastatur oder Direktaktion.
 - Die Seitenleiste bietet Mehrfachfilter ueber Labels. Wenn mehrere Labels aktiv sind, zeigt die Liste nur Dokumente, die alle ausgewaehlten Labels enthalten.
 - Das Loeschen eines Labels entfernt nur die Zuordnung. Dokumente und Originaldateien bleiben unveraendert in der Library.

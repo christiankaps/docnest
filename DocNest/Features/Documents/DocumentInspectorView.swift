@@ -206,7 +206,7 @@ struct DocumentInspectorView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(document.labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { label in
                         HStack {
-                            LabelChip(name: label.name)
+                            LabelChip(name: label.name, color: label.labelColor)
                             Spacer()
                             Button {
                                 removeLabel(label, from: document)
@@ -282,7 +282,7 @@ struct DocumentInspectorView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(selectionSummary.labelsOnAllSelectedDocuments) { label in
                             HStack {
-                                LabelChip(name: label.name)
+                                LabelChip(name: label.name, color: label.labelColor)
                                 Spacer()
                                 Button("Remove from Selection") {
                                     removeLabel(label, from: documents)
@@ -461,13 +461,15 @@ private struct BatchLabelState {
 
 private struct LabelChip: View {
     let name: String
+    let color: LabelColor
 
     var body: some View {
         Text(name)
             .font(.caption.weight(.semibold))
+            .foregroundStyle(color.color)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Capsule().fill(Color.accentColor.opacity(0.14)))
+            .background(Capsule().fill(color.color.opacity(0.16)))
     }
 }
 

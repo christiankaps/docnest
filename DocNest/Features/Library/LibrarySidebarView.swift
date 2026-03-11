@@ -49,7 +49,10 @@ struct LibrarySidebarView: View {
                             toggleLabelSelection(label)
                         } label: {
                             HStack {
-                                Label(label.name, systemImage: selectedLabelIDs.contains(label.persistentModelID) ? "tag.fill" : "tag")
+                                Circle()
+                                    .fill(label.labelColor.color)
+                                    .frame(width: 10, height: 10)
+                                Text(label.name)
                                 Spacer()
                                 if selectedLabelIDs.contains(label.persistentModelID) {
                                     Image(systemName: "checkmark.circle.fill")
