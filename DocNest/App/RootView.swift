@@ -96,6 +96,16 @@ struct RootView: View {
             columnVisibility = .all
         }
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    withAnimation {
+                        columnVisibility = columnVisibility == .all ? .doubleColumn : .all
+                    }
+                } label: {
+                    Label("Toggle Sidebar", systemImage: "sidebar.leading")
+                }
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     isImporting = true
