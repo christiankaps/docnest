@@ -10,7 +10,7 @@ struct DocumentInspectorView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \LabelTag.name, order: .forward) private var allLabels: [LabelTag]
     @State private var newLabelName = ""
-    @State private var labelErrorMessage: String?
+    @State private var inspectorErrorMessage: String?
 
     private var singleSelectedDocument: DocumentRecord? {
         documents.count == 1 ? documents.first : nil
@@ -45,6 +45,8 @@ struct DocumentInspectorView: View {
                         Text(document.formattedFileSize)
                             .foregroundStyle(.secondary)
                     }
+
+                    notesSection(for: document)
 
                     labelSection(for: document)
 
@@ -93,12 +95,12 @@ struct DocumentInspectorView: View {
                 )
             }
         }
-        .alert("Label Error", isPresented: labelErrorBinding) {
+        .alert("Inspector Error", isPresented: inspectorErrorBinding) {
             Button("OK", role: .cancel) {
-                labelErrorMessage = nil
+                inspectorErrorMessage = nil
             }
         } message: {
-            Text(labelErrorMessage ?? "Unknown label error.")
+            Text(inspectorErrorMessage ?? "Unknown inspector error.")
         }
     }
 
@@ -170,6 +172,38 @@ struct DocumentInspectorView: View {
         }
 
         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+    }
+
+    private func notesBinding(for document: DocumentRecord) -> Binding<String> {
+        Binding(
+            get: { document.notes },
+            set: { newValue in
+                document.notes = newValue
+
+                do {
+                    try modelContext.save()
+                } catch {
+                    inspectorErrorMessage = error.localizedDescription
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func notesSection(for document: DocumentRecord) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Notes")
+                .font(.headline)
+
+            TextEditor(text: notesBinding(for: document))
+                .font(.body)
+                .frame(minHeight: 96)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.secondary.opacity(0.08))
+                )
+        }
     }
 
     @ViewBuilder
@@ -323,12 +357,12 @@ struct DocumentInspectorView: View {
         }
     }
 
-    private var labelErrorBinding: Binding<Bool> {
+    private var inspectorErrorBinding: Binding<Bool> {
         Binding(
-            get: { labelErrorMessage != nil },
+            get: { inspectorErrorMessage != nil },
             set: { newValue in
                 if !newValue {
-                    labelErrorMessage = nil
+                    inspectorErrorMessage = nil
                 }
             }
         )
@@ -348,7 +382,7 @@ struct DocumentInspectorView: View {
                 try ManageLabelsUseCase.assign(label, to: documents, using: modelContext)
             }
         } catch {
-            labelErrorMessage = error.localizedDescription
+            inspectorErrorMessage = error.localizedDescription
         }
     }
 
@@ -360,7 +394,7 @@ struct DocumentInspectorView: View {
         do {
             try ManageLabelsUseCase.remove(label, from: documents, using: modelContext)
         } catch {
-            labelErrorMessage = error.localizedDescription
+            inspectorErrorMessage = error.localizedDescription
         }
     }
 
@@ -373,7 +407,7 @@ struct DocumentInspectorView: View {
             _ = try ManageLabelsUseCase.createAndAssignLabel(named: newLabelName, to: documents, using: modelContext)
             newLabelName = ""
         } catch {
-            labelErrorMessage = error.localizedDescription
+            inspectorErrorMessage = error.localizedDescription
         }
     }
 }
@@ -467,6 +501,7 @@ private enum DocumentInspectorPreviewData {
         let document = DocumentRecord(
             originalFileName: "invoice-march-2026.pdf",
             title: "Invoice March 2026",
+            notes: "Quarterly VAT filing reference and payment confirmation.",
             sourceCreatedAt: .now.addingTimeInterval(-86_400 * 2),
             importedAt: .now,
             pageCount: 4,

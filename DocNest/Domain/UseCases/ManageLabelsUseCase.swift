@@ -160,6 +160,51 @@ enum ManageLabelsUseCase {
     }
 }
 
+enum SearchDocumentsUseCase {
+    static func matches(_ document: DocumentRecord, query: String) -> Bool {
+        let searchTerms = normalizedSearchTerms(from: query)
+        guard !searchTerms.isEmpty else {
+            return true
+        }
+
+        let searchableValues = searchableValues(for: document)
+        return searchTerms.allSatisfy { term in
+            searchableValues.contains { value in
+                value.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            }
+        }
+    }
+
+    static func filter(
+        _ documents: [DocumentRecord],
+        query: String,
+        selectedLabelIDs: Set<PersistentIdentifier>
+    ) -> [DocumentRecord] {
+        documents.filter { document in
+            ManageLabelsUseCase.matchingAllSelectedLabels(document, selectedLabelIDs: selectedLabelIDs)
+                && matches(document, query: query)
+        }
+    }
+
+    private static func searchableValues(for document: DocumentRecord) -> [String] {
+        var values = [document.title, document.originalFileName]
+
+        if !document.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            values.append(document.notes)
+        }
+
+        values.append(contentsOf: document.labels.map(\.name))
+        return values
+    }
+
+    private static func normalizedSearchTerms(from query: String) -> [String] {
+        query
+            .components(separatedBy: .whitespacesAndNewlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+}
+
 struct LabelMutationResult {
     let label: LabelTag
     let didCreateLabel: Bool

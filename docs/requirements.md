@@ -307,6 +307,7 @@ Meine Dokumente.docnestlibrary/
 - Nutzer muss jederzeit erkennen koennen, ob er ein Originaldokument, Metadaten oder nur die Sicht auf die Daten veraendert.
 - Zerstoererische Aktionen brauchen klare Sprache und Undo, wenn moeglich.
 - Light Mode und Dark Mode duerfen nicht nur technisch funktionieren, sondern muessen fuer Listen, Seitenleisten, PDF-Vorschau und Label-Darstellung gestalterisch konsistent umgesetzt sein.
+- Menueleisten-Eintraege duerfen nur Aktionen zeigen, die im aktuellen Produkt tatsaechlich unterstuetzt werden; generische Dokument-Template-Befehle wie neues Dokument, sichern, importieren, exportieren oder drucken werden fuer v1 ausgeblendet, solange DocNest dafuer keine passenden Workflows anbietet.
 
 ## 11. Priorisierte Implementierungsreihenfolge
 
@@ -382,6 +383,13 @@ Ziel: Dokumente lassen sich schnell wiederfinden.
 - Optional Textindex fuer PDF-Inhalte.
 - Kombinierbare Filter.
 - Gespeicherte Smart Filter, wenn Phase 4 stabil ist.
+
+Aktueller Stand:
+- Die Hauptansicht bietet ein eingebautes Suchfeld fuer die geoeffnete Library.
+- Die Suche filtert live ueber Titel, Originaldateiname, Notizen und Labelnamen.
+- Mehrwort-Suchen arbeiten token-basiert; ein Dokument bleibt nur sichtbar, wenn alle Suchterme ueber die durchsuchbaren Metadaten hinweg gefunden werden.
+- Suchtext und Label-Filter lassen sich kombinieren und wirken gemeinsam auf dieselbe Dokumentliste.
+- PDF-Volltextsuche oder ein separater Suchindex sind noch nicht Teil des aktuellen Schritts.
 
 ### Phase 6: Datenintegritaet und Betriebsfaehigkeit
 Ziel: Die App ist alltagstauglich und fehlertolerant.

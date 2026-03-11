@@ -67,6 +67,7 @@ final class DocNestTests: XCTestCase {
         let doc = DocumentRecord(
             originalFileName: "test.pdf",
             title: "Test",
+            notes: "Quarterly planning note",
             sourceCreatedAt: .now.addingTimeInterval(-86_400),
             importedAt: .now,
             pageCount: 1,
@@ -79,6 +80,7 @@ final class DocNestTests: XCTestCase {
 
         let fetched = try context.fetch(FetchDescriptor<DocumentRecord>())
         XCTAssertEqual(fetched.first?.storedFilePath, "/tmp/test-path.pdf")
+        XCTAssertEqual(fetched.first?.notes, "Quarterly planning note")
         XCTAssertEqual(fetched.first?.fileSize, 8_192)
         XCTAssertEqual(fetched.first?.contentHash, "abc123")
     }
@@ -459,6 +461,76 @@ final class DocNestTests: XCTestCase {
 
         XCTAssertTrue(ManageLabelsUseCase.matchingAllSelectedLabels(matchingDocument, selectedLabelIDs: matchingIDs))
         XCTAssertFalse(ManageLabelsUseCase.matchingAllSelectedLabels(partialDocument, selectedLabelIDs: matchingIDs))
+    }
+
+    func testSearchDocumentsMatchesTitleFilenameNotesAndLabels() {
+        let finance = LabelTag(name: "Finance")
+        let document = DocumentRecord(
+            originalFileName: "invoice-march-2026.pdf",
+            title: "March Invoice",
+            notes: "VAT filing ready for accountant review",
+            importedAt: .now,
+            pageCount: 1,
+            labels: [finance]
+        )
+
+        XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "march"))
+        XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "invoice-march-2026"))
+        XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "accountant"))
+        XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "finance"))
+    }
+
+    func testSearchDocumentsRequiresAllTermsToMatch() {
+        let finance = LabelTag(name: "Finance")
+        let document = DocumentRecord(
+            originalFileName: "invoice.pdf",
+            title: "March Invoice",
+            notes: "VAT filing ready",
+            importedAt: .now,
+            pageCount: 1,
+            labels: [finance]
+        )
+
+        XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "march finance"))
+        XCTAssertFalse(SearchDocumentsUseCase.matches(document, query: "march archive"))
+    }
+
+    func testSearchDocumentsFilterCombinesTextAndSelectedLabels() {
+        let finance = LabelTag(name: "Finance")
+        let archive = LabelTag(name: "Archive")
+        let matchingDocument = DocumentRecord(
+            originalFileName: "invoice.pdf",
+            title: "March Invoice",
+            notes: "VAT filing ready",
+            importedAt: .now,
+            pageCount: 1,
+            labels: [finance]
+        )
+        let wrongLabelDocument = DocumentRecord(
+            originalFileName: "invoice.pdf",
+            title: "March Invoice",
+            notes: "VAT filing ready",
+            importedAt: .now,
+            pageCount: 1,
+            labels: [archive]
+        )
+        let wrongTextDocument = DocumentRecord(
+            originalFileName: "contract.pdf",
+            title: "Client Contract",
+            notes: "Signed agreement",
+            importedAt: .now,
+            pageCount: 1,
+            labels: [finance]
+        )
+
+        let filteredDocuments = SearchDocumentsUseCase.filter(
+            [matchingDocument, wrongLabelDocument, wrongTextDocument],
+            query: "vat invoice",
+            selectedLabelIDs: Set([finance.persistentModelID])
+        )
+
+        XCTAssertEqual(filteredDocuments.count, 1)
+        XCTAssertEqual(filteredDocuments.first?.title, "March Invoice")
     }
 
     @MainActor

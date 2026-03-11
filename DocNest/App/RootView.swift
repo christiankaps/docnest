@@ -7,6 +7,7 @@ struct RootView: View {
     @State private var selectedSection: LibrarySection = .allDocuments
     @State private var selectedLabelIDs: Set<PersistentIdentifier> = []
     @State private var selectedDocumentIDs: Set<PersistentIdentifier> = []
+    @State private var searchText = ""
     @State private var isImporting = false
     @State private var isDropTargeted = false
     @State private var isShowingLabelManager = false
@@ -33,9 +34,11 @@ struct RootView: View {
             allDocuments.filter { $0.labels.isEmpty }
         }
 
-        return sectionDocuments.filter {
-            ManageLabelsUseCase.matchingAllSelectedLabels($0, selectedLabelIDs: selectedLabelIDs)
-        }
+        return SearchDocumentsUseCase.filter(
+            sectionDocuments,
+            query: searchText,
+            selectedLabelIDs: selectedLabelIDs
+        )
     }
 
     private var selectedDocuments: [DocumentRecord] {
@@ -85,6 +88,7 @@ struct RootView: View {
             )
         }
         .navigationSplitViewStyle(.balanced)
+        .searchable(text: $searchText, prompt: "Search title, file name, notes, or labels")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
