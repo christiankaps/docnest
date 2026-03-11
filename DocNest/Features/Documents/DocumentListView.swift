@@ -25,8 +25,12 @@ struct DocumentListView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                sortButton("Title", column: .title)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                sortButton("Document", column: .title)
+                    .frame(width: 220, alignment: .leading)
+                Text("File Name")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 260, alignment: .leading)
                 sortButton("Imported", column: .importedAt)
                     .frame(width: 110, alignment: .leading)
                 sortButton("Created", column: .createdAt)
@@ -44,42 +48,73 @@ struct DocumentListView: View {
             .padding(.vertical, 8)
             .background(Color.secondary.opacity(0.08))
 
-            List(sortedDocuments, selection: $selectedDocumentIDs) { document in
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(document.title)
-                            .font(.headline)
-                        Text(document.originalFileName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if sortedDocuments.isEmpty {
+                ContentUnavailableView(
+                    "No Documents",
+                    systemImage: "doc.text",
+                    description: Text("Import PDFs to populate the library and review them here.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(sortedDocuments, selection: $selectedDocumentIDs) { document in
+                    HStack(alignment: .center, spacing: 12) {
+                        HStack(spacing: 10) {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.accentColor.opacity(0.12))
+                                .frame(width: 34, height: 34)
+                                .overlay {
+                                    Image(systemName: "doc.richtext")
+                                        .foregroundStyle(.tint)
+                                }
 
-                    Text(document.importedAt, format: .dateTime.year().month().day())
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(document.title)
+                                    .font(.headline)
+                                    .lineLimit(1)
+
+                                if !document.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text(document.notes)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                        .frame(width: 220, alignment: .leading)
+
+                        Text(document.originalFileName)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .frame(width: 260, alignment: .leading)
+
+                        Text(document.importedAt, format: .dateTime.year().month().day())
+                            .frame(width: 110, alignment: .leading)
+
+                        Group {
+                            if let sourceCreatedAt = document.sourceCreatedAt {
+                                Text(sourceCreatedAt, format: .dateTime.year().month().day())
+                            } else {
+                                Text("-")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                         .frame(width: 110, alignment: .leading)
 
-                    Group {
-                        if let sourceCreatedAt = document.sourceCreatedAt {
-                            Text(sourceCreatedAt, format: .dateTime.year().month().day())
-                        } else {
-                            Text("-")
-                                .foregroundStyle(.secondary)
-                        }
+                        Text("\(document.pageCount)")
+                            .frame(width: 60, alignment: .leading)
+
+                        Text(document.formattedFileSize)
+                            .frame(width: 90, alignment: .leading)
+
+                        Text(document.labelSummary(emptyText: "No labels"))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .frame(width: 180, alignment: .leading)
                     }
-                    .frame(width: 110, alignment: .leading)
-
-                    Text("\(document.pageCount)")
-                        .frame(width: 60, alignment: .leading)
-
-                    Text(document.formattedFileSize)
-                        .frame(width: 90, alignment: .leading)
-
-                    Text(document.labelSummary(emptyText: "No labels"))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 180, alignment: .leading)
+                    .padding(.vertical, 6)
+                    .tag(document.persistentModelID)
                 }
-                .padding(.vertical, 4)
-                .tag(document.persistentModelID)
             }
         }
         .navigationTitle("Documents")

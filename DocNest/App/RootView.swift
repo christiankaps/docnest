@@ -58,6 +58,7 @@ struct RootView: View {
                 labels: allLabels,
                 selectedLabelIDs: $selectedLabelIDs
             )
+            .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 320)
         } content: {
             ZStack {
                 DocumentListView(
@@ -78,6 +79,7 @@ struct RootView: View {
             } isTargeted: { isTargeted in
                 isDropTargeted = isTargeted
             }
+            .navigationSplitViewColumnWidth(min: 700, ideal: 860)
         } detail: {
             DocumentInspectorView(
                 documents: selectedDocuments,
@@ -86,6 +88,7 @@ struct RootView: View {
                     isShowingLabelManager = true
                 }
             )
+            .navigationSplitViewColumnWidth(min: 420, ideal: 560, max: 760)
         }
         .navigationSplitViewStyle(.balanced)
         .searchable(text: $searchText, prompt: "Search title, file name, notes, or labels")

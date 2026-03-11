@@ -358,7 +358,9 @@ Ziel: Dokumente werden in der App wirklich nutzbar.
 
 Aktueller Stand:
 - Die Dokumentliste bietet sortierbare Spalten fuer Titel, Importdatum, Seitenzahl und Dateigroesse.
+- Die Dokumentliste zeigt den Dokumenttitel und den Originaldateinamen als getrennte, klar erkennbare Informationen anstatt nur einer kompakten Mischdarstellung.
 - Der Inspector bietet Finder-Aktionen fuer Originaldatei und Library.
+- Die Split-View reserviert mehr Breite fuer Seitenleiste und Detailbereich, damit Library-Namen und die PDF-Vorschau im Alltagsbetrieb besser lesbar bleiben.
 
 ### Phase 4: Labels als primaeres Ordnungssystem
 Ziel: Nutzer kann Dokumente sinnvoll organisieren.
