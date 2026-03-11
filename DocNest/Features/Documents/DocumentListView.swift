@@ -26,11 +26,7 @@ struct DocumentListView: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 sortButton("Document", column: .title)
-                    .frame(width: 230, alignment: .leading)
-                Text("File Name")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 270, alignment: .leading)
+                    .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
                 sortButton("Imported", column: .importedAt)
                     .frame(width: 110, alignment: .leading)
                 sortButton("Created", column: .createdAt)
@@ -81,14 +77,7 @@ struct DocumentListView: View {
                                 }
                             }
                         }
-                        .frame(width: 230, alignment: .leading)
-
-                        Text(document.originalFileName)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .textSelection(.enabled)
-                            .frame(width: 270, alignment: .leading)
+                        .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
 
                         Text(document.importedAt, format: .dateTime.year().month().day())
                             .font(.system(size: 12).monospacedDigit())

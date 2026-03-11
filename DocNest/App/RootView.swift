@@ -91,7 +91,6 @@ struct RootView: View {
             )
             .navigationSplitViewColumnWidth(min: 380, ideal: 520, max: 760)
         }
-        .navigationSplitViewStyle(.balanced)
         .searchable(text: $searchText, prompt: "Search title, file name, notes, or labels")
         .onAppear {
             columnVisibility = .all
