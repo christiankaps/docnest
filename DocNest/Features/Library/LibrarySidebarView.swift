@@ -96,10 +96,11 @@ struct LibrarySidebarView: View {
                                     }
                                 }
                             } label: {
-                                HStack(spacing: 6) {
+                                HStack(spacing: 8) {
                                     Circle()
                                         .fill(newLabelColor.color)
-                                        .frame(width: 14, height: 14)
+                                        .frame(width: 16, height: 16)
+                                        .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
                                     Text(newLabelColor.displayName)
                                         .font(AppTypography.caption)
                                 }
