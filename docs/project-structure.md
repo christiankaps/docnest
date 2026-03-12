@@ -14,19 +14,13 @@ DocNest/
     UseCases/
   Features/
     Library/
-    Import/
     Documents/
-    Labels/
-    Search/
   Infrastructure/
     Library/
-    Persistence/
-    Search/
     Preview/
   Resources/
   Shared/
     Design/
-    Utilities/
 
 DocNestTests/
 DocNestUITests/
@@ -50,19 +44,17 @@ docs/
 ### Features
 
 - UI und Ablauf pro Fachbereich
-- Startaufteilung nach Library, Import, Documents, Labels und Search
+- Aufteilung nach Library und Documents
 - jedes Feature kann spaeter eigene ViewModels, Commands und Unteransichten enthalten
 
 ### Infrastructure
 
 - Dateisystemzugriff fuer die Library
-- Persistenzlayer
-- Suchindex
 - PDF-Vorschau und spaetere Thumbnail-Erzeugung
 
 ### Shared
 
-- wiederverwendbare UI-Bausteine, Theme-Definitionen und Utilities
+- wiederverwendbare UI-Bausteine und Theme-Definitionen (AppTypography, LabelChip)
 - kein unklarer Sammelplatz fuer Fachlogik
 
 ## Startpunkt in Xcode
