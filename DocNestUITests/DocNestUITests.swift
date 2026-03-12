@@ -64,6 +64,32 @@ final class DocNestUITests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testCommandFFocusesSearchFieldWhenLibraryIsOpen() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Search Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try createLibraryFixture(at: libraryURL)
+
+        let app = XCUIApplication()
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES",
+                                "-selectedLibraryPath", libraryURL.path]
+        app.launch()
+
+        let searchField = app.searchFields["document-search-field"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+
+        app.typeKey("f", modifierFlags: .command)
+        app.typeText("invoice")
+
+        XCTAssertEqual(searchField.value as? String, "invoice")
+    }
+
     private func createLibraryFixture(at libraryURL: URL) throws {
         try FileManager.default.createDirectory(at: libraryURL, withIntermediateDirectories: true)
 

@@ -10,6 +10,7 @@ struct RootView: View {
     @State private var labelFilterSelection = DeferredSelectionState<PersistentIdentifier>()
     @State private var selectedDocumentIDs: Set<PersistentIdentifier> = []
     @State private var searchText = ""
+    @State private var searchFocusRequestToken = 0
     @State private var isImporting = false
     @State private var isDropTargeted = false
     @State private var importSummaryMessage: String?
@@ -101,11 +102,18 @@ struct RootView: View {
             )
         }
         .navigationSplitViewStyle(.balanced)
-        .searchable(text: $searchText, prompt: "Search title, file name, or labels")
         .onAppear {
             columnVisibility = .all
         }
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                SearchToolbarField(
+                    text: $searchText,
+                    focusRequestToken: searchFocusRequestToken
+                )
+                .frame(width: 280)
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     isImporting = true
@@ -137,6 +145,9 @@ struct RootView: View {
         }
         .onChange(of: filteredDocuments.map(\.persistentModelID)) { _, documentIDs in
             selectedDocumentIDs.formIntersection(Set(documentIDs))
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .docNestFocusSearch)) { _ in
+            searchFocusRequestToken += 1
         }
         .onDisappear {
             pendingLabelFilterApplyTask?.cancel()

@@ -18,6 +18,12 @@ struct DocNestApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
+            CommandGroup(after: .pasteboard) {
+                Button("Find") {
+                    NotificationCenter.default.post(name: .docNestFocusSearch, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: [.command])
+            }
             CommandGroup(replacing: .saveItem) { }
             CommandGroup(replacing: .importExport) { }
             CommandGroup(replacing: .printItem) { }

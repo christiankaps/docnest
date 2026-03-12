@@ -308,6 +308,7 @@ Meine Dokumente.docnestlibrary/
 - Dokument in Liste waehlen und sofort Vorschau sehen.
 - Labels per Shortcut oder Inspector zuweisen.
 - Trefferliste live beim Tippen filtern.
+- Command+F fokussiert das Suchfeld der Dokumentansicht, wenn eine Library geoeffnet ist.
 
 ### 10.4 Drag-and-drop UX
 - Bei einem gueltigen PDF-Drop ist die aktive Drop-Zone sofort erkennbar.

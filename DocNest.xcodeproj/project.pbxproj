@@ -17,6 +17,7 @@
 		6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */; };
 		77424B1901611FDF26B6EBA6 /* AppSplitViewLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC92D622E6EF259A9AF5A669 /* AppSplitViewLayout.swift */; };
 		78C8D82942577262672EDDF2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0A020E71E4139D5C6236FCD /* Assets.xcassets */; };
+		7A1E697690A2764E2A40E8BB /* SearchToolbarField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384308B1EF0740E0C4F3A350 /* SearchToolbarField.swift */; };
 		8D1FC626EFC093CBE2FF7636 /* PDFViewRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54801B6E1BCE4A70FCDB2E29 /* PDFViewRepresentable.swift */; };
 		9B1EA4B0472E2FA374348A7F /* DocNestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD39DB5ED19340D342B038E6 /* DocNestTests.swift */; };
 		A35D8B1AEE7796BDCF11A938 /* DocumentStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F35D29609AD07395CE3098C2 /* DocumentStorageService.swift */; };
@@ -25,6 +26,7 @@
 		BAD3422FCC9D99B891471458 /* DocumentLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B0FFAF2C02193A2F504BDB3 /* DocumentLibraryService.swift */; };
 		BB6346F3461319B78849AE57 /* ManageLabelsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD49D19B314A1AF377BCD069 /* ManageLabelsUseCase.swift */; };
 		BE2517F95F869DB2842C1F08 /* LabelChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E121E80E607DB634883795 /* LabelChip.swift */; };
+		D0E526C148C713C44FEE42EB /* SearchFocusCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83474F7BD44082F27FE0A810 /* SearchFocusCommand.swift */; };
 		EB82992B3C2494D927CD3370 /* DocNestUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */; };
 		EFE086EED508E58D74F74FD9 /* SearchDocumentsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9CF39DD2A6316E2DFD9361 /* SearchDocumentsUseCase.swift */; };
 		F6ABB1DC45B766AD5419EAFE /* SidebarLabelSelectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8797DFFE81CB9CAC18E358D6 /* SidebarLabelSelectionState.swift */; };
@@ -54,12 +56,14 @@
 		0EA3AF9677EEE87A61D1F2B1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		23AC657950D272E01D18DE75 /* LabelTag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelTag.swift; sourceTree = "<group>"; };
 		29A4179D6FD2BD0370A1E9A7 /* AppTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTypography.swift; sourceTree = "<group>"; };
+		384308B1EF0740E0C4F3A350 /* SearchToolbarField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchToolbarField.swift; sourceTree = "<group>"; };
 		3A92312359B8EE4691B36D8E /* DocNestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocNestTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B0FFAF2C02193A2F504BDB3 /* DocumentLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentLibraryService.swift; sourceTree = "<group>"; };
 		45B34DF5ACFF5069169049C6 /* DocNestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestApp.swift; sourceTree = "<group>"; };
 		4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInspectorView.swift; sourceTree = "<group>"; };
 		54801B6E1BCE4A70FCDB2E29 /* PDFViewRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewRepresentable.swift; sourceTree = "<group>"; };
 		6D9CF39DD2A6316E2DFD9361 /* SearchDocumentsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchDocumentsUseCase.swift; sourceTree = "<group>"; };
+		83474F7BD44082F27FE0A810 /* SearchFocusCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFocusCommand.swift; sourceTree = "<group>"; };
 		83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestUITests.swift; sourceTree = "<group>"; };
 		8797DFFE81CB9CAC18E358D6 /* SidebarLabelSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarLabelSelectionState.swift; sourceTree = "<group>"; };
 		A1C271308AF16C589CE96C8B /* DeferredSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeferredSelectionState.swift; sourceTree = "<group>"; };
@@ -205,6 +209,8 @@
 				EC92D622E6EF259A9AF5A669 /* AppSplitViewLayout.swift */,
 				A1C271308AF16C589CE96C8B /* DeferredSelectionState.swift */,
 				EA07191F675258A004D68388 /* ResizeHandleCursorState.swift */,
+				83474F7BD44082F27FE0A810 /* SearchFocusCommand.swift */,
+				384308B1EF0740E0C4F3A350 /* SearchToolbarField.swift */,
 				8797DFFE81CB9CAC18E358D6 /* SidebarLabelSelectionState.swift */,
 				DFFA402AACB7259B8D838914 /* Design */,
 			);
@@ -390,6 +396,8 @@
 				6332EE665429D0D47E89D7F4 /* ResizeHandleCursorState.swift in Sources */,
 				4C1368A6F47101D34D33808A /* RootView.swift in Sources */,
 				EFE086EED508E58D74F74FD9 /* SearchDocumentsUseCase.swift in Sources */,
+				D0E526C148C713C44FEE42EB /* SearchFocusCommand.swift in Sources */,
+				7A1E697690A2764E2A40E8BB /* SearchToolbarField.swift in Sources */,
 				F6ABB1DC45B766AD5419EAFE /* SidebarLabelSelectionState.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
