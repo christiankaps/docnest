@@ -96,9 +96,14 @@ struct LibrarySidebarView: View {
                                     }
                                 }
                             } label: {
-                                Circle()
-                                    .fill(newLabelColor.color)
-                                    .frame(width: 20, height: 20)
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(newLabelColor.color)
+                                        .frame(width: 14, height: 14)
+                                    Text(newLabelColor.displayName)
+                                        .font(AppTypography.caption)
+                                }
+                                .foregroundStyle(.primary)
                             }
                             .help("Choose label color")
 
