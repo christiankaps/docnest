@@ -319,7 +319,7 @@ Meine Dokumente.docnestlibrary/
 
 ### 10.6 Seitenleisten-integrierte Label-Verwaltung
 - Labels werden direkt in der linken Seitenleiste verwaltet, nicht ueber einen separaten modalen Dialog.
-- Inline-Aktionen in der Seitenleiste: Label anlegen (ueber ein "+"-Element), umbenennen (Doppelklick oder Kontextmenue), loeschen (Kontextmenue), Farbe aendern (Kontextmenue oder Inline-Picker).
+- Inline-Aktionen in der Seitenleiste: Label anlegen (ueber ein "+"-Element mit Farbe waehrend der Erstellung wahlbar), umbenennen (Doppelklick oder Kontextmenue), loeschen (Kontextmenue), Farbe aendern (Kontextmenue oder Inline-Picker).
 - Die Reihenfolge der Labels ist per Drag-and-drop in der Seitenleiste aenderbar. Die benutzerdefinierte Sortierung wird persistiert.
 - Label-Filter wirken per AND-Logik bei Mehrfachauswahl.
 
