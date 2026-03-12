@@ -74,9 +74,9 @@ struct DocumentInspectorView: View {
                             .font(.system(size: 48))
                             .foregroundStyle(.red.opacity(0.6))
                         Text("File not found")
-                            .font(.headline)
+                            .font(AppTypography.sectionTitle)
                         Text("The stored PDF file for \"\(document.originalFileName)\" could not be located.")
-                            .font(.subheadline)
+                            .font(AppTypography.body)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 360)
@@ -92,9 +92,9 @@ struct DocumentInspectorView: View {
                             .font(.system(size: 48))
                             .foregroundStyle(.secondary)
                         Text("No PDF file")
-                            .font(.headline)
+                            .font(AppTypography.sectionTitle)
                         Text("Import a PDF to see its preview.")
-                            .font(.subheadline)
+                            .font(AppTypography.body)
                             .foregroundStyle(.secondary)
                     }
                     .padding()
@@ -107,24 +107,28 @@ struct DocumentInspectorView: View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(document.title)
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                    .font(AppTypography.title)
 
                 Text(document.originalFileName)
+                    .font(AppTypography.body)
                     .foregroundStyle(.secondary)
 
                 Text("Imported \(document.importedAt.formatted(date: .abbreviated, time: .omitted))")
+                    .font(AppTypography.body)
                     .foregroundStyle(.secondary)
 
                 if let sourceCreatedAt = document.sourceCreatedAt {
                     Text("Created \(sourceCreatedAt.formatted(date: .abbreviated, time: .omitted))")
+                        .font(AppTypography.body)
                         .foregroundStyle(.secondary)
                 }
 
                 Text("\(document.pageCount) pages")
+                    .font(AppTypography.body)
                     .foregroundStyle(.secondary)
 
                 Text(document.formattedFileSize)
+                    .font(AppTypography.body)
                     .foregroundStyle(.secondary)
             }
 
@@ -133,9 +137,9 @@ struct DocumentInspectorView: View {
             if !document.contentHash.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Content Hash")
-                        .font(.headline)
+                        .font(AppTypography.sectionTitle)
                     Text(document.contentHash)
-                        .font(.caption.monospaced())
+                        .font(AppTypography.caption.monospaced())
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
@@ -194,7 +198,7 @@ struct DocumentInspectorView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Labels")
-                    .font(.headline)
+                    .font(AppTypography.sectionTitle)
                 Spacer()
                 Button("Manage Labels", action: onManageLabels)
             }
@@ -260,23 +264,24 @@ struct DocumentInspectorView: View {
         return VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("\(documents.count) Documents Selected")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                    .font(AppTypography.title)
 
                 Text("Use this inspector to add or remove labels across the current selection without changing the imported originals.")
+                    .font(AppTypography.body)
                     .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Shared Labels")
-                        .font(.headline)
+                        .font(AppTypography.sectionTitle)
                     Spacer()
                     Button("Manage Labels", action: onManageLabels)
                 }
 
                 if selectionSummary.labelsOnAllSelectedDocuments.isEmpty {
                     Text("No label is currently assigned to every selected document.")
+                        .font(AppTypography.body)
                         .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
@@ -297,9 +302,10 @@ struct DocumentInspectorView: View {
             if !selectionSummary.partiallyAssignedLabels.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Partially Assigned")
-                        .font(.headline)
+                        .font(AppTypography.sectionTitle)
 
                     Text(selectionSummary.partiallyAssignedLabels.map(\.name).joined(separator: ", "))
+                        .font(AppTypography.body)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -465,7 +471,7 @@ private struct LabelChip: View {
 
     var body: some View {
         Text(name)
-            .font(.caption.weight(.semibold))
+            .font(AppTypography.captionStrong)
             .foregroundStyle(color.color)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)

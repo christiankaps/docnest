@@ -22,7 +22,7 @@ struct DocNestApp: App {
 private struct AppRootView: View {
     @StateObject private var librarySession = LibrarySessionController()
     @State private var isClosedLibraryDropTargeted = false
-    @State private var isShowingLibraryPrompt = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         Group {
@@ -32,31 +32,63 @@ private struct AppRootView: View {
                     .modelContainer(modelContainer)
                     .accessibilityIdentifier("library-open-root")
             } else {
-                ContentUnavailableView {
-                    Label("No Library Open", systemImage: "books.vertical")
-                } description: {
-                    Text("Create a DocNest library or open an existing one before importing documents.")
-                } actions: {
-                    HStack(spacing: 12) {
-                        Button("Create Library", action: librarySession.createLibrary)
-                        Button("Open Library", action: librarySession.openLibrary)
+                NavigationSplitView(columnVisibility: $columnVisibility) {
+                    List {
+                        Section("Library") {
+                            Label("All Documents", systemImage: "doc.richtext")
+                            Label("Recent Imports", systemImage: "clock")
+                            Label("Needs Labels", systemImage: "tag.slash")
+                        }
+
+                        Section("Label Filters") {
+                            Text("No labels yet")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                }
-                .overlay {
-                    if isClosedLibraryDropTargeted {
-                        DocumentImportDropOverlay(
-                            title: "Open a Library First",
-                            message: "Create or open a DocNest library before dropping PDFs into the app."
-                        )
-                        .padding(32)
+                    .navigationTitle("Library")
+                    .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 300)
+                } content: {
+                    ZStack {
+                        ContentUnavailableView {
+                            Label("No Library Open", systemImage: "books.vertical")
+                        } description: {
+                            Text("Create a DocNest library or open an existing one before importing documents.")
+                        } actions: {
+                            HStack(spacing: 12) {
+                                Button("Create Library", action: librarySession.createLibrary)
+                                Button("Open Library", action: librarySession.openLibrary)
+                            }
+                        }
+
+                        if isClosedLibraryDropTargeted {
+                            DocumentImportDropOverlay(
+                                title: "Open a Library First",
+                                message: "Create or open a DocNest library before dropping PDFs into the app."
+                            )
+                            .padding(20)
+                        }
                     }
-                }
-                .dropDestination(for: URL.self) { urls, _ in
-                    handleDroppedURLsWithoutLibrary(urls)
-                } isTargeted: { isTargeted in
-                    isClosedLibraryDropTargeted = isTargeted
+                    .dropDestination(for: URL.self) { urls, _ in
+                        handleDroppedURLsWithoutLibrary(urls)
+                    } isTargeted: { isTargeted in
+                        isClosedLibraryDropTargeted = isTargeted
+                    }
+                    .navigationTitle("Documents")
+                    .navigationSplitViewColumnWidth(min: 560, ideal: 740)
+                } detail: {
+                    ContentUnavailableView(
+                        "No Document Selected",
+                        systemImage: "doc.text",
+                        description: Text("Open or create a library to inspect document details and preview PDFs.")
+                    )
+                    .navigationTitle("Preview")
+                    .navigationSplitViewColumnWidth(min: 380, ideal: 520, max: 760)
                 }
                 .accessibilityIdentifier("library-closed-root")
+                .onAppear {
+                    columnVisibility = .all
+                }
             }
         }
         .toolbar {
@@ -72,9 +104,6 @@ private struct AppRootView: View {
         }
         .task {
             librarySession.restorePersistedLibrary()
-            if librarySession.selectedLibraryURL == nil && librarySession.libraryErrorMessage == nil {
-                isShowingLibraryPrompt = true
-            }
         }
         .alert("Library Error", isPresented: libraryErrorBinding) {
             Button("Open Library") {
@@ -90,17 +119,6 @@ private struct AppRootView: View {
             }
         } message: {
             Text(librarySession.libraryErrorMessage ?? "Unknown library error.")
-        }
-        .alert("Welcome to DocNest", isPresented: $isShowingLibraryPrompt) {
-            Button("Open Library") {
-                librarySession.openLibrary()
-            }
-            Button("Create Library") {
-                librarySession.createLibrary()
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Open an existing library or create a new one to get started.")
         }
     }
 

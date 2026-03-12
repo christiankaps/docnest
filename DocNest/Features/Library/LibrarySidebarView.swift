@@ -37,6 +37,7 @@ struct LibrarySidebarView: View {
             Section("Label Filters") {
                 if labels.isEmpty {
                     Text("No labels yet")
+                        .font(AppTypography.caption)
                         .foregroundStyle(.secondary)
                 } else {
                     Button("Clear Label Filters") {

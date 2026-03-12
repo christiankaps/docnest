@@ -85,7 +85,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Nutzer kann eine neue Library anlegen.
 - Nutzer kann eine bestehende Library oeffnen.
 - App merkt sich die zuletzt erfolgreich geoeffnete Library und versucht sie beim naechsten Start automatisch wieder zu oeffnen.
-- Wenn keine zuletzt geoeffnete Library bekannt ist oder die gespeicherte Library nicht mehr validiert werden kann, zeigt die App einen Willkommensdialog mit den Optionen "Library oeffnen" und "Library erstellen", damit Nutzer sofort starten koennen.
+- Wenn keine zuletzt geoeffnete Library bekannt ist oder die gespeicherte Library nicht mehr validiert werden kann, zeigt die App keinen modalen Popup-Dialog. Stattdessen wird der Willkommenszustand direkt in das leere App-Layout integriert: Die drei Panels bleiben sichtbar, und der Hauptbereich zeigt eine eingebettete Willkommensansicht mit den Optionen "Library oeffnen" und "Library erstellen" als Teil des normalen Fensterinhalts.
 - Der Save-Dialog zum Erstellen einer Library zeigt nur den Bibliotheksnamen ohne die interne Dateiendung (.docnestlibrary); die App haengt die Endung automatisch an.
 - App prueft beim Oeffnen, ob Struktur und Metadaten konsistent sind.
 - App zeigt Fehlerzustand verstaendlich an, falls eine Library beschaedigt oder unvollstaendig ist.
@@ -103,6 +103,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Doppelte Dateien werden erkannt, mindestens hash-basiert.
 - Nutzer sieht beim Import, welche Dateien neu sind und welche Duplikate darstellen.
 - Nutzer erhaelt eine verstaendliche Rueckmeldung, wenn einzelne Dateien im Stapelimport fehlschlagen.
+- Beim Import werden die aktuell als Filter aktiven Labels automatisch den neu importierten Dokumenten zugewiesen. Dadurch landen neue Dateien direkt in der gefilterten Ansicht und muessen nicht manuell gelabelt werden.
 
 #### Sollte
 - Stapelimport mehrerer Dateien.
@@ -143,11 +144,13 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Ein Dokument kann mehrere Labels haben.
 - Labels koennen schnell per Tastatur oder Direktaktion zugewiesen werden.
 - Filter nach einem oder mehreren Labels sind moeglich.
+- Wenn mehrere Labels als Filter ausgewaehlt sind, gilt AND-Logik: Nur Dokumente mit allen ausgewaehlten Labels werden angezeigt.
+- Label-Verwaltung (Anlegen, Umbenennen, Loeschen, Farbauswahl) ist direkt in die linke Seitenleiste integriert, nicht in einen separaten modalen Dialog.
+- Die Reihenfolge der Labels in der Seitenleiste ist vom Nutzer per Drag-and-drop aenderbar. Die benutzerdefinierte Reihenfolge wird persistiert.
 
 #### Sollte
 - Farbige Labels.
 - Label-Vorschlaege auf Basis zuletzt genutzter Labels.
-- Label-Verwaltung als eigene Seitenleiste oder Inspector.
 
 #### Kann spaeter folgen
 - Hierarchische Labels.
@@ -289,6 +292,8 @@ Meine Dokumente.docnestlibrary/
 - Hauptbereich fuer Dokumentliste.
 - Detail- oder Vorschau-Bereich fuer ausgewaehltes Dokument.
 - Das Layout muss im normalen Fenster und im Vollbildmodus sinnvoll skalieren.
+- Das Drei-Panel-Layout (Seitenleiste, Dokumentliste, Inspector) muss nach dem Start sofort vollstaendig sichtbar sein. Kein Panel darf versteckt, eingeklappt oder nur teilweise sichtbar starten.
+- Die App verwendet eine moderne, gut lesbare Schriftart (SF Pro oder SF Pro Rounded). Typografie, Abstaende und visuelle Gewichtung sollen ein modernes, aufgeraeumtes Erscheinungsbild vermitteln.
 
 ### 10.2 Kerninteraktionen
 - Dateien auf Fenster ziehen und importieren.
@@ -301,6 +306,23 @@ Meine Dokumente.docnestlibrary/
 - Die visuelle Rueckmeldung darf Listen- oder Inspector-Inhalte nicht unnoetig verdecken.
 - Nach erfolgreichem Drop bleibt der Nutzer im aktuellen Fensterkontext; der Import soll keine neue Library oder kein neues Fenster oeffnen.
 - Nach einem abgeschlossenen Drop sieht der Nutzer dieselbe Importzusammenfassung wie beim Dateidialog.
+
+### 10.5 Startup-Zustand ohne Library
+- Beim Start ohne geoeffnete Library zeigt die App keine modale Dialogbox und keinen Popup.
+- Stattdessen wird das regulaere Drei-Panel-Layout mit leerem Inhalt angezeigt.
+- Der Hauptbereich (Content-Bereich) zeigt eine einladende Willkommensansicht mit Aktionen zum Erstellen oder Oeffnen einer Library, eingebettet in den normalen Fensterfluss.
+- Die Seitenleiste und der Inspector-Bereich bleiben sichtbar, aber inhaltlich leer oder mit Platzhalter-Zustand.
+
+### 10.6 Seitenleisten-integrierte Label-Verwaltung
+- Labels werden direkt in der linken Seitenleiste verwaltet, nicht ueber einen separaten modalen Dialog.
+- Inline-Aktionen in der Seitenleiste: Label anlegen (ueber ein "+"-Element), umbenennen (Doppelklick oder Kontextmenue), loeschen (Kontextmenue), Farbe aendern (Kontextmenue oder Inline-Picker).
+- Die Reihenfolge der Labels ist per Drag-and-drop in der Seitenleiste aenderbar. Die benutzerdefinierte Sortierung wird persistiert.
+- Label-Filter wirken per AND-Logik bei Mehrfachauswahl.
+
+### 10.7 Automatische Label-Zuweisung beim Import
+- Wenn beim Import Label-Filter aktiv sind, werden diese Labels automatisch den neu importierten Dokumenten zugewiesen.
+- Dadurch erscheinen importierte Dokumente sofort in der aktuell gefilterten Ansicht.
+- Der Nutzer erkennt in der Importzusammenfassung, welche Labels automatisch zugewiesen wurden.
 
 ### 10.3 Kritische UX-Regeln
 - Nutzer muss jederzeit erkennen koennen, ob er ein Originaldokument, Metadaten oder nur die Sicht auf die Daten veraendert.
@@ -337,6 +359,7 @@ Aktueller Stand:
 - Hash-basierte Duplikate werden uebersprungen und im Importstatus explizit ausgewiesen.
 - Dateidialog-Import und Drag-and-drop verwenden denselben Importpfad und dieselbe Rueckmeldung.
 - Die Dokumentliste dient als grosszuegige Drop-Zone; bei geschlossenener Library erklaert die App den fehlenden Importkontext statt still zu scheitern.
+- Offen: Beim Import werden aktuell keine Labels automatisch zugewiesen. Geplant ist, dass die aktuell aktiven Label-Filter automatisch auf neu importierte Dokumente uebertragen werden.
 
 Implementierungsplan fuer Drag-and-drop:
 1. In der Hauptansicht einen grosszuegigen Drop-Bereich auf dem Content-Bereich einfuehren, nicht nur auf einem einzelnen Unterelement.
@@ -364,6 +387,8 @@ Aktueller Stand:
 - Die Detailansicht trennt PDF-Vorschau und Metadaten ueber einen vertikal verschiebbaren Splitter, damit Nutzer die Vorschauhoehe direkt anpassen koennen.
 - Die App startet mit einer Fensterbreite und Split-View-Konfiguration, in der die linke Seitenleiste standardmaessig sichtbar bleibt; Nutzer sollen die Library-Navigation nicht erst durch manuelles Verbreitern des Fensters wiederherstellen muessen.
 - Ein Sidebar-Toggle-Button in der Toolbar bleibt immer sichtbar und erlaubt das Ein- und Ausblenden der Seitenleiste unabhaengig vom aktuellen Layout-Zustand.
+- Offen: Die Startup-Ansicht ohne Library zeigt derzeit einen Popup-Dialog. Geplant ist eine eingebettete Willkommensansicht im regulaeren Drei-Panel-Layout.
+- Offen: Typografie nutzt derzeit systemnahe Standardschriften inline. Geplant ist ein konsistentes, modernes Schriftkonzept (SF Pro / SF Pro Rounded) mit zentraler Definition.
 
 ### Phase 4: Labels als primaeres Ordnungssystem
 Ziel: Nutzer kann Dokumente sinnvoll organisieren.
@@ -381,6 +406,8 @@ Aktueller Stand:
 - Das Loeschen eines Labels entfernt nur die Zuordnung. Dokumente und Originaldateien bleiben unveraendert in der Library.
 - Die Dokumentliste unterstuetzt Mehrfachselektion. Der Inspector kann Labels fuer die gesamte Auswahl hinzufügen oder von der gesamten Auswahl entfernen.
 - Bei gemischten Label-Zustaenden zeigt der Inspector gemeinsame Labels getrennt von partiell vergebenen Labels an und bietet Aktionen wie "zu verbleibenden Dokumenten hinzufuegen" an.
+- Offen: Label-Verwaltung (CRUD, Farbe) ist derzeit ein separater modaler Dialog. Geplant ist die Integration direkt in die Seitenleiste mit Inline-Bearbeitung und Drag-and-drop-Reorder.
+- Offen: Benutzerdefinierte Label-Reihenfolge wird noch nicht persistiert. Ein `sortOrder`-Feld im Label-Modell ist geplant.
 
 ### Phase 5: Suche und Wiederfinden
 Ziel: Dokumente lassen sich schnell wiederfinden.

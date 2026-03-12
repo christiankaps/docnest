@@ -36,7 +36,7 @@ struct DocumentListView: View {
                 sortButton("Size", column: .fileSize)
                     .frame(width: 90, alignment: .leading)
                 Text("Labels")
-                    .font(.caption.weight(.semibold))
+                    .font(AppTypography.columnHeader)
                     .foregroundStyle(.secondary)
                     .frame(width: 220, alignment: .leading)
             }
@@ -61,19 +61,19 @@ struct DocumentListView: View {
                                 .overlay {
                                     Image(systemName: "doc.richtext")
                                         .foregroundStyle(.tint)
-                                        .font(.system(size: 13, weight: .semibold))
+                                        .font(AppTypography.listTitle)
                                 }
 
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(document.title)
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(AppTypography.listTitle)
                                     .lineLimit(1)
                             }
                         }
                         .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
 
                         Text(document.importedAt, format: .dateTime.year().month().day())
-                            .font(.system(size: 12).monospacedDigit())
+                            .font(AppTypography.listMeta.monospacedDigit())
                             .frame(width: 110, alignment: .leading)
 
                         Group {
@@ -84,15 +84,15 @@ struct DocumentListView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        .font(.system(size: 12).monospacedDigit())
+                        .font(AppTypography.listMeta.monospacedDigit())
                         .frame(width: 110, alignment: .leading)
 
                         Text("\(document.pageCount)")
-                            .font(.system(size: 12).monospacedDigit())
+                            .font(AppTypography.listMeta.monospacedDigit())
                             .frame(width: 60, alignment: .leading)
 
                         Text(document.formattedFileSize)
-                            .font(.system(size: 12).monospacedDigit())
+                            .font(AppTypography.listMeta.monospacedDigit())
                             .frame(width: 90, alignment: .leading)
 
                         DocumentLabelStrip(labels: document.labels)
@@ -117,10 +117,10 @@ struct DocumentListView: View {
         } label: {
             HStack(spacing: 4) {
                 Text(title)
-                    .font(.caption.weight(.semibold))
+                    .font(AppTypography.columnHeader)
                 if sortColumn == column {
                     Image(systemName: sortDirection == .ascending ? "arrow.up" : "arrow.down")
-                        .font(.caption2.weight(.bold))
+                        .font(AppTypography.captionStrong)
                 }
             }
             .foregroundStyle(sortColumn == column ? Color.primary : Color.secondary)
@@ -209,7 +209,7 @@ private struct DocumentLabelStrip: View {
     var body: some View {
         if sortedLabels.isEmpty {
             Text("No labels")
-                .font(.system(size: 11))
+                .font(AppTypography.labelChip)
                 .foregroundStyle(.secondary)
         } else {
             HStack(spacing: 6) {
@@ -219,7 +219,7 @@ private struct DocumentLabelStrip: View {
 
                 if hiddenLabelCount > 0 {
                     Text("+\(hiddenLabelCount)")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(AppTypography.labelChip)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -234,7 +234,7 @@ private struct DocumentListLabelChip: View {
 
     var body: some View {
         Text(name)
-            .font(.system(size: 11, weight: .semibold))
+            .font(AppTypography.labelChip)
             .foregroundStyle(color.color)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
