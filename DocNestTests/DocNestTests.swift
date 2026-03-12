@@ -215,6 +215,38 @@ final class DocNestTests: XCTestCase {
         XCTAssertFalse(state.isCursorActive)
     }
 
+    func testDeferredSelectionStateUpdatesVisualSelectionImmediately() {
+        var state = DeferredSelectionState<String>()
+
+        state.toggleVisualSelection(for: "finance")
+
+        XCTAssertEqual(state.visualSelection, ["finance"])
+        XCTAssertTrue(state.appliedSelection.isEmpty)
+    }
+
+    func testDeferredSelectionStateCommitsVisualSelectionSeparately() {
+        var state = DeferredSelectionState<String>()
+
+        state.replaceVisualSelection(with: ["finance", "tax"])
+        state.commitVisualSelection()
+
+        XCTAssertEqual(state.visualSelection, ["finance", "tax"])
+        XCTAssertEqual(state.appliedSelection, ["finance", "tax"])
+    }
+
+    func testDeferredSelectionStateSyncsAvailableSelectionsAcrossVisualAndAppliedState() {
+        var state = DeferredSelectionState<String>()
+
+        state.replaceVisualSelection(with: ["finance", "tax"])
+        state.commitVisualSelection()
+        state.replaceVisualSelection(with: ["tax", "legal"])
+
+        state.syncAvailableSelections(["tax", "contracts"])
+
+        XCTAssertEqual(state.visualSelection, ["tax"])
+        XCTAssertEqual(state.appliedSelection, ["tax"])
+    }
+
     @MainActor
     func testLibraryContainersStayIsolated() throws {
         let tempRoot = FileManager.default.temporaryDirectory

@@ -166,6 +166,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 #### Muss
 - Volltextnahe Suche ueber Dateiname, Titel, Notizen und Labels.
 - Kombination aus Suchtext und Label-Filtern.
+- Beim Aktivieren oder Deaktivieren eines Label-Filters muss die Auswahlmarkierung in der Seitenleiste sofort sichtbar umschalten, auch wenn die Aktualisierung der Dokumentliste geringfuegig laenger dauert.
 - Sortierung nach Importdatum, Dokumentdatum, Name, Dateigroesse.
 - "Needs Labels"-Filter zeigt nur Dokumente ohne Labels an. Wenn dieser Filter aktiv ist, werden aktive Label-Filter automatisch geloescht, um logische Konflikte zu vermeiden (ein Dokument kann nicht gleichzeitig keine Labels haben und bestimmte Labels enthalten).
 

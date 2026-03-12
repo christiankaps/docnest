@@ -3,14 +3,17 @@ import SwiftData
 
 struct RootView: View {
     let libraryURL: URL
+    private let labelFilterApplyDelay: Duration = .milliseconds(75)
+
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var selectedSection: LibrarySection = .allDocuments
-    @State private var selectedLabelIDs: Set<PersistentIdentifier> = []
+    @State private var labelFilterSelection = DeferredSelectionState<PersistentIdentifier>()
     @State private var selectedDocumentIDs: Set<PersistentIdentifier> = []
     @State private var searchText = ""
     @State private var isImporting = false
     @State private var isDropTargeted = false
     @State private var importSummaryMessage: String?
+    @State private var pendingLabelFilterApplyTask: Task<Void, Never>?
     @Environment(\.modelContext) private var modelContext
 
     @Query(sort: \DocumentRecord.importedAt, order: .reverse)
@@ -36,7 +39,7 @@ struct RootView: View {
         return SearchDocumentsUseCase.filter(
             sectionDocuments,
             query: searchText,
-            selectedLabelIDs: selectedLabelIDs
+            selectedLabelIDs: labelFilterSelection.appliedSelection
         )
     }
 
@@ -55,7 +58,7 @@ struct RootView: View {
             LibrarySidebarView(
                 selectedSection: $selectedSection,
                 labels: allLabels,
-                selectedLabelIDs: $selectedLabelIDs
+                selectedLabelIDs: visualSelectedLabelIDsBinding
             )
             .navigationSplitViewColumnWidth(
                 min: AppSplitViewLayout.sidebarWidth,
@@ -125,12 +128,28 @@ struct RootView: View {
         } message: {
             Text(importSummaryMessage ?? "")
         }
+        .onChange(of: labelFilterSelection.visualSelection) { _, newSelection in
+            scheduleLabelFilterApply(immediately: newSelection.isEmpty)
+        }
         .onChange(of: allLabels.map(\.persistentModelID)) { _, labelIDs in
-            selectedLabelIDs.formIntersection(Set(labelIDs))
+            pendingLabelFilterApplyTask?.cancel()
+            labelFilterSelection.syncAvailableSelections(Set(labelIDs))
         }
         .onChange(of: filteredDocuments.map(\.persistentModelID)) { _, documentIDs in
             selectedDocumentIDs.formIntersection(Set(documentIDs))
         }
+        .onDisappear {
+            pendingLabelFilterApplyTask?.cancel()
+        }
+    }
+
+    private var visualSelectedLabelIDsBinding: Binding<Set<PersistentIdentifier>> {
+        Binding(
+            get: { labelFilterSelection.visualSelection },
+            set: { newSelection in
+                labelFilterSelection.replaceVisualSelection(with: newSelection)
+            }
+        )
     }
 
     private var importSummaryBinding: Binding<Bool> {
@@ -168,7 +187,7 @@ struct RootView: View {
         }
 
         let activeFilterLabels = allLabels.filter { label in
-            selectedLabelIDs.contains(label.persistentModelID)
+            labelFilterSelection.visualSelection.contains(label.persistentModelID)
         }
 
         let importResult = ImportPDFDocumentsUseCase.execute(
@@ -180,6 +199,25 @@ struct RootView: View {
 
         if importResult.hasUserMessage {
             importSummaryMessage = importResult.summaryMessage
+        }
+    }
+
+    private func scheduleLabelFilterApply(immediately: Bool) {
+        pendingLabelFilterApplyTask?.cancel()
+
+        guard !immediately else {
+            labelFilterSelection.commitVisualSelection()
+            return
+        }
+
+        pendingLabelFilterApplyTask = Task { @MainActor in
+            try? await Task.sleep(for: labelFilterApplyDelay)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            labelFilterSelection.commitVisualSelection()
         }
     }
 }
