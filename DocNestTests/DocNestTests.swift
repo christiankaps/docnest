@@ -173,6 +173,48 @@ final class DocNestTests: XCTestCase {
         )
     }
 
+    func testOpenLibraryLayoutKeepsSidePanelsFixedAndDocumentListFlexible() {
+        XCTAssertEqual(AppSplitViewLayout.sidebarWidth, 260)
+        XCTAssertEqual(AppSplitViewLayout.inspectorWidth, 420)
+        XCTAssertEqual(AppSplitViewLayout.documentListMinWidth, 280)
+        XCTAssertEqual(
+            AppSplitViewLayout.minimumOpenLibraryWindowWidth,
+            AppSplitViewLayout.sidebarWidth + AppSplitViewLayout.documentListMinWidth + AppSplitViewLayout.inspectorWidth
+        )
+        XCTAssertLessThan(AppSplitViewLayout.documentListMinWidth, AppSplitViewLayout.inspectorWidth)
+        XCTAssertLessThan(AppSplitViewLayout.documentListMinWidth, AppSplitViewLayout.closedLibraryContentMinWidth)
+    }
+
+    func testClosedLibraryLayoutPreservesSidePanelWidths() {
+        XCTAssertEqual(AppSplitViewLayout.closedLibraryContentMinWidth, 360)
+        XCTAssertEqual(
+            AppSplitViewLayout.minimumClosedLibraryWindowWidth,
+            AppSplitViewLayout.sidebarWidth + AppSplitViewLayout.closedLibraryContentMinWidth + AppSplitViewLayout.inspectorWidth
+        )
+        XCTAssertEqual(
+            AppSplitViewLayout.minimumWindowWidth,
+            max(AppSplitViewLayout.minimumOpenLibraryWindowWidth, AppSplitViewLayout.minimumClosedLibraryWindowWidth)
+        )
+    }
+
+    func testResizeHandleCursorStateResetsCursorWhenHoverEnds() {
+        var state = ResizeHandleCursorState()
+
+        XCTAssertEqual(state.hoverChanged(true), .resizeLeftRight)
+        XCTAssertEqual(state.hoverChanged(false), .arrow)
+        XCTAssertFalse(state.isHovering)
+        XCTAssertFalse(state.isCursorActive)
+    }
+
+    func testResizeHandleCursorStateResetsCursorWhenViewDisappears() {
+        var state = ResizeHandleCursorState()
+
+        XCTAssertEqual(state.hoverChanged(true), .resizeLeftRight)
+        XCTAssertEqual(state.disappeared(), .arrow)
+        XCTAssertFalse(state.isHovering)
+        XCTAssertFalse(state.isCursorActive)
+    }
+
     @MainActor
     func testLibraryContainersStayIsolated() throws {
         let tempRoot = FileManager.default.temporaryDirectory

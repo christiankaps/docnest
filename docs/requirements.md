@@ -129,6 +129,8 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 
 #### Muss
 - Listenansicht mit sortierbaren Spalten.
+- Wenn linke Seitenleiste und rechter Inspector eingeblendet sind, muessen beide Panels jeweils vollstaendig sichtbar bleiben; die App darf keinen sichtbaren Panel-Inhalt halb abschneiden.
+- Wenn das Fenster schmaler wird, schrumpft zuerst die Dokumentliste in der Mitte. Die seitlichen Panels behalten ihre voll nutzbaren Breiten, solange sie sichtbar sind.
 - Nutzer kann die Breite der sichtbaren Spalten in der Dokumentliste direkt per Drag-Geste anpassen.
 - Nutzer kann Dateiattribute in der Dokumentliste ein- oder ausblenden (Importdatum, Erstellungsdatum, Seitenzahl, Dateigroesse, Labels). Die Spalte "Document" bleibt immer sichtbar.
 - Die Dokumentliste nutzt eine klare Zeilenabgrenzung mit alternierender Zeilenfarbe (Even/Odd), um die Lesbarkeit bei vielen Eintraegen zu verbessern.
@@ -297,6 +299,7 @@ Meine Dokumente.docnestlibrary/
 - Detail- oder Vorschau-Bereich fuer ausgewaehltes Dokument.
 - Das Layout muss im normalen Fenster und im Vollbildmodus sinnvoll skalieren.
 - Das Drei-Panel-Layout (Seitenleiste, Dokumentliste, Inspector) muss nach dem Start sofort vollstaendig sichtbar sein. Kein Panel darf versteckt, eingeklappt oder nur teilweise sichtbar starten.
+- Fuer die linke Seitenleiste wird genau ein Sidebar-Toggle im Toolbar-Bereich angeboten; doppelte Bedienelemente fuer dieselbe Aktion sind nicht zulaessig.
 - Die App verwendet eine moderne, gut lesbare Schriftart (SF Pro oder SF Pro Rounded). Typografie, Abstaende und visuelle Gewichtung sollen ein modernes, aufgeraeumtes Erscheinungsbild vermitteln.
 
 ### 10.2 Kerninteraktionen

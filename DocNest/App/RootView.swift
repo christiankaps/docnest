@@ -57,7 +57,11 @@ struct RootView: View {
                 labels: allLabels,
                 selectedLabelIDs: $selectedLabelIDs
             )
-            .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 300)
+            .navigationSplitViewColumnWidth(
+                min: AppSplitViewLayout.sidebarWidth,
+                ideal: AppSplitViewLayout.sidebarWidth,
+                max: AppSplitViewLayout.sidebarWidth
+            )
         } content: {
             ZStack {
                 DocumentListView(
@@ -78,29 +82,27 @@ struct RootView: View {
             } isTargeted: { isTargeted in
                 isDropTargeted = isTargeted
             }
-            .navigationSplitViewColumnWidth(min: 560, ideal: 740)
+            .navigationSplitViewColumnWidth(
+                min: AppSplitViewLayout.documentListMinWidth,
+                ideal: AppSplitViewLayout.documentListIdealWidth
+            )
         } detail: {
             DocumentInspectorView(
                 documents: selectedDocuments,
                 libraryURL: libraryURL
             )
-            .navigationSplitViewColumnWidth(min: 380, ideal: 520, max: 760)
+            .navigationSplitViewColumnWidth(
+                min: AppSplitViewLayout.inspectorWidth,
+                ideal: AppSplitViewLayout.inspectorWidth,
+                max: AppSplitViewLayout.inspectorWidth
+            )
         }
+        .navigationSplitViewStyle(.balanced)
         .searchable(text: $searchText, prompt: "Search title, file name, or labels")
         .onAppear {
             columnVisibility = .all
         }
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    withAnimation {
-                        columnVisibility = columnVisibility == .all ? .doubleColumn : .all
-                    }
-                } label: {
-                    Label("Toggle Sidebar", systemImage: "sidebar.leading")
-                }
-            }
-
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     isImporting = true

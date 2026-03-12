@@ -6,9 +6,15 @@ struct DocNestApp: App {
     var body: some Scene {
         WindowGroup {
             AppRootView()
-                .frame(minWidth: 1360, minHeight: 700)
+                .frame(
+                    minWidth: AppSplitViewLayout.minimumWindowWidth,
+                    minHeight: AppSplitViewLayout.minimumWindowHeight
+                )
         }
-        .defaultSize(width: 1600, height: 860)
+        .defaultSize(
+            width: AppSplitViewLayout.defaultWindowWidth,
+            height: AppSplitViewLayout.defaultWindowHeight
+        )
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
@@ -47,7 +53,11 @@ private struct AppRootView: View {
                         }
                     }
                     .navigationTitle("Library")
-                    .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 300)
+                    .navigationSplitViewColumnWidth(
+                        min: AppSplitViewLayout.sidebarWidth,
+                        ideal: AppSplitViewLayout.sidebarWidth,
+                        max: AppSplitViewLayout.sidebarWidth
+                    )
                 } content: {
                     ZStack {
                         ContentUnavailableView {
@@ -75,7 +85,10 @@ private struct AppRootView: View {
                         isClosedLibraryDropTargeted = isTargeted
                     }
                     .navigationTitle("Documents")
-                    .navigationSplitViewColumnWidth(min: 560, ideal: 740)
+                    .navigationSplitViewColumnWidth(
+                        min: AppSplitViewLayout.closedLibraryContentMinWidth,
+                        ideal: AppSplitViewLayout.closedLibraryContentIdealWidth
+                    )
                 } detail: {
                     ContentUnavailableView(
                         "No Document Selected",
@@ -83,8 +96,13 @@ private struct AppRootView: View {
                         description: Text("Open or create a library to inspect document details and preview PDFs.")
                     )
                     .navigationTitle("Preview")
-                    .navigationSplitViewColumnWidth(min: 380, ideal: 520, max: 760)
+                    .navigationSplitViewColumnWidth(
+                        min: AppSplitViewLayout.inspectorWidth,
+                        ideal: AppSplitViewLayout.inspectorWidth,
+                        max: AppSplitViewLayout.inspectorWidth
+                    )
                 }
+                .navigationSplitViewStyle(.balanced)
                 .accessibilityIdentifier("library-closed-root")
                 .onAppear {
                     columnVisibility = .all

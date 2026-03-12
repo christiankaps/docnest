@@ -235,6 +235,7 @@ private struct ResizableColumnHeader<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     @State private var dragStartWidth: Double?
+    @State private var cursorState = ResizeHandleCursorState()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -246,13 +247,11 @@ private struct ResizableColumnHeader<Content: View>: View {
                 .frame(width: 1, height: 20)
                 .padding(.leading, 6)
                 .contentShape(Rectangle())
-                .onContinuousHover { phase in
-                    switch phase {
-                    case .active:
-                        NSCursor.resizeLeftRight.push()
-                    case .ended:
-                        NSCursor.pop()
-                    }
+                .onHover { isHovering in
+                    applyCursorUpdate(cursorState.hoverChanged(isHovering))
+                }
+                .onDisappear {
+                    applyCursorUpdate(cursorState.disappeared())
                 }
                 .gesture(
                     DragGesture(minimumDistance: 0)
@@ -269,11 +268,23 @@ private struct ResizableColumnHeader<Content: View>: View {
                         }
                         .onEnded { _ in
                             dragStartWidth = nil
+                            applyCursorUpdate(cursorState.dragEnded())
                         }
                 )
                 .help("Drag to resize column")
         }
         .frame(width: width, alignment: .leading)
+    }
+
+    private func applyCursorUpdate(_ update: ResizeHandleCursorUpdate) {
+        switch update {
+        case .none:
+            break
+        case .resizeLeftRight:
+            NSCursor.resizeLeftRight.set()
+        case .arrow:
+            NSCursor.arrow.set()
+        }
     }
 }
 

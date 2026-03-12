@@ -40,6 +40,30 @@ final class DocNestUITests: XCTestCase {
             "Expected the Import button to appear after restoring a library fixture")
     }
 
+    @MainActor
+    func testOpenLibraryUsesOnlySystemSidebarToggle() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Toolbar Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try createLibraryFixture(at: libraryURL)
+
+        let app = XCUIApplication()
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES",
+                                "-selectedLibraryPath", libraryURL.path]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["Import"].waitForExistence(timeout: 5))
+        XCTAssertFalse(
+            app.buttons["Toggle Sidebar"].exists,
+            "RootView should not add a second custom sidebar toggle button."
+        )
+    }
+
     private func createLibraryFixture(at libraryURL: URL) throws {
         try FileManager.default.createDirectory(at: libraryURL, withIntermediateDirectories: true)
 
