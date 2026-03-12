@@ -22,6 +22,7 @@ struct ImportPDFDocumentsResult {
     let duplicates: [Duplicate]
     let unsupportedFiles: [Unsupported]
     let failures: [Failure]
+    let autoAssignedLabels: [String]
 
     var hasDuplicates: Bool {
         !duplicates.isEmpty
@@ -35,8 +36,12 @@ struct ImportPDFDocumentsResult {
         !failures.isEmpty
     }
 
+    var hasAutoAssignedLabels: Bool {
+        importedCount > 0 && !autoAssignedLabels.isEmpty
+    }
+
     var hasUserMessage: Bool {
-        hasDuplicates || hasUnsupportedFiles || hasFailures
+        hasDuplicates || hasUnsupportedFiles || hasFailures || hasAutoAssignedLabels
     }
 
     var summaryMessage: String {
@@ -58,6 +63,10 @@ struct ImportPDFDocumentsResult {
         if hasUnsupportedFiles {
             lines.append(unsupportedFiles.count == 1 ? "Skipped 1 unsupported file:" : "Skipped \(unsupportedFiles.count) unsupported files:")
             lines.append(contentsOf: unsupportedFiles.map { "- \($0.fileName)" })
+        }
+
+        if hasAutoAssignedLabels {
+            lines.append("Automatically assigned labels: \(autoAssignedLabels.joined(separator: ", ")).")
         }
 
         let failureLines = failures.map { failure in
@@ -89,8 +98,13 @@ enum ImportPDFDocumentsUseCase {
     static func execute(
         urls: [URL],
         into libraryURL: URL,
+        autoAssignLabels: [LabelTag] = [],
         using modelContext: ModelContext
     ) -> ImportPDFDocumentsResult {
+        let autoAssignedLabelNames = autoAssignLabels
+            .map(\.name)
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+
         var importedRecords: [DocumentRecord] = []
         var importedStoredPaths: [String] = []
         var duplicates: [ImportPDFDocumentsResult.Duplicate] = []
@@ -126,6 +140,7 @@ enum ImportPDFDocumentsUseCase {
                     importedAt: importedAt,
                     into: libraryURL
                 )
+                record.labels = autoAssignLabels
                 modelContext.insert(record)
                 importedRecords.append(record)
                 if let storedFilePath = record.storedFilePath {
@@ -164,7 +179,8 @@ enum ImportPDFDocumentsUseCase {
                 importedCount: 0,
                 duplicates: duplicates,
                 unsupportedFiles: unsupportedFiles,
-                failures: failures
+                failures: failures,
+                autoAssignedLabels: autoAssignedLabelNames
             )
         }
 
@@ -172,7 +188,8 @@ enum ImportPDFDocumentsUseCase {
             importedCount: importedRecords.count,
             duplicates: duplicates,
             unsupportedFiles: unsupportedFiles,
-            failures: failures
+            failures: failures,
+            autoAssignedLabels: autoAssignedLabelNames
         )
     }
 

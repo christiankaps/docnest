@@ -179,9 +179,14 @@ struct RootView: View {
             return
         }
 
+        let activeFilterLabels = allLabels.filter { label in
+            selectedLabelIDs.contains(label.persistentModelID)
+        }
+
         let importResult = ImportPDFDocumentsUseCase.execute(
             urls: urls,
             into: libraryURL,
+            autoAssignLabels: activeFilterLabels,
             using: modelContext
         )
 

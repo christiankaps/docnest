@@ -359,7 +359,7 @@ Aktueller Stand:
 - Hash-basierte Duplikate werden uebersprungen und im Importstatus explizit ausgewiesen.
 - Dateidialog-Import und Drag-and-drop verwenden denselben Importpfad und dieselbe Rueckmeldung.
 - Die Dokumentliste dient als grosszuegige Drop-Zone; bei geschlossenener Library erklaert die App den fehlenden Importkontext statt still zu scheitern.
-- Offen: Beim Import werden aktuell keine Labels automatisch zugewiesen. Geplant ist, dass die aktuell aktiven Label-Filter automatisch auf neu importierte Dokumente uebertragen werden.
+- Beim Import werden aktuell aktive Label-Filter automatisch auf neu importierte Dokumente uebertragen.
 
 Implementierungsplan fuer Drag-and-drop:
 1. In der Hauptansicht einen grosszuegigen Drop-Bereich auf dem Content-Bereich einfuehren, nicht nur auf einem einzelnen Unterelement.
