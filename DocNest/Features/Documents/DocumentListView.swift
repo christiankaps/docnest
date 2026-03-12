@@ -6,6 +6,17 @@ struct DocumentListView: View {
     @Binding var selectedDocumentIDs: Set<PersistentIdentifier>
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
+    @AppStorage("docListColumnWidthDocument") private var documentColumnWidth = 300.0
+    @AppStorage("docListColumnWidthImported") private var importedColumnWidth = 120.0
+    @AppStorage("docListColumnWidthCreated") private var createdColumnWidth = 120.0
+    @AppStorage("docListColumnWidthPages") private var pagesColumnWidth = 72.0
+    @AppStorage("docListColumnWidthSize") private var sizeColumnWidth = 96.0
+    @AppStorage("docListColumnWidthLabels") private var labelsColumnWidth = 240.0
+    @AppStorage("docListShowImported") private var showsImportedColumn = true
+    @AppStorage("docListShowCreated") private var showsCreatedColumn = true
+    @AppStorage("docListShowPages") private var showsPagesColumn = true
+    @AppStorage("docListShowSize") private var showsSizeColumn = true
+    @AppStorage("docListShowLabels") private var showsLabelsColumn = true
 
     private var sortedDocuments: [DocumentRecord] {
         documents.sorted { lhs, rhs in
@@ -24,21 +35,56 @@ struct DocumentListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                sortButton("Document", column: .title)
-                    .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
-                sortButton("Imported", column: .importedAt)
-                    .frame(width: 110, alignment: .leading)
-                sortButton("Created", column: .createdAt)
-                    .frame(width: 110, alignment: .leading)
-                sortButton("Pages", column: .pageCount)
-                    .frame(width: 60, alignment: .leading)
-                sortButton("Size", column: .fileSize)
-                    .frame(width: 90, alignment: .leading)
-                Text("Labels")
-                    .font(AppTypography.columnHeader)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 220, alignment: .leading)
+            HStack(spacing: 10) {
+                ResizableColumnHeader(width: $documentColumnWidth, minWidth: 220) {
+                    sortButton("Document", column: .title)
+                }
+
+                if showsImportedColumn {
+                    ResizableColumnHeader(width: $importedColumnWidth, minWidth: 96) {
+                        sortButton("Imported", column: .importedAt)
+                    }
+                }
+
+                if showsCreatedColumn {
+                    ResizableColumnHeader(width: $createdColumnWidth, minWidth: 96) {
+                        sortButton("Created", column: .createdAt)
+                    }
+                }
+
+                if showsPagesColumn {
+                    ResizableColumnHeader(width: $pagesColumnWidth, minWidth: 54) {
+                        sortButton("Pages", column: .pageCount)
+                    }
+                }
+
+                if showsSizeColumn {
+                    ResizableColumnHeader(width: $sizeColumnWidth, minWidth: 72) {
+                        sortButton("Size", column: .fileSize)
+                    }
+                }
+
+                if showsLabelsColumn {
+                    ResizableColumnHeader(width: $labelsColumnWidth, minWidth: 120) {
+                        Text("Labels")
+                            .font(AppTypography.columnHeader)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Menu {
+                    Text("Visible Attributes")
+                    Toggle("Imported", isOn: $showsImportedColumn)
+                    Toggle("Created", isOn: $showsCreatedColumn)
+                    Toggle("Pages", isOn: $showsPagesColumn)
+                    Toggle("Size", isOn: $showsSizeColumn)
+                    Toggle("Labels", isOn: $showsLabelsColumn)
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
@@ -52,8 +98,8 @@ struct DocumentListView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(sortedDocuments, selection: $selectedDocumentIDs) { document in
-                    HStack(alignment: .center, spacing: 12) {
+                List(Array(sortedDocuments.enumerated()), id: \.element.persistentModelID, selection: $selectedDocumentIDs) { index, document in
+                    HStack(alignment: .center, spacing: 10) {
                         HStack(spacing: 10) {
                             RoundedRectangle(cornerRadius: 8)
                                 .fill(Color.accentColor.opacity(0.12))
@@ -70,37 +116,51 @@ struct DocumentListView: View {
                                     .lineLimit(1)
                             }
                         }
-                        .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
+                        .frame(width: documentColumnWidth, alignment: .leading)
 
-                        Text(document.importedAt, format: .dateTime.year().month().day())
-                            .font(AppTypography.listMeta.monospacedDigit())
-                            .frame(width: 110, alignment: .leading)
-
-                        Group {
-                            if let sourceCreatedAt = document.sourceCreatedAt {
-                                Text(sourceCreatedAt, format: .dateTime.year().month().day())
-                            } else {
-                                Text("-")
-                                    .foregroundStyle(.secondary)
-                            }
+                        if showsImportedColumn {
+                            Text(document.importedAt, format: .dateTime.year().month().day())
+                                .font(AppTypography.listMeta.monospacedDigit())
+                                .frame(width: importedColumnWidth, alignment: .leading)
                         }
-                        .font(AppTypography.listMeta.monospacedDigit())
-                        .frame(width: 110, alignment: .leading)
 
-                        Text("\(document.pageCount)")
+                        if showsCreatedColumn {
+                            Group {
+                                if let sourceCreatedAt = document.sourceCreatedAt {
+                                    Text(sourceCreatedAt, format: .dateTime.year().month().day())
+                                } else {
+                                    Text("-")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                             .font(AppTypography.listMeta.monospacedDigit())
-                            .frame(width: 60, alignment: .leading)
+                            .frame(width: createdColumnWidth, alignment: .leading)
+                        }
 
-                        Text(document.formattedFileSize)
-                            .font(AppTypography.listMeta.monospacedDigit())
-                            .frame(width: 90, alignment: .leading)
+                        if showsPagesColumn {
+                            Text("\(document.pageCount)")
+                                .font(AppTypography.listMeta.monospacedDigit())
+                                .frame(width: pagesColumnWidth, alignment: .leading)
+                        }
 
-                        DocumentLabelStrip(labels: document.labels)
-                            .frame(width: 220, alignment: .leading)
+                        if showsSizeColumn {
+                            Text(document.formattedFileSize)
+                                .font(AppTypography.listMeta.monospacedDigit())
+                                .frame(width: sizeColumnWidth, alignment: .leading)
+                        }
+
+                        if showsLabelsColumn {
+                            DocumentLabelStrip(labels: document.labels)
+                                .frame(width: labelsColumnWidth, alignment: .leading)
+                        }
+
+                        Spacer(minLength: 0)
                     }
                     .padding(.vertical, 4)
                     .tag(document.persistentModelID)
+                    .listRowBackground(index.isMultiple(of: 2) ? Color.secondary.opacity(0.05) : Color.clear)
                 }
+                .listStyle(.plain)
             }
         }
         .navigationTitle("Documents")
@@ -166,6 +226,46 @@ struct DocumentListView: View {
         }
 
         return .orderedSame
+    }
+}
+
+private struct ResizableColumnHeader<Content: View>: View {
+    @Binding var width: Double
+    let minWidth: Double
+    @ViewBuilder let content: () -> Content
+
+    @State private var dragStartWidth: Double?
+
+    var body: some View {
+        HStack(spacing: 0) {
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Rectangle()
+                .fill(Color.secondary.opacity(0.35))
+                .frame(width: 1, height: 20)
+                .padding(.leading, 6)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            if dragStartWidth == nil {
+                                dragStartWidth = width
+                            }
+
+                            guard let dragStartWidth else {
+                                return
+                            }
+
+                            width = max(minWidth, dragStartWidth + value.translation.width)
+                        }
+                        .onEnded { _ in
+                            dragStartWidth = nil
+                        }
+                )
+                .help("Drag to resize column")
+        }
+        .frame(width: width, alignment: .leading)
     }
 }
 
