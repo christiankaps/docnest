@@ -387,8 +387,8 @@ Aktueller Stand:
 - Die Detailansicht trennt PDF-Vorschau und Metadaten ueber einen vertikal verschiebbaren Splitter, damit Nutzer die Vorschauhoehe direkt anpassen koennen.
 - Die App startet mit einer Fensterbreite und Split-View-Konfiguration, in der die linke Seitenleiste standardmaessig sichtbar bleibt; Nutzer sollen die Library-Navigation nicht erst durch manuelles Verbreitern des Fensters wiederherstellen muessen.
 - Ein Sidebar-Toggle-Button in der Toolbar bleibt immer sichtbar und erlaubt das Ein- und Ausblenden der Seitenleiste unabhaengig vom aktuellen Layout-Zustand.
-- Offen: Die Startup-Ansicht ohne Library zeigt derzeit einen Popup-Dialog. Geplant ist eine eingebettete Willkommensansicht im regulaeren Drei-Panel-Layout.
-- Offen: Typografie nutzt derzeit systemnahe Standardschriften inline. Geplant ist ein konsistentes, modernes Schriftkonzept (SF Pro / SF Pro Rounded) mit zentraler Definition.
+- Die Startup-Ansicht ohne Library ist in das regulaere Drei-Panel-Layout integriert und zeigt keinen separaten Popup-Dialog mehr.
+- Die Typografie wurde auf ein konsistentes, modernes Schriftkonzept mit gerundeter Systemschrift vereinheitlicht.
 
 ### Phase 4: Labels als primaeres Ordnungssystem
 Ziel: Nutzer kann Dokumente sinnvoll organisieren.
@@ -406,8 +406,8 @@ Aktueller Stand:
 - Das Loeschen eines Labels entfernt nur die Zuordnung. Dokumente und Originaldateien bleiben unveraendert in der Library.
 - Die Dokumentliste unterstuetzt Mehrfachselektion. Der Inspector kann Labels fuer die gesamte Auswahl hinzufügen oder von der gesamten Auswahl entfernen.
 - Bei gemischten Label-Zustaenden zeigt der Inspector gemeinsame Labels getrennt von partiell vergebenen Labels an und bietet Aktionen wie "zu verbleibenden Dokumenten hinzufuegen" an.
-- Offen: Label-Verwaltung (CRUD, Farbe) ist derzeit ein separater modaler Dialog. Geplant ist die Integration direkt in die Seitenleiste mit Inline-Bearbeitung und Drag-and-drop-Reorder.
-- Offen: Benutzerdefinierte Label-Reihenfolge wird noch nicht persistiert. Ein `sortOrder`-Feld im Label-Modell ist geplant.
+- Die Label-Verwaltung ist in die linke Seitenleiste integriert (anlegen, umbenennen, Farbe aendern, loeschen).
+- Labels lassen sich in der Seitenleiste neu anordnen; die Reihenfolge wird ueber ein persistiertes `sortOrder`-Feld gespeichert.
 
 ### Phase 5: Suche und Wiederfinden
 Ziel: Dokumente lassen sich schnell wiederfinden.

@@ -5,10 +5,9 @@ import SwiftData
 struct DocumentInspectorView: View {
     let documents: [DocumentRecord]
     let libraryURL: URL?
-    let onManageLabels: () -> Void
 
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \LabelTag.name, order: .forward) private var allLabels: [LabelTag]
+    @Query(sort: [SortDescriptor(\LabelTag.sortOrder, order: .forward), SortDescriptor(\LabelTag.name, order: .forward)]) private var allLabels: [LabelTag]
     @State private var newLabelName = ""
     @State private var inspectorErrorMessage: String?
 
@@ -199,8 +198,6 @@ struct DocumentInspectorView: View {
             HStack {
                 Text("Labels")
                     .font(AppTypography.sectionTitle)
-                Spacer()
-                Button("Manage Labels", action: onManageLabels)
             }
 
             if document.labels.isEmpty {
@@ -275,8 +272,6 @@ struct DocumentInspectorView: View {
                 HStack {
                     Text("Shared Labels")
                         .font(AppTypography.sectionTitle)
-                    Spacer()
-                    Button("Manage Labels", action: onManageLabels)
                 }
 
                 if selectionSummary.labelsOnAllSelectedDocuments.isEmpty {
@@ -508,6 +503,6 @@ private enum DocumentInspectorPreviewData {
 #Preview {
     let previewData = DocumentInspectorPreviewData.make()
 
-    DocumentInspectorView(documents: [previewData.document], libraryURL: nil, onManageLabels: {})
+    DocumentInspectorView(documents: [previewData.document], libraryURL: nil)
         .modelContainer(previewData.container)
 }

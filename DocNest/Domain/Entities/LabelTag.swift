@@ -32,12 +32,14 @@ final class LabelTag {
     var id: UUID
     var name: String
     var colorName: String
+    var sortOrder: Int
     var documents: [DocumentRecord] = []
 
-    init(id: UUID = UUID(), name: String, colorName: String = LabelColor.blue.rawValue) {
+    init(id: UUID = UUID(), name: String, colorName: String = LabelColor.blue.rawValue, sortOrder: Int = 0) {
         self.id = id
         self.name = name
         self.colorName = colorName
+        self.sortOrder = sortOrder
     }
 
     var labelColor: LabelColor {
@@ -48,9 +50,9 @@ final class LabelTag {
 
 extension LabelTag {
     static func makeSamples() -> (finance: LabelTag, tax: LabelTag, contracts: LabelTag) {
-        let finance = LabelTag(name: "Finance", colorName: LabelColor.green.rawValue)
-        let tax = LabelTag(name: "Tax", colorName: LabelColor.red.rawValue)
-        let contracts = LabelTag(name: "Contracts", colorName: LabelColor.indigo.rawValue)
+        let finance = LabelTag(name: "Finance", colorName: LabelColor.green.rawValue, sortOrder: 0)
+        let tax = LabelTag(name: "Tax", colorName: LabelColor.red.rawValue, sortOrder: 1)
+        let contracts = LabelTag(name: "Contracts", colorName: LabelColor.indigo.rawValue, sortOrder: 2)
         return (finance, tax, contracts)
     }
 }

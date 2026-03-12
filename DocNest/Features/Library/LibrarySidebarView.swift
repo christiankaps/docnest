@@ -13,6 +13,22 @@ struct LibrarySidebarView: View {
     @Binding var selectedSection: LibrarySection
     let labels: [LabelTag]
     @Binding var selectedLabelIDs: Set<PersistentIdentifier>
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var isAddingLabel = false
+    @State private var newLabelName = ""
+    @State private var editingLabelID: PersistentIdentifier?
+    @State private var editedLabelName = ""
+    @State private var errorMessage: String?
+
+    private var sortedLabels: [LabelTag] {
+        labels.sorted {
+            if $0.sortOrder == $1.sortOrder {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.sortOrder < $1.sortOrder
+        }
+    }
 
     var body: some View {
         List {
@@ -35,38 +51,115 @@ struct LibrarySidebarView: View {
             }
 
             Section("Label Filters") {
-                if labels.isEmpty {
-                    Text("No labels yet")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.secondary)
-                } else {
+                HStack {
                     Button("Clear Label Filters") {
                         selectedLabelIDs.removeAll()
                     }
                     .disabled(selectedLabelIDs.isEmpty)
 
-                    ForEach(labels) { label in
-                        Button {
-                            toggleLabelSelection(label)
-                        } label: {
-                            HStack {
-                                Circle()
-                                    .fill(label.labelColor.color)
-                                    .frame(width: 10, height: 10)
-                                Text(label.name)
-                                Spacer()
-                                if selectedLabelIDs.contains(label.persistentModelID) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.tint)
+                    Spacer()
+
+                    Button {
+                        isAddingLabel = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Add Label")
+                }
+
+                if isAddingLabel {
+                    HStack(spacing: 8) {
+                        TextField("New label", text: $newLabelName)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit(addLabel)
+
+                        Button("Add", action: addLabel)
+                            .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+
+                if labels.isEmpty {
+                    Text("No labels yet")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(sortedLabels) { label in
+                        if editingLabelID == label.persistentModelID {
+                            TextField("Label name", text: $editedLabelName)
+                                .textFieldStyle(.roundedBorder)
+                                .onSubmit {
+                                    renameLabel(label)
+                                }
+                        } else {
+                            Button {
+                                toggleLabelSelection(label)
+                            } label: {
+                                HStack {
+                                    Circle()
+                                        .fill(label.labelColor.color)
+                                        .frame(width: 10, height: 10)
+                                    Text(label.name)
+                                    Spacer()
+                                    if selectedLabelIDs.contains(label.persistentModelID) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(.tint)
+                                    }
                                 }
                             }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Rename") {
+                                    beginEditing(label)
+                                }
+
+                                Menu("Color") {
+                                    ForEach(LabelColor.allCases) { color in
+                                        Button {
+                                            changeColor(of: label, to: color)
+                                        } label: {
+                                            HStack {
+                                                Text(color.displayName)
+                                                if label.labelColor == color {
+                                                    Image(systemName: "checkmark")
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Button("Delete", role: .destructive) {
+                                    deleteLabel(label)
+                                }
+                            }
+                            .onTapGesture(count: 2) {
+                                beginEditing(label)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
+                    .onMove(perform: moveLabels)
                 }
             }
         }
         .navigationTitle("Library")
+        .alert("Label Error", isPresented: errorBinding) {
+            Button("OK", role: .cancel) {
+                errorMessage = nil
+            }
+        } message: {
+            Text(errorMessage ?? "Unknown label error.")
+        }
+    }
+
+    private var errorBinding: Binding<Bool> {
+        Binding(
+            get: { errorMessage != nil },
+            set: { newValue in
+                if !newValue {
+                    errorMessage = nil
+                }
+            }
+        )
     }
 
     private func toggleLabelSelection(_ label: LabelTag) {
@@ -75,6 +168,57 @@ struct LibrarySidebarView: View {
             selectedLabelIDs.remove(labelID)
         } else {
             selectedLabelIDs.insert(labelID)
+        }
+    }
+
+    private func addLabel() {
+        do {
+            _ = try ManageLabelsUseCase.createLabel(named: newLabelName, using: modelContext)
+            newLabelName = ""
+            isAddingLabel = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func beginEditing(_ label: LabelTag) {
+        editingLabelID = label.persistentModelID
+        editedLabelName = label.name
+    }
+
+    private func renameLabel(_ label: LabelTag) {
+        do {
+            _ = try ManageLabelsUseCase.rename(label, to: editedLabelName, using: modelContext)
+            editingLabelID = nil
+            editedLabelName = ""
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func changeColor(of label: LabelTag, to color: LabelColor) {
+        label.labelColor = color
+        do {
+            try modelContext.save()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteLabel(_ label: LabelTag) {
+        do {
+            try ManageLabelsUseCase.delete(label, using: modelContext)
+            selectedLabelIDs.remove(label.persistentModelID)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func moveLabels(from source: IndexSet, to destination: Int) {
+        do {
+            try ManageLabelsUseCase.reorderLabels(from: source, to: destination, labels: sortedLabels, using: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

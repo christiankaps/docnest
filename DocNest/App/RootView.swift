@@ -24,14 +24,13 @@ struct RootView: View {
     @State private var searchText = ""
     @State private var isImporting = false
     @State private var isDropTargeted = false
-    @State private var isShowingLabelManager = false
     @State private var importSummaryMessage: String?
     @Environment(\.modelContext) private var modelContext
 
     @Query(sort: \DocumentRecord.importedAt, order: .reverse)
     private var allDocuments: [DocumentRecord]
 
-    @Query(sort: \LabelTag.name, order: .forward)
+    @Query(sort: [SortDescriptor(\LabelTag.sortOrder, order: .forward), SortDescriptor(\LabelTag.name, order: .forward)])
     private var allLabels: [LabelTag]
 
     private var recentDocuments: [DocumentRecord] {
@@ -97,10 +96,7 @@ struct RootView: View {
         } detail: {
             DocumentInspectorView(
                 documents: selectedDocuments,
-                libraryURL: libraryURL,
-                onManageLabels: {
-                    isShowingLabelManager = true
-                }
+                libraryURL: libraryURL
             )
             .navigationSplitViewColumnWidth(min: 380, ideal: 520, max: 760)
         }
@@ -126,17 +122,6 @@ struct RootView: View {
                     Label("Import", systemImage: "plus")
                 }
             }
-
-            ToolbarItem {
-                Button {
-                    isShowingLabelManager = true
-                } label: {
-                    Label("Manage Labels", systemImage: "tag")
-                }
-            }
-        }
-        .sheet(isPresented: $isShowingLabelManager) {
-            LabelManagementView()
         }
         .fileImporter(
             isPresented: $isImporting,

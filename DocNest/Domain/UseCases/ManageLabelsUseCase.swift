@@ -97,6 +97,17 @@ enum ManageLabelsUseCase {
         try modelContext.save()
     }
 
+    static func reorderLabels(from source: IndexSet, to destination: Int, labels: [LabelTag], using modelContext: ModelContext) throws {
+        var reorderedLabels = labels
+        reorderedLabels.move(fromOffsets: source, toOffset: destination)
+
+        for (index, label) in reorderedLabels.enumerated() {
+            label.sortOrder = index
+        }
+
+        try modelContext.save()
+    }
+
     private static func createOrFetchLabel(named name: String, using modelContext: ModelContext) throws -> LabelMutationResult {
         let normalizedName = try normalizedLabelName(from: name)
 
@@ -104,7 +115,11 @@ enum ManageLabelsUseCase {
             return LabelMutationResult(label: existingLabel, didCreateLabel: false)
         }
 
-        let label = LabelTag(name: normalizedName)
+        let descriptor = FetchDescriptor<LabelTag>(sortBy: [SortDescriptor(\.sortOrder, order: .forward)])
+        let labels = try modelContext.fetch(descriptor)
+        let nextSortOrder = (labels.map(\.sortOrder).max() ?? -1) + 1
+
+        let label = LabelTag(name: normalizedName, sortOrder: nextSortOrder)
         modelContext.insert(label)
         return LabelMutationResult(label: label, didCreateLabel: true)
     }
