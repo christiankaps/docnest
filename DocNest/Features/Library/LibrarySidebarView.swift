@@ -17,6 +17,7 @@ struct LibrarySidebarView: View {
 
     @State private var isAddingLabel = false
     @State private var newLabelName = ""
+    @State private var newLabelColor: LabelColor = .blue
     @State private var editingLabelID: PersistentIdentifier?
     @State private var editedLabelName = ""
     @State private var errorMessage: String?
@@ -72,13 +73,38 @@ struct LibrarySidebarView: View {
                 }
 
                 if isAddingLabel {
-                    HStack(spacing: 8) {
-                        TextField("New label", text: $newLabelName)
-                            .textFieldStyle(.roundedBorder)
-                            .onSubmit(addLabel)
+                    VStack(spacing: 8) {
+                        HStack(spacing: 8) {
+                            TextField("New label", text: $newLabelName)
+                                .textFieldStyle(.roundedBorder)
+                                .onSubmit(addLabel)
 
-                        Button("Add", action: addLabel)
-                            .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            Menu {
+                                ForEach(LabelColor.allCases) { color in
+                                    Button {
+                                        newLabelColor = color
+                                    } label: {
+                                        HStack {
+                                            Circle()
+                                                .fill(color.color)
+                                                .frame(width: 12, height: 12)
+                                            Text(color.displayName)
+                                            if newLabelColor == color {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Circle()
+                                    .fill(newLabelColor.color)
+                                    .frame(width: 20, height: 20)
+                            }
+                            .help("Choose label color")
+
+                            Button("Add", action: addLabel)
+                                .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
                     }
                 }
 
@@ -176,8 +202,9 @@ struct LibrarySidebarView: View {
 
     private func addLabel() {
         do {
-            _ = try ManageLabelsUseCase.createLabel(named: newLabelName, using: modelContext)
+            _ = try ManageLabelsUseCase.createLabel(named: newLabelName, color: newLabelColor, using: modelContext)
             newLabelName = ""
+            newLabelColor = .blue
             isAddingLabel = false
         } catch {
             errorMessage = error.localizedDescription

@@ -13,7 +13,12 @@ enum ManageLabelsUseCase {
 
     @discardableResult
     static func createLabel(named name: String, using modelContext: ModelContext) throws -> LabelTag {
-        let result = try createOrFetchLabel(named: name, using: modelContext)
+        try createLabel(named: name, color: .blue, using: modelContext)
+    }
+
+    @discardableResult
+    static func createLabel(named name: String, color: LabelColor, using modelContext: ModelContext) throws -> LabelTag {
+        let result = try createOrFetchLabel(named: name, color: color, using: modelContext)
 
         if result.didCreateLabel {
             try modelContext.save()
@@ -108,7 +113,7 @@ enum ManageLabelsUseCase {
         try modelContext.save()
     }
 
-    private static func createOrFetchLabel(named name: String, using modelContext: ModelContext) throws -> LabelMutationResult {
+    private static func createOrFetchLabel(named name: String, color: LabelColor = .blue, using modelContext: ModelContext) throws -> LabelMutationResult {
         let normalizedName = try normalizedLabelName(from: name)
 
         if let existingLabel = try existingLabel(named: normalizedName, using: modelContext) {
@@ -119,7 +124,7 @@ enum ManageLabelsUseCase {
         let labels = try modelContext.fetch(descriptor)
         let nextSortOrder = (labels.map(\.sortOrder).max() ?? -1) + 1
 
-        let label = LabelTag(name: normalizedName, sortOrder: nextSortOrder)
+        let label = LabelTag(name: normalizedName, colorName: color.rawValue, sortOrder: nextSortOrder)
         modelContext.insert(label)
         return LabelMutationResult(label: label, didCreateLabel: true)
     }
