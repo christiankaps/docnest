@@ -460,20 +460,6 @@ private struct BatchLabelState {
     }
 }
 
-private struct LabelChip: View {
-    let name: String
-    let color: LabelColor
-
-    var body: some View {
-        Text(name)
-            .font(AppTypography.captionStrong)
-            .foregroundStyle(color.color)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(color.color.opacity(0.16)))
-    }
-}
-
 private enum DocumentInspectorPreviewData {
     @MainActor
     static func make() -> (container: ModelContainer, document: DocumentRecord) {

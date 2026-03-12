@@ -322,7 +322,7 @@ private struct DocumentLabelStrip: View {
         } else {
             HStack(spacing: 6) {
                 ForEach(visibleLabels) { label in
-                    DocumentListLabelChip(name: label.name, color: label.labelColor)
+                    LabelChip(name: label.name, color: label.labelColor, size: .compact)
                 }
 
                 if hiddenLabelCount > 0 {
@@ -333,20 +333,6 @@ private struct DocumentLabelStrip: View {
             }
             .lineLimit(1)
         }
-    }
-}
-
-private struct DocumentListLabelChip: View {
-    let name: String
-    let color: LabelColor
-
-    var body: some View {
-        Text(name)
-            .font(AppTypography.labelChip)
-            .foregroundStyle(color.color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(color.color.opacity(0.16)))
     }
 }
 

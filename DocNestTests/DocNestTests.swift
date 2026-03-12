@@ -457,8 +457,9 @@ final class DocNestTests: XCTestCase {
 
         let matchingIDs = Set([finance.persistentModelID, archive.persistentModelID])
 
-        XCTAssertTrue(ManageLabelsUseCase.matchingAllSelectedLabels(matchingDocument, selectedLabelIDs: matchingIDs))
-        XCTAssertFalse(ManageLabelsUseCase.matchingAllSelectedLabels(partialDocument, selectedLabelIDs: matchingIDs))
+        let filtered = SearchDocumentsUseCase.filter([matchingDocument, partialDocument], query: "", selectedLabelIDs: matchingIDs)
+        XCTAssertEqual(filtered.count, 1)
+        XCTAssertTrue(filtered.contains(where: { $0.title == "Both" }))
     }
 
     func testSearchDocumentsMatchesTitleFilenameNotesAndLabels() {

@@ -8,9 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		0C0958A98ED0BC8389BBA0C9 /* DocumentRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF537CE863340AB823C51D5C /* DocumentRecord.swift */; };
-		170B20CCF25397F2320894BF /* LabelManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1191C90F44EA0DB73C127B53 /* LabelManagementView.swift */; };
 		2423CFECF69765FB09B4592A /* DocumentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051CE3481269CA75C84B0B72 /* DocumentListView.swift */; };
 		3C5C703826BEB50F7BCFF836 /* DocNestApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B34DF5ACFF5069169049C6 /* DocNestApp.swift */; };
+		3EB178A6D0FFD0F4CB64DA1D /* AppTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29A4179D6FD2BD0370A1E9A7 /* AppTypography.swift */; };
 		4C1368A6F47101D34D33808A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBBA8006045ACAA798F6A49 /* RootView.swift */; };
 		6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */; };
 		78C8D82942577262672EDDF2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0A020E71E4139D5C6236FCD /* Assets.xcassets */; };
@@ -21,7 +21,9 @@
 		A702052A7EEBA5D0ED3DCFC3 /* LabelTag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23AC657950D272E01D18DE75 /* LabelTag.swift */; };
 		BAD3422FCC9D99B891471458 /* DocumentLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B0FFAF2C02193A2F504BDB3 /* DocumentLibraryService.swift */; };
 		BB6346F3461319B78849AE57 /* ManageLabelsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD49D19B314A1AF377BCD069 /* ManageLabelsUseCase.swift */; };
+		BE2517F95F869DB2842C1F08 /* LabelChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E121E80E607DB634883795 /* LabelChip.swift */; };
 		EB82992B3C2494D927CD3370 /* DocNestUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */; };
+		EFE086EED508E58D74F74FD9 /* SearchDocumentsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9CF39DD2A6316E2DFD9361 /* SearchDocumentsUseCase.swift */; };
 		FE3E50539F4B142C71550969 /* ImportPDFDocumentsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC772C7F97D15E871FCAB48C /* ImportPDFDocumentsUseCase.swift */; };
 /* End PBXBuildFile section */
 
@@ -45,15 +47,18 @@
 /* Begin PBXFileReference section */
 		051CE3481269CA75C84B0B72 /* DocumentListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentListView.swift; sourceTree = "<group>"; };
 		0BBBA8006045ACAA798F6A49 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		1191C90F44EA0DB73C127B53 /* LabelManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelManagementView.swift; sourceTree = "<group>"; };
+		0EA3AF9677EEE87A61D1F2B1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		23AC657950D272E01D18DE75 /* LabelTag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelTag.swift; sourceTree = "<group>"; };
+		29A4179D6FD2BD0370A1E9A7 /* AppTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTypography.swift; sourceTree = "<group>"; };
 		3A92312359B8EE4691B36D8E /* DocNestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocNestTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B0FFAF2C02193A2F504BDB3 /* DocumentLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentLibraryService.swift; sourceTree = "<group>"; };
 		45B34DF5ACFF5069169049C6 /* DocNestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestApp.swift; sourceTree = "<group>"; };
 		4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInspectorView.swift; sourceTree = "<group>"; };
 		54801B6E1BCE4A70FCDB2E29 /* PDFViewRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewRepresentable.swift; sourceTree = "<group>"; };
+		6D9CF39DD2A6316E2DFD9361 /* SearchDocumentsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchDocumentsUseCase.swift; sourceTree = "<group>"; };
 		83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestUITests.swift; sourceTree = "<group>"; };
 		A28DA505FA162562D9E4D07F /* DocNest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DocNest.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A5E121E80E607DB634883795 /* LabelChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelChip.swift; sourceTree = "<group>"; };
 		B0A020E71E4139D5C6236FCD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C0AAAEB26F93E46DA446829E /* LibrarySidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySidebarView.swift; sourceTree = "<group>"; };
 		CC772C7F97D15E871FCAB48C /* ImportPDFDocumentsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportPDFDocumentsUseCase.swift; sourceTree = "<group>"; };
@@ -79,6 +84,7 @@
 			children = (
 				CC772C7F97D15E871FCAB48C /* ImportPDFDocumentsUseCase.swift */,
 				FD49D19B314A1AF377BCD069 /* ManageLabelsUseCase.swift */,
+				6D9CF39DD2A6316E2DFD9361 /* SearchDocumentsUseCase.swift */,
 			);
 			path = UseCases;
 			sourceTree = "<group>";
@@ -90,14 +96,6 @@
 				38435D2BDC8C055FF1387640 /* Preview */,
 			);
 			path = Infrastructure;
-			sourceTree = "<group>";
-		};
-		0A9CCDDC3EAFE730D0557290 /* Labels */ = {
-			isa = PBXGroup;
-			children = (
-				1191C90F44EA0DB73C127B53 /* LabelManagementView.swift */,
-			);
-			path = Labels;
 			sourceTree = "<group>";
 		};
 		1F8FC622FDD062746E7DC3C6 /* Library */ = {
@@ -156,11 +154,13 @@
 		6FACB24E3D38D5C34FD87BE7 /* DocNest */ = {
 			isa = PBXGroup;
 			children = (
+				0EA3AF9677EEE87A61D1F2B1 /* Info.plist */,
 				04D496539C8F02D386DE2799 /* App */,
 				9CF5820AED9DA5236D87057E /* Domain */,
 				8519309182595678342B501A /* Features */,
 				0A02BAB1A1B55CB365A3E3D1 /* Infrastructure */,
 				574E3AA1DE04477D8D0EB337 /* Resources */,
+				AA2B6BB91C8A906EF754BA80 /* Shared */,
 			);
 			path = DocNest;
 			sourceTree = "<group>";
@@ -169,7 +169,6 @@
 			isa = PBXGroup;
 			children = (
 				5E2B1DB5CA4FCAD7D11BA925 /* Documents */,
-				0A9CCDDC3EAFE730D0557290 /* Labels */,
 				1F8FC622FDD062746E7DC3C6 /* Library */,
 			);
 			path = Features;
@@ -192,6 +191,14 @@
 			path = Domain;
 			sourceTree = "<group>";
 		};
+		AA2B6BB91C8A906EF754BA80 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				DFFA402AACB7259B8D838914 /* Design */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
 		AF55C1A192F3448EF4951786 /* Entities */ = {
 			isa = PBXGroup;
 			children = (
@@ -209,6 +216,15 @@
 			path = DocNestTests;
 			sourceTree = "<group>";
 		};
+		DFFA402AACB7259B8D838914 /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				29A4179D6FD2BD0370A1E9A7 /* AppTypography.swift */,
+				A5E121E80E607DB634883795 /* LabelChip.swift */,
+			);
+			path = Design;
+			sourceTree = "<group>";
+		};
 		E913A424206DBE20E2C89B02 /* Library */ = {
 			isa = PBXGroup;
 			children = (
@@ -216,13 +232,6 @@
 				F35D29609AD07395CE3098C2 /* DocumentStorageService.swift */,
 			);
 			path = Library;
-			sourceTree = "<group>";
-		};
-		"TEMP_9620B8C6-AD41-4553-A1AD-589D31BB237C" /* Shared */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -351,6 +360,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3EB178A6D0FFD0F4CB64DA1D /* AppTypography.swift in Sources */,
 				3C5C703826BEB50F7BCFF836 /* DocNestApp.swift in Sources */,
 				6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */,
 				BAD3422FCC9D99B891471458 /* DocumentLibraryService.swift in Sources */,
@@ -358,12 +368,13 @@
 				0C0958A98ED0BC8389BBA0C9 /* DocumentRecord.swift in Sources */,
 				A35D8B1AEE7796BDCF11A938 /* DocumentStorageService.swift in Sources */,
 				FE3E50539F4B142C71550969 /* ImportPDFDocumentsUseCase.swift in Sources */,
-				170B20CCF25397F2320894BF /* LabelManagementView.swift in Sources */,
+				BE2517F95F869DB2842C1F08 /* LabelChip.swift in Sources */,
 				A702052A7EEBA5D0ED3DCFC3 /* LabelTag.swift in Sources */,
 				A67C2A9BBA4BD3402F3871B7 /* LibrarySidebarView.swift in Sources */,
 				BB6346F3461319B78849AE57 /* ManageLabelsUseCase.swift in Sources */,
 				8D1FC626EFC093CBE2FF7636 /* PDFViewRepresentable.swift in Sources */,
 				4C1368A6F47101D34D33808A /* RootView.swift in Sources */,
+				EFE086EED508E58D74F74FD9 /* SearchDocumentsUseCase.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

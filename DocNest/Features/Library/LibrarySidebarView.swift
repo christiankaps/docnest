@@ -234,9 +234,8 @@ struct LibrarySidebarView: View {
     }
 
     private func changeColor(of label: LabelTag, to color: LabelColor) {
-        label.labelColor = color
         do {
-            try modelContext.save()
+            try ManageLabelsUseCase.changeColor(of: label, to: color, using: modelContext)
         } catch {
             errorMessage = error.localizedDescription
         }
