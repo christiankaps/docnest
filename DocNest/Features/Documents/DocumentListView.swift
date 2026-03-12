@@ -246,6 +246,14 @@ private struct ResizableColumnHeader<Content: View>: View {
                 .frame(width: 1, height: 20)
                 .padding(.leading, 6)
                 .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active:
+                        NSCursor.resizeLeftRight.push()
+                    case .ended:
+                        NSCursor.pop()
+                    }
+                }
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
