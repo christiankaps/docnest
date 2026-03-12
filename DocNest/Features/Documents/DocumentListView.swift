@@ -1,8 +1,52 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
+
+enum DocumentLabelDragPayload {
+    static let prefix = "docnest-label:"
+
+    static func payload(for labelID: UUID) -> String {
+        "\(prefix)\(labelID.uuidString)"
+    }
+
+    static func labelID(from payload: String) -> UUID? {
+        guard payload.hasPrefix(prefix) else {
+            return nil
+        }
+
+        let rawID = String(payload.dropFirst(prefix.count))
+        return UUID(uuidString: rawID)
+    }
+}
+
+enum DocumentFileDragPayload {
+    static let prefix = "docnest-documents:"
+
+    static func payload(for documentIDs: [UUID]) -> String {
+        let rawIDs = documentIDs.map(\.uuidString).joined(separator: ",")
+        return "\(prefix)\(rawIDs)"
+    }
+
+    static func documentIDs(from payload: String) -> [UUID]? {
+        guard payload.hasPrefix(prefix) else {
+            return nil
+        }
+
+        let rawIDs = payload.dropFirst(prefix.count).split(separator: ",")
+        let documentIDs = rawIDs.compactMap { UUID(uuidString: String($0)) }
+        guard !documentIDs.isEmpty else {
+            return nil
+        }
+
+        return documentIDs
+    }
+}
 
 struct DocumentListView: View {
     let documents: [DocumentRecord]
+    let selectedSection: LibrarySection
+    let onRestoreDocument: (DocumentRecord) -> Void
+    let onAssignDroppedLabelToDocument: (UUID, DocumentRecord) -> Bool
     @Binding var selectedDocumentIDs: Set<PersistentIdentifier>
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
@@ -98,7 +142,7 @@ struct DocumentListView: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(Array(sortedDocuments.enumerated()), id: \.element.persistentModelID, selection: $selectedDocumentIDs) { index, document in
+                List(sortedDocuments, id: \.persistentModelID, selection: $selectedDocumentIDs) { document in
                     HStack(alignment: .center, spacing: 10) {
                         HStack(spacing: 10) {
                             RoundedRectangle(cornerRadius: 8)
@@ -158,7 +202,36 @@ struct DocumentListView: View {
                     }
                     .padding(.vertical, 4)
                     .tag(document.persistentModelID)
-                    .listRowBackground(index.isMultiple(of: 2) ? Color.secondary.opacity(0.05) : Color.clear)
+                    .contextMenu {
+                        if selectedSection == .bin {
+                            Button("Restore") {
+                                onRestoreDocument(document)
+                            }
+                        }
+                    }
+                    .onDrag {
+                        let documentIDsToDrag: [UUID]
+
+                        if selectedDocumentIDs.contains(document.persistentModelID) {
+                            documentIDsToDrag = sortedDocuments
+                                .filter { selectedDocumentIDs.contains($0.persistentModelID) }
+                                .map(\.id)
+                        } else {
+                            documentIDsToDrag = [document.id]
+                        }
+
+                        return NSItemProvider(
+                            item: DocumentFileDragPayload.payload(for: documentIDsToDrag) as NSString,
+                            typeIdentifier: UTType.plainText.identifier
+                        )
+                    }
+                    .dropDestination(for: String.self) { items, _ in
+                        guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
+                            return false
+                        }
+
+                        return onAssignDroppedLabelToDocument(labelID, document)
+                    }
                 }
                 .listStyle(.plain)
             }
@@ -363,6 +436,9 @@ private struct DocumentLabelStrip: View {
 
     return DocumentListView(
         documents: samples,
+        selectedSection: .allDocuments,
+        onRestoreDocument: { _ in },
+        onAssignDroppedLabelToDocument: { _, _ in false },
         selectedDocumentIDs: .constant(Set(samples.first.map { [$0.persistentModelID] } ?? []))
     )
     .modelContainer(container)

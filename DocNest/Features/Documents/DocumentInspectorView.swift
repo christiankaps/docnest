@@ -10,9 +10,14 @@ struct DocumentInspectorView: View {
     @Query(sort: [SortDescriptor(\LabelTag.sortOrder, order: .forward), SortDescriptor(\LabelTag.name, order: .forward)]) private var allLabels: [LabelTag]
     @State private var newLabelName = ""
     @State private var inspectorErrorMessage: String?
+    @State private var pendingDeletion: [DocumentRecord] = []
 
     private var singleSelectedDocument: DocumentRecord? {
         documents.count == 1 ? documents.first : nil
+    }
+
+    private var selectionIsInBin: Bool {
+        !documents.isEmpty && documents.allSatisfy { $0.trashedAt != nil }
     }
 
     var body: some View {
@@ -47,6 +52,21 @@ struct DocumentInspectorView: View {
                     description: Text("Choose a document from the list to inspect its metadata, labels, and preview.")
                 )
             }
+        }
+        .confirmationDialog(
+            pendingDeletionTitle,
+            isPresented: pendingDeletionBinding,
+            titleVisibility: .visible
+        ) {
+            Button(pendingDeletionActionTitle, role: .destructive) {
+                confirmDeletionAction()
+            }
+
+            Button("Cancel", role: .cancel) {
+                pendingDeletion = []
+            }
+        } message: {
+            Text(pendingDeletionMessage)
         }
         .alert("Inspector Error", isPresented: inspectorErrorBinding) {
             Button("OK", role: .cancel) {
@@ -161,6 +181,8 @@ struct DocumentInspectorView: View {
                     }
                 }
             }
+
+            documentDeletionSection(for: [document])
         }
     }
 
@@ -337,7 +359,28 @@ struct DocumentInspectorView: View {
                 .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
+            documentDeletionSection(for: documents)
+
             Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private func documentDeletionSection(for documents: [DocumentRecord]) -> some View {
+        Divider()
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Delete")
+                .font(AppTypography.sectionTitle)
+
+            Text(deletionHelpText(for: documents))
+                .font(AppTypography.body)
+                .foregroundStyle(.secondary)
+
+            Button(selectionIsInBin ? (documents.count == 1 ? "Delete Permanently" : "Delete Selection Permanently") : (documents.count == 1 ? "Delete Document" : "Delete Selection")) {
+                promptDeletionAction(for: documents)
+            }
+            .foregroundStyle(.red)
         }
     }
 
@@ -347,6 +390,17 @@ struct DocumentInspectorView: View {
             set: { newValue in
                 if !newValue {
                     inspectorErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private var pendingDeletionBinding: Binding<Bool> {
+        Binding(
+            get: { !pendingDeletion.isEmpty },
+            set: { newValue in
+                if !newValue {
+                    pendingDeletion = []
                 }
             }
         )
@@ -393,6 +447,82 @@ struct DocumentInspectorView: View {
         } catch {
             inspectorErrorMessage = error.localizedDescription
         }
+    }
+
+    private func promptDeletionAction(for documents: [DocumentRecord]) {
+        pendingDeletion = documents
+    }
+
+    private func confirmDeletionAction() {
+        guard !pendingDeletion.isEmpty else {
+            return
+        }
+
+        do {
+            if pendingDeletion.allSatisfy({ $0.trashedAt != nil }) {
+                let removalMode: DocumentDeletionMode = libraryURL == nil ? .removeFromLibrary : .deleteStoredFiles
+                try DeleteDocumentsUseCase.execute(
+                    pendingDeletion,
+                    mode: removalMode,
+                    libraryURL: libraryURL,
+                    using: modelContext
+                )
+            } else {
+                try DeleteDocumentsUseCase.moveToBin(pendingDeletion, using: modelContext)
+            }
+            pendingDeletion = []
+        } catch {
+            pendingDeletion = []
+            inspectorErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func deletionHelpText(for documents: [DocumentRecord]) -> String {
+        if documents.allSatisfy({ $0.trashedAt != nil }) {
+            if documents.count == 1 {
+                return "Deleting from Bin removes the document permanently from the library."
+            }
+
+            return "Deleting from Bin removes all selected documents permanently from the library."
+        }
+
+        if documents.count == 1 {
+            return "Deleting moves the document to Bin first, so it can be restored later."
+        }
+
+        return "Deleting moves all selected documents to Bin first, so they can be restored later."
+    }
+
+    private var pendingDeletionTitle: String {
+        if pendingDeletion.allSatisfy({ $0.trashedAt != nil }) {
+            return pendingDeletion.count == 1 ? "Delete Document Permanently" : "Delete Documents Permanently"
+        }
+
+        return pendingDeletion.count == 1 ? "Move Document To Bin" : "Move Documents To Bin"
+    }
+
+    private var pendingDeletionActionTitle: String {
+        if pendingDeletion.allSatisfy({ $0.trashedAt != nil }) {
+            return pendingDeletion.count == 1 ? "Delete Permanently" : "Delete Selection Permanently"
+        }
+
+        return pendingDeletion.count == 1 ? "Move to Bin" : "Move Selection to Bin"
+    }
+
+    private var pendingDeletionMessage: String {
+        if pendingDeletion.allSatisfy({ $0.trashedAt != nil }) {
+            if pendingDeletion.count == 1 {
+                return "This removes the document permanently from the library and deletes its stored PDF file. This action cannot be undone."
+            }
+
+            return "This removes the selected documents permanently from the library and deletes their stored PDF files. This action cannot be undone."
+        }
+
+        if pendingDeletion.count == 1 {
+            return "The document will be moved to Bin and can be restored later."
+        }
+
+        return "The selected documents will be moved to Bin and can be restored later."
     }
 }
 

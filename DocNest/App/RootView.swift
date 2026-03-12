@@ -4,6 +4,7 @@ import SwiftData
 struct RootView: View {
     let libraryURL: URL
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
+    private let recentDocumentLimit = 10
 
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var selectedSection: LibrarySection = .allDocuments
@@ -15,6 +16,8 @@ struct RootView: View {
     @State private var isDropTargeted = false
     @State private var importSummaryMessage: String?
     @State private var pendingLabelFilterApplyTask: Task<Void, Never>?
+    @State private var isConfirmingBinRemoval = false
+    @State private var pendingDroppedLabelAssignment: PendingDroppedLabelAssignment?
     @Environment(\.modelContext) private var modelContext
 
     @Query(sort: \DocumentRecord.importedAt, order: .reverse)
@@ -23,18 +26,24 @@ struct RootView: View {
     @Query(sort: [SortDescriptor(\LabelTag.sortOrder, order: .forward), SortDescriptor(\LabelTag.name, order: .forward)])
     private var allLabels: [LabelTag]
 
-    private var recentDocuments: [DocumentRecord] {
-        Array(allDocuments.prefix(10))
+    private var activeDocuments: [DocumentRecord] {
+        allDocuments.filter { $0.trashedAt == nil }
     }
 
-    private var filteredDocuments: [DocumentRecord] {
+    private var trashedDocuments: [DocumentRecord] {
+        allDocuments.filter { $0.trashedAt != nil }
+    }
+
+    private func computeFilteredDocuments(active: [DocumentRecord], trashed: [DocumentRecord]) -> [DocumentRecord] {
         let sectionDocuments: [DocumentRecord] = switch selectedSection {
         case .allDocuments:
-            allDocuments
+            active
         case .recent:
-            recentDocuments
+            Array(active.prefix(recentDocumentLimit))
         case .needsLabels:
-            allDocuments.filter { $0.labels.isEmpty }
+            active.filter { $0.labels.isEmpty }
+        case .bin:
+            trashed
         }
 
         return SearchDocumentsUseCase.filter(
@@ -44,21 +53,35 @@ struct RootView: View {
         )
     }
 
-    private var selectedDocuments: [DocumentRecord] {
-        let explicitSelection = filteredDocuments.filter { selectedDocumentIDs.contains($0.persistentModelID) }
+    private func computeSelectedDocuments(from filtered: [DocumentRecord]) -> [DocumentRecord] {
+        let explicitSelection = filtered.filter { selectedDocumentIDs.contains($0.persistentModelID) }
 
         if !explicitSelection.isEmpty {
             return explicitSelection
         }
 
-        return filteredDocuments.first.map { [$0] } ?? []
+        return filtered.first.map { [$0] } ?? []
     }
 
     var body: some View {
+        let active = activeDocuments
+        let trashed = trashedDocuments
+        let hasTrashed = !trashed.isEmpty
+        let counts = LibrarySidebarCounts(documents: allDocuments, labels: allLabels, recentLimit: recentDocumentLimit)
+        let filtered = computeFilteredDocuments(active: active, trashed: trashed)
+        let selected = computeSelectedDocuments(from: filtered)
+
         NavigationSplitView(columnVisibility: $columnVisibility) {
             LibrarySidebarView(
                 selectedSection: $selectedSection,
                 labels: allLabels,
+                counts: counts,
+                canRestoreAllFromBin: hasTrashed,
+                canRemoveAllFromBin: hasTrashed,
+                onRestoreAllFromBin: restoreAllFromBin,
+                onRemoveAllFromBin: { isConfirmingBinRemoval = true },
+                onDropDocumentsToBin: handleDroppedDocumentIDs,
+                onDropDocumentsToLabel: handleDroppedDocumentsOnLabel,
                 selectedLabelIDs: visualSelectedLabelIDsBinding
             )
             .navigationSplitViewColumnWidth(
@@ -69,7 +92,10 @@ struct RootView: View {
         } content: {
             ZStack {
                 DocumentListView(
-                    documents: filteredDocuments,
+                    documents: filtered,
+                    selectedSection: selectedSection,
+                    onRestoreDocument: restoreDocumentFromBin,
+                    onAssignDroppedLabelToDocument: assignDroppedLabelToDocument,
                     selectedDocumentIDs: $selectedDocumentIDs
                 )
 
@@ -92,7 +118,7 @@ struct RootView: View {
             )
         } detail: {
             DocumentInspectorView(
-                documents: selectedDocuments,
+                documents: selected,
                 libraryURL: libraryURL
             )
             .navigationSplitViewColumnWidth(
@@ -139,18 +165,58 @@ struct RootView: View {
         .onChange(of: labelFilterSelection.visualSelection) { _, newSelection in
             scheduleLabelFilterApply(immediately: newSelection.isEmpty)
         }
-        .onChange(of: allLabels.map(\.persistentModelID)) { _, labelIDs in
+        .onChange(of: allLabels.count) {
             pendingLabelFilterApplyTask?.cancel()
-            labelFilterSelection.syncAvailableSelections(Set(labelIDs))
+            labelFilterSelection.syncAvailableSelections(Set(allLabels.map(\.persistentModelID)))
         }
-        .onChange(of: filteredDocuments.map(\.persistentModelID)) { _, documentIDs in
-            selectedDocumentIDs.formIntersection(Set(documentIDs))
+        .onChange(of: selectedSection) {
+            pruneSelectedDocumentIDs()
+        }
+        .onChange(of: searchText) {
+            pruneSelectedDocumentIDs()
+        }
+        .onChange(of: labelFilterSelection.appliedSelection) {
+            pruneSelectedDocumentIDs()
+        }
+        .onChange(of: allDocuments.count) {
+            pruneSelectedDocumentIDs()
         }
         .onReceive(NotificationCenter.default.publisher(for: .docNestFocusSearch)) { _ in
             searchFocusRequestToken += 1
         }
         .onDisappear {
             pendingLabelFilterApplyTask?.cancel()
+        }
+        .onDeleteCommand {
+            deleteSelectedDocumentsFromKeyboard()
+        }
+        .confirmationDialog(
+            "Remove All From Bin",
+            isPresented: $isConfirmingBinRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Remove All Permanently", role: .destructive) {
+                removeAllFromBin()
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes all documents currently in Bin, including stored PDF files. This action cannot be undone.")
+        }
+        .confirmationDialog(
+            droppedLabelAssignmentTitle,
+            isPresented: pendingDroppedLabelAssignmentBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Assign Label", role: .destructive) {
+                confirmDroppedLabelAssignment()
+            }
+
+            Button("Cancel", role: .cancel) {
+                pendingDroppedLabelAssignment = nil
+            }
+        } message: {
+            Text(droppedLabelAssignmentMessage)
         }
     }
 
@@ -169,6 +235,17 @@ struct RootView: View {
             set: { newValue in
                 if !newValue {
                     importSummaryMessage = nil
+                }
+            }
+        )
+    }
+
+    private var pendingDroppedLabelAssignmentBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDroppedLabelAssignment != nil },
+            set: { newValue in
+                if !newValue {
+                    pendingDroppedLabelAssignment = nil
                 }
             }
         )
@@ -230,6 +307,190 @@ struct RootView: View {
 
             labelFilterSelection.commitVisualSelection()
         }
+    }
+
+    private func restoreDocumentFromBin(_ document: DocumentRecord) {
+        do {
+            try DeleteDocumentsUseCase.restoreFromBin([document], using: modelContext)
+        } catch {
+            importSummaryMessage = error.localizedDescription
+        }
+    }
+
+    private func restoreAllFromBin() {
+        do {
+            try DeleteDocumentsUseCase.restoreFromBin(trashedDocuments, using: modelContext)
+        } catch {
+            importSummaryMessage = error.localizedDescription
+        }
+    }
+
+    private func removeAllFromBin() {
+        do {
+            try DeleteDocumentsUseCase.execute(
+                trashedDocuments,
+                mode: .deleteStoredFiles,
+                libraryURL: libraryURL,
+                using: modelContext
+            )
+        } catch {
+            importSummaryMessage = error.localizedDescription
+        }
+    }
+
+    private func handleDroppedDocumentIDs(_ droppedIDs: [String]) -> Bool {
+        let uuidSet = parseDroppedDocumentIDs(droppedIDs)
+        guard !uuidSet.isEmpty else {
+            return false
+        }
+
+        let documentsToMove = activeDocuments.filter { uuidSet.contains($0.id) }
+        guard !documentsToMove.isEmpty else {
+            return false
+        }
+
+        do {
+            try DeleteDocumentsUseCase.moveToBin(documentsToMove, using: modelContext)
+            return true
+        } catch {
+            importSummaryMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    private func handleDroppedDocumentsOnLabel(_ payloadItems: [String], label: LabelTag) -> Bool {
+        let documentIDs = parseDroppedDocumentIDs(payloadItems)
+        guard !documentIDs.isEmpty else {
+            return false
+        }
+
+        let candidateDocuments = activeDocuments.filter { documentIDs.contains($0.id) }
+        guard !candidateDocuments.isEmpty else {
+            return false
+        }
+
+        pendingDroppedLabelAssignment = PendingDroppedLabelAssignment(
+            labelID: label.persistentModelID,
+            documentIDs: Set(candidateDocuments.map(\.persistentModelID))
+        )
+        return true
+    }
+
+    private func confirmDroppedLabelAssignment() {
+        guard let pendingDroppedLabelAssignment,
+              let label = allLabels.first(where: { $0.persistentModelID == pendingDroppedLabelAssignment.labelID }) else {
+            self.pendingDroppedLabelAssignment = nil
+            return
+        }
+
+        let documentsToAssign = allDocuments.filter { pendingDroppedLabelAssignment.documentIDs.contains($0.persistentModelID) }
+        guard !documentsToAssign.isEmpty else {
+            self.pendingDroppedLabelAssignment = nil
+            return
+        }
+
+        do {
+            try ManageLabelsUseCase.assign(label, to: documentsToAssign, using: modelContext)
+            self.pendingDroppedLabelAssignment = nil
+        } catch {
+            self.pendingDroppedLabelAssignment = nil
+            importSummaryMessage = error.localizedDescription
+        }
+    }
+
+    private func pruneSelectedDocumentIDs() {
+        let active = activeDocuments
+        let trashed = trashedDocuments
+        let filtered = computeFilteredDocuments(active: active, trashed: trashed)
+        let validIDs = Set(filtered.map(\.persistentModelID))
+        selectedDocumentIDs.formIntersection(validIDs)
+    }
+
+    private func deleteSelectedDocumentsFromKeyboard() {
+        let active = activeDocuments
+        let trashed = trashedDocuments
+        let filtered = computeFilteredDocuments(active: active, trashed: trashed)
+        let explicitSelection = filtered.filter { selectedDocumentIDs.contains($0.persistentModelID) }
+        guard !explicitSelection.isEmpty else {
+            return
+        }
+
+        do {
+            if selectedSection == .bin {
+                let mode: DocumentDeletionMode = libraryURL == nil ? .removeFromLibrary : .deleteStoredFiles
+                try DeleteDocumentsUseCase.execute(
+                    explicitSelection,
+                    mode: mode,
+                    libraryURL: libraryURL,
+                    using: modelContext
+                )
+            } else {
+                try DeleteDocumentsUseCase.moveToBin(explicitSelection, using: modelContext)
+            }
+        } catch {
+            importSummaryMessage = error.localizedDescription
+        }
+    }
+
+    private func assignDroppedLabelToDocument(_ labelID: UUID, document: DocumentRecord) -> Bool {
+        guard document.trashedAt == nil else {
+            return false
+        }
+
+        guard let label = allLabels.first(where: { $0.id == labelID }) else {
+            return false
+        }
+
+        do {
+            try ManageLabelsUseCase.assign(label, to: document, using: modelContext)
+            return true
+        } catch {
+            importSummaryMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    private var droppedLabelAssignmentTitle: String {
+        guard let pendingDroppedLabelAssignment,
+              let label = allLabels.first(where: { $0.persistentModelID == pendingDroppedLabelAssignment.labelID }) else {
+            return "Assign Label"
+        }
+
+        return "Assign \"\(label.name)\""
+    }
+
+    private var droppedLabelAssignmentMessage: String {
+        guard let pendingDroppedLabelAssignment else {
+            return ""
+        }
+
+        if pendingDroppedLabelAssignment.documentIDs.count == 1 {
+            return "Assign this label to 1 document?"
+        }
+
+        return "Assign this label to \(pendingDroppedLabelAssignment.documentIDs.count) documents?"
+    }
+
+    private func parseDroppedDocumentIDs(_ payloadItems: [String]) -> Set<UUID> {
+        var documentIDs = Set<UUID>()
+
+        for payload in payloadItems {
+            if let extractedIDs = DocumentFileDragPayload.documentIDs(from: payload) {
+                documentIDs.formUnion(extractedIDs)
+                continue
+            }
+
+            if let singleID = UUID(uuidString: payload) {
+                documentIDs.insert(singleID)
+            }
+        }
+
+        return documentIDs
+    }
+
+    private struct PendingDroppedLabelAssignment {
+        let labelID: PersistentIdentifier
+        let documentIDs: Set<PersistentIdentifier>
     }
 }
 

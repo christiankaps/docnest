@@ -12,6 +12,7 @@ final class DocumentRecord {
     var fileSize: Int64
     var contentHash: String
     var storedFilePath: String?
+    var trashedAt: Date?
 
     @Relationship(deleteRule: .nullify, inverse: \LabelTag.documents)
     var labels: [LabelTag] = []
@@ -26,6 +27,7 @@ final class DocumentRecord {
         fileSize: Int64 = 0,
         contentHash: String = "",
         storedFilePath: String? = nil,
+        trashedAt: Date? = nil,
         labels: [LabelTag] = []
     ) {
         self.id = id
@@ -37,6 +39,7 @@ final class DocumentRecord {
         self.fileSize = fileSize
         self.contentHash = contentHash
         self.storedFilePath = storedFilePath
+        self.trashedAt = trashedAt
         self.labels = labels
     }
 }

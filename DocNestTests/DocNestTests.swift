@@ -273,6 +273,78 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(state.displayedSelection, ["tax"])
     }
 
+    func testLibrarySidebarCountsReflectSectionBucketsAndLabels() {
+        let finance = LabelTag(name: "Finance")
+        let tax = LabelTag(name: "Tax")
+        let archive = LabelTag(name: "Archive")
+        let documents = [
+            DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [finance, tax]),
+            DocumentRecord(originalFileName: "receipt.pdf", title: "Receipt", importedAt: .now, pageCount: 1, labels: [finance]),
+            DocumentRecord(originalFileName: "contract.pdf", title: "Contract", importedAt: .now, pageCount: 1)
+        ]
+
+        let counts = LibrarySidebarCounts(documents: documents, labels: [finance, tax, archive], recentLimit: 10)
+
+        XCTAssertEqual(counts.count(for: .allDocuments), 3)
+        XCTAssertEqual(counts.count(for: .recent), 3)
+        XCTAssertEqual(counts.count(for: .needsLabels), 1)
+        XCTAssertEqual(counts.count(for: finance), 2)
+        XCTAssertEqual(counts.count(for: tax), 1)
+        XCTAssertEqual(counts.count(for: archive), 0)
+    }
+
+    func testLibrarySidebarCountsCapsRecentBucketAtRecentLimit() {
+        let documents = (0..<12).map { index in
+            DocumentRecord(
+                originalFileName: "doc-\(index).pdf",
+                title: "Doc \(index)",
+                importedAt: .now,
+                pageCount: 1
+            )
+        }
+
+        let counts = LibrarySidebarCounts(documents: documents, labels: [], recentLimit: 10)
+
+        XCTAssertEqual(counts.count(for: .allDocuments), 12)
+        XCTAssertEqual(counts.count(for: .recent), 10)
+        XCTAssertEqual(counts.count(for: .needsLabels), 12)
+    }
+
+    func testLibrarySidebarCountsExcludesBinItemsFromActiveBuckets() {
+        let label = LabelTag(name: "Finance")
+        let documents = [
+            DocumentRecord(originalFileName: "active-a.pdf", title: "A", importedAt: .now, pageCount: 1, labels: [label]),
+            DocumentRecord(originalFileName: "active-b.pdf", title: "B", importedAt: .now, pageCount: 1),
+            DocumentRecord(originalFileName: "bin.pdf", title: "Bin", importedAt: .now, pageCount: 1, trashedAt: .now, labels: [label])
+        ]
+
+        let counts = LibrarySidebarCounts(documents: documents, labels: [label], recentLimit: 10)
+
+        XCTAssertEqual(counts.count(for: .allDocuments), 2)
+        XCTAssertEqual(counts.count(for: .needsLabels), 1)
+        XCTAssertEqual(counts.count(for: .bin), 1)
+        XCTAssertEqual(counts.count(for: label), 1)
+    }
+
+    func testDocumentFileDragPayloadRoundTripsSingleID() {
+        let documentID = UUID()
+
+        let payload = DocumentFileDragPayload.payload(for: [documentID])
+        let parsedIDs = DocumentFileDragPayload.documentIDs(from: payload)
+
+        XCTAssertEqual(parsedIDs, [documentID])
+    }
+
+    func testDocumentFileDragPayloadRoundTripsMultipleIDs() {
+        let firstID = UUID()
+        let secondID = UUID()
+
+        let payload = DocumentFileDragPayload.payload(for: [firstID, secondID])
+        let parsedIDs = DocumentFileDragPayload.documentIDs(from: payload)
+
+        XCTAssertEqual(parsedIDs, [firstID, secondID])
+    }
+
     @MainActor
     func testLibraryContainersStayIsolated() throws {
         let tempRoot = FileManager.default.temporaryDirectory
@@ -546,6 +618,210 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(remainingDocuments.count, 1)
         XCTAssertTrue(remainingDocuments[0].labels.isEmpty)
         XCTAssertTrue(remainingLabels.isEmpty)
+    }
+
+    @MainActor
+    func testDeletingLabelDirectlyDoesNotCascadeIntoDocuments() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Invoices")
+        let document = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [label])
+        context.insert(label)
+        context.insert(document)
+        try context.save()
+
+        context.delete(label)
+        try context.save()
+
+        let remainingDocuments = try context.fetch(FetchDescriptor<DocumentRecord>())
+        let remainingLabels = try context.fetch(FetchDescriptor<LabelTag>())
+
+        XCTAssertEqual(remainingDocuments.count, 1)
+        XCTAssertTrue(remainingDocuments[0].labels.isEmpty)
+        XCTAssertTrue(remainingLabels.isEmpty)
+    }
+
+    @MainActor
+    func testRemoveDocumentFromLibraryKeepsStoredFile() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(at: tempRoot.appendingPathComponent("Test Library"))
+        let storedFilePath = "Originals/2026/03/test.pdf"
+        let storedFileURL = libraryURL.appendingPathComponent(storedFilePath)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: storedFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("test".utf8).write(to: storedFileURL)
+
+        let document = DocumentRecord(
+            originalFileName: "test.pdf",
+            title: "Test",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: storedFilePath
+        )
+        context.insert(document)
+        try context.save()
+
+        try DeleteDocumentsUseCase.execute([document], mode: .removeFromLibrary, libraryURL: libraryURL, using: context)
+
+        let remainingDocuments = try context.fetch(FetchDescriptor<DocumentRecord>())
+        XCTAssertTrue(remainingDocuments.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storedFileURL.path))
+    }
+
+    @MainActor
+    func testDeleteDocumentWithStoredFileRemovesRecordAndPDF() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(at: tempRoot.appendingPathComponent("Test Library"))
+        let storedFilePath = "Originals/2026/03/test.pdf"
+        let storedFileURL = libraryURL.appendingPathComponent(storedFilePath)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: storedFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("test".utf8).write(to: storedFileURL)
+
+        let document = DocumentRecord(
+            originalFileName: "test.pdf",
+            title: "Test",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: storedFilePath
+        )
+        context.insert(document)
+        try context.save()
+
+        try DeleteDocumentsUseCase.execute([document], mode: .deleteStoredFiles, libraryURL: libraryURL, using: context)
+
+        let remainingDocuments = try context.fetch(FetchDescriptor<DocumentRecord>())
+        XCTAssertTrue(remainingDocuments.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storedFileURL.path))
+    }
+
+    @MainActor
+    func testDeletingStoredFilesRequiresLibraryLocation() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let document = DocumentRecord(
+            originalFileName: "test.pdf",
+            title: "Test",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: "Originals/2026/03/test.pdf"
+        )
+        context.insert(document)
+        try context.save()
+
+        XCTAssertThrowsError(
+            try DeleteDocumentsUseCase.execute([document], mode: .deleteStoredFiles, libraryURL: nil, using: context)
+        )
+    }
+
+    @MainActor
+    func testMoveDocumentToBinSetsTrashedDate() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let document = DocumentRecord(originalFileName: "test.pdf", title: "Test", importedAt: .now, pageCount: 1)
+        context.insert(document)
+        try context.save()
+
+        try DeleteDocumentsUseCase.moveToBin([document], using: context)
+
+        XCTAssertNotNil(document.trashedAt)
+    }
+
+    @MainActor
+    func testRestoreDocumentFromBinClearsTrashedDate() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let document = DocumentRecord(originalFileName: "test.pdf", title: "Test", importedAt: .now, pageCount: 1, trashedAt: .now)
+        context.insert(document)
+        try context.save()
+
+        try DeleteDocumentsUseCase.restoreFromBin([document], using: context)
+
+        XCTAssertNil(document.trashedAt)
+    }
+
+    @MainActor
+    func testPendingLabelDeletionReportsAffectedDocumentCount() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Finance")
+        let documentA = DocumentRecord(originalFileName: "a.pdf", title: "A", importedAt: .now, pageCount: 1, labels: [label])
+        let documentB = DocumentRecord(originalFileName: "b.pdf", title: "B", importedAt: .now, pageCount: 1, labels: [label])
+        context.insert(label)
+        context.insert(documentA)
+        context.insert(documentB)
+        try context.save()
+
+        let pendingDeletion = PendingLabelDeletion(label: label)
+
+        XCTAssertEqual(pendingDeletion.affectedDocumentCount, 2)
+        XCTAssertEqual(
+            pendingDeletion.message,
+            "Deleting \"Finance\" will remove this label from 2 documents. The documents themselves will be kept."
+        )
+    }
+
+    @MainActor
+    func testPendingLabelDeletionUsesSingularDocumentMessage() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Tax")
+        let document = DocumentRecord(originalFileName: "a.pdf", title: "A", importedAt: .now, pageCount: 1, labels: [label])
+        context.insert(label)
+        context.insert(document)
+        try context.save()
+
+        let pendingDeletion = PendingLabelDeletion(label: label)
+
+        XCTAssertEqual(pendingDeletion.affectedDocumentCount, 1)
+        XCTAssertEqual(
+            pendingDeletion.message,
+            "Deleting \"Tax\" will remove this label from 1 document. The document itself will be kept."
+        )
+    }
+
+    @MainActor
+    func testPendingLabelDeletionSkipsConfirmationWhenNoDocumentsAreAssigned() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Unassigned")
+        context.insert(label)
+        try context.save()
+
+        let pendingDeletion = PendingLabelDeletion(label: label)
+
+        XCTAssertEqual(pendingDeletion.affectedDocumentCount, 0)
+        XCTAssertFalse(pendingDeletion.requiresConfirmation)
     }
 
     @MainActor

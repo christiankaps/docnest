@@ -138,6 +138,11 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - PDF-Vorschau fuer das ausgewaehlte Dokument.
 - Finder-Integration: Originaldatei oeffnen, im Finder zeigen, exportieren.
 
+- Die Dokumentliste unterstuetzt zwei Darstellungsmodi: Listenansicht und Miniaturansicht. In der Miniaturansicht werden Dokumente als Thumbnail-Kacheln dargestellt, aehnlich der Finder-Symbolansicht. Die Groesse der Thumbnails ist ueber einen Schieberegler stufenlos einstellbar.
+- Die Toolbar enthaelt einen Share-Button, der das native macOS-Teilen-Sheet fuer das aktuell selektierte Dokument oder alle selektierten Dokumente oeffnet. Drucken ist ueber das Share-Sheet erreichbar.
+- Ein Rechtsklick auf ein Dokument in der Liste oeffnet ein Kontextmenu mit Schnellaktionen: Labels zuweisen, im Finder anzeigen, in den Bin verschieben und weitere kontextbezogene Optionen.
+- In der Dokumentliste zeigt jedes einem Dokument zugewiesene Label-Badge beim Hover ein "x"-Symbol. Ein Klick auf dieses "x" entfernt das Label sofort vom Dokument, ohne Bestatigungsdialog.
+
 #### Sollte
 - Quick Look aehnliches Vorschauverhalten.
 - Split View: Liste links, Vorschau rechts.
@@ -149,7 +154,12 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Ein Dokument kann mehrere Labels haben.
 - Labels koennen schnell per Tastatur oder Direktaktion zugewiesen werden.
 - Filter nach einem oder mehreren Labels sind moeglich.
+- Die linke Seitenleiste zeigt fuer jedes Label die Anzahl der Dokumente, die dieses Label aktuell tragen.
+- Das Ziehen eines Labels aus der Seitenleiste auf ein Dokument in der Liste weist dieses Label dem Dokument zu.
+- Das Ziehen eines oder mehrerer Dokumente auf ein Label in der Seitenleiste weist das Ziel-Label allen gezogenen Dokumenten zu, aber erst nach einem nativen Bestatigungsdialog.
 - Wenn mehrere Labels als Filter ausgewaehlt sind, gilt AND-Logik: Nur Dokumente mit allen ausgewaehlten Labels werden angezeigt.
+- Das Loeschen eines Labels darf niemals die zugeordneten Dokumente loeschen; es entfernt nur die Label-Zuordnung.
+- Wenn ein Label mindestens einem Dokument zugewiesen ist, zeigt die App vor dem Loeschen einen nativen Bestatigungsdialog mit der Anzahl betroffener Dokumente. Labels ohne zugewiesene Dokumente werden ohne zusaetzliche Bestaetigung geloescht.
 - Label-Verwaltung (Anlegen, Umbenennen, Loeschen, Farbauswahl) ist direkt in die linke Seitenleiste integriert, nicht in einen separaten modalen Dialog.
 - Die Reihenfolge der Labels in der Seitenleiste ist vom Nutzer per Drag-and-drop aenderbar. Die benutzerdefinierte Reihenfolge wird persistiert.
 
@@ -166,6 +176,11 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 #### Muss
 - Volltextnahe Suche ueber Dateiname, Titel, Notizen und Labels.
 - Kombination aus Suchtext und Label-Filtern.
+- Die Library-Buckets in der linken Seitenleiste zeigen die jeweilige Dokumentanzahl fuer "All Documents", "Recent Imports" und "Needs Labels".
+- Die linke Seitenleiste enthaelt zusaetzlich einen "Bin"-Bucket mit der Anzahl aktuell geloeschter Dokumente.
+- Dokumente im "Bin" werden von normaler Suche und Label-Filtern ignoriert; sie erscheinen nur im Bin-Bucket.
+- Dokumente koennen per Drag-and-drop aus der Dokumentliste direkt auf das Bin-Symbol in der Seitenleiste verschoben werden.
+- Die Entf/Delete-Taste verschiebt selektierte Dokumente in den Bin; bei selektierten Dokumenten im Bin fuehrt sie ein permanentes Entfernen aus.
 - Beim Aktivieren oder Deaktivieren eines Label-Filters muss die Auswahlmarkierung in der Seitenleiste sofort sichtbar umschalten, auch wenn die Aktualisierung der Dokumentliste geringfuegig laenger dauert.
 - Sortierung nach Importdatum, Dokumentdatum, Name, Dateigroesse.
 - "Needs Labels"-Filter zeigt nur Dokumente ohne Labels an. Wenn dieser Filter aktiv ist, werden aktive Label-Filter automatisch geloescht, um logische Konflikte zu vermeiden (ein Dokument kann nicht gleichzeitig keine Labels haben und bestimmte Labels enthalten).
@@ -191,7 +206,10 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 
 #### Muss
 - App darf Originaldateien nicht stillschweigend verlieren oder ueberschreiben.
-- Loeschen eines Dokuments aus der App muss klar zwischen "aus Library entfernen" und "Datei wirklich loeschen" unterscheiden.
+- Loeschen eines Dokuments verschiebt es zuerst in den "Bin"-Bucket statt es sofort permanent zu entfernen.
+- Der "Bin"-Bucket bietet "Restore All" sowie das Wiederherstellen einzelner Dokumente.
+- Der "Bin"-Bucket bietet eine "Remove All"-Funktion fuer permanentes Entfernen aller aktuell im Bin liegenden Dokumente.
+- Wenn ein Dokument bereits im Bin liegt, bedeutet Loeschen ein permanentes Entfernen aus der Library.
 - App kann fehlende Dateien oder inkonsistente Metadaten erkennen.
 
 #### Sollte

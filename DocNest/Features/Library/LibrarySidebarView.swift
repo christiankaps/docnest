@@ -1,10 +1,12 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 enum LibrarySection: String, CaseIterable, Identifiable {
     case allDocuments = "All Documents"
     case recent = "Recent Imports"
     case needsLabels = "Needs Labels"
+    case bin = "Bin"
 
     var id: String { rawValue }
 }
@@ -12,6 +14,13 @@ enum LibrarySection: String, CaseIterable, Identifiable {
 struct LibrarySidebarView: View {
     @Binding var selectedSection: LibrarySection
     let labels: [LabelTag]
+    let counts: LibrarySidebarCounts
+    let canRestoreAllFromBin: Bool
+    let canRemoveAllFromBin: Bool
+    let onRestoreAllFromBin: () -> Void
+    let onRemoveAllFromBin: () -> Void
+    let onDropDocumentsToBin: ([String]) -> Bool
+    let onDropDocumentsToLabel: ([String], LabelTag) -> Bool
     @Binding var selectedLabelIDs: Set<PersistentIdentifier>
     @Environment(\.modelContext) private var modelContext
 
@@ -21,8 +30,7 @@ struct LibrarySidebarView: View {
     @State private var editingLabelID: PersistentIdentifier?
     @State private var editedLabelName = ""
     @State private var errorMessage: String?
-    @State private var labelSelectionState = SidebarLabelSelectionState<PersistentIdentifier>()
-    @State private var pendingSelectionPropagationTask: Task<Void, Never>?
+    @State private var pendingLabelDeletion: PendingLabelDeletion?
 
     private var sortedLabels: [LabelTag] {
         labels.sorted {
@@ -40,13 +48,15 @@ struct LibrarySidebarView: View {
                     Button {
                         selectedSection = section
                         if section == .needsLabels {
-                            labelSelectionState.clear()
-                            propagateDisplayedSelection()
+                            selectedLabelIDs = []
                         }
                     } label: {
                         HStack {
                             Label(section.rawValue, systemImage: iconName(for: section))
                             Spacer()
+                            Text("\(counts.count(for: section))")
+                                .font(AppTypography.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
                             if selectedSection == section {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(.tint)
@@ -54,16 +64,37 @@ struct LibrarySidebarView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .dropDestination(for: String.self) { items, _ in
+                        guard section == .bin else {
+                            return false
+                        }
+
+                        return onDropDocumentsToBin(items)
+                    }
+                }
+
+                if selectedSection == .bin {
+                    HStack(spacing: 8) {
+                        Button("Restore All") {
+                            onRestoreAllFromBin()
+                        }
+                        .disabled(!canRestoreAllFromBin)
+
+                        Button("Remove All", role: .destructive) {
+                            onRemoveAllFromBin()
+                        }
+                        .disabled(!canRemoveAllFromBin)
+                    }
+                    .font(AppTypography.caption)
                 }
             }
 
             Section("Label Filters") {
                 HStack {
                     Button("Clear Label Filters") {
-                        labelSelectionState.clear()
-                        propagateDisplayedSelection()
+                        selectedLabelIDs = []
                     }
-                    .disabled(labelSelectionState.displayedSelection.isEmpty)
+                    .disabled(selectedLabelIDs.isEmpty)
 
                     Spacer()
 
@@ -141,13 +172,25 @@ struct LibrarySidebarView: View {
                                         .frame(width: 10, height: 10)
                                     Text(label.name)
                                     Spacer()
-                                    if labelSelectionState.displayedSelection.contains(label.persistentModelID) {
+                                    Text("\(counts.count(for: label))")
+                                        .font(AppTypography.caption.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                    if selectedLabelIDs.contains(label.persistentModelID) {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundStyle(.tint)
                                     }
                                 }
                             }
                             .buttonStyle(.plain)
+                            .onDrag {
+                                NSItemProvider(
+                                    item: DocumentLabelDragPayload.payload(for: label.id) as NSString,
+                                    typeIdentifier: UTType.plainText.identifier
+                                )
+                            }
+                            .dropDestination(for: String.self) { items, _ in
+                                onDropDocumentsToLabel(items, label)
+                            }
                             .contextMenu {
                                 Button("Rename") {
                                     beginEditing(label)
@@ -182,6 +225,21 @@ struct LibrarySidebarView: View {
             }
         }
         .navigationTitle("Library")
+        .confirmationDialog(
+            pendingLabelDeletion?.title ?? "Delete Label",
+            isPresented: pendingLabelDeletionBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Label", role: .destructive) {
+                confirmDeleteLabel()
+            }
+
+            Button("Cancel", role: .cancel) {
+                pendingLabelDeletion = nil
+            }
+        } message: {
+            Text(pendingLabelDeletion?.message ?? "")
+        }
         .alert("Label Error", isPresented: errorBinding) {
             Button("OK", role: .cancel) {
                 errorMessage = nil
@@ -189,18 +247,7 @@ struct LibrarySidebarView: View {
         } message: {
             Text(errorMessage ?? "Unknown label error.")
         }
-        .onAppear {
-            labelSelectionState.replaceDisplayedSelection(with: selectedLabelIDs)
-        }
-        .onChange(of: selectedLabelIDs) { _, newSelection in
-            labelSelectionState.replaceDisplayedSelection(with: newSelection)
-        }
-        .onChange(of: labels.map(\.persistentModelID)) { _, labelIDs in
-            labelSelectionState.syncAvailableSelections(Set(labelIDs))
-        }
-        .onDisappear {
-            pendingSelectionPropagationTask?.cancel()
-        }
+
     }
 
     private var errorBinding: Binding<Bool> {
@@ -214,9 +261,23 @@ struct LibrarySidebarView: View {
         )
     }
 
+    private var pendingLabelDeletionBinding: Binding<Bool> {
+        Binding(
+            get: { pendingLabelDeletion != nil },
+            set: { newValue in
+                if !newValue {
+                    pendingLabelDeletion = nil
+                }
+            }
+        )
+    }
+
     private func toggleLabelSelection(_ label: LabelTag) {
-        labelSelectionState.toggle(label.persistentModelID)
-        propagateDisplayedSelection()
+        if selectedLabelIDs.contains(label.persistentModelID) {
+            selectedLabelIDs.remove(label.persistentModelID)
+        } else {
+            selectedLabelIDs.insert(label.persistentModelID)
+        }
     }
 
     private func addLabel() {
@@ -254,13 +315,37 @@ struct LibrarySidebarView: View {
     }
 
     private func deleteLabel(_ label: LabelTag) {
+        let pendingDeletion = PendingLabelDeletion(label: label)
+
+        if pendingDeletion.requiresConfirmation {
+            pendingLabelDeletion = pendingDeletion
+            return
+        }
+
         do {
-            try ManageLabelsUseCase.delete(label, using: modelContext)
-            labelSelectionState.syncAvailableSelections(Set(labels.map(\.persistentModelID)))
-            propagateDisplayedSelection()
+            try performDeleteLabel(label)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func confirmDeleteLabel() {
+        guard let pendingLabelDeletion else {
+            return
+        }
+
+        do {
+            try performDeleteLabel(pendingLabelDeletion.label)
+            self.pendingLabelDeletion = nil
+        } catch {
+            self.pendingLabelDeletion = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func performDeleteLabel(_ label: LabelTag) throws {
+        try ManageLabelsUseCase.delete(label, using: modelContext)
+        selectedLabelIDs.remove(label.persistentModelID)
     }
 
     private func moveLabels(from source: IndexSet, to destination: Int) {
@@ -279,22 +364,74 @@ struct LibrarySidebarView: View {
             "clock"
         case .needsLabels:
             "tag.slash"
+        case .bin:
+            "trash"
         }
     }
 
-    private func propagateDisplayedSelection() {
-        pendingSelectionPropagationTask?.cancel()
+}
 
-        let displayedSelection = labelSelectionState.displayedSelection
-        pendingSelectionPropagationTask = Task { @MainActor in
-            await Task.yield()
+struct PendingLabelDeletion {
+    let label: LabelTag
+    let affectedDocumentCount: Int
 
-            guard !Task.isCancelled else {
-                return
+    init(label: LabelTag) {
+        self.label = label
+        affectedDocumentCount = Set(label.documents.map(\.persistentModelID)).count
+    }
+
+    var title: String {
+        "Delete Label"
+    }
+
+    var requiresConfirmation: Bool {
+        affectedDocumentCount > 0
+    }
+
+    var message: String {
+        if affectedDocumentCount == 1 {
+            return "Deleting \"\(label.name)\" will remove this label from 1 document. The document itself will be kept."
+        }
+
+        return "Deleting \"\(label.name)\" will remove this label from \(affectedDocumentCount) documents. The documents themselves will be kept."
+    }
+}
+
+struct LibrarySidebarCounts {
+    private let sectionCounts: [LibrarySection: Int]
+    private let labelCounts: [PersistentIdentifier: Int]
+
+    init(documents: [DocumentRecord], labels: [LabelTag], recentLimit: Int) {
+        let activeDocuments = documents.filter { $0.trashedAt == nil }
+        let trashedDocuments = documents.filter { $0.trashedAt != nil }
+        var needsLabelsCount = 0
+        var computedLabelCounts = Dictionary(uniqueKeysWithValues: labels.map { ($0.persistentModelID, 0) })
+
+        for document in activeDocuments {
+            if document.labels.isEmpty {
+                needsLabelsCount += 1
             }
 
-            selectedLabelIDs = displayedSelection
+            for labelID in Set(document.labels.map(\.persistentModelID)) {
+                computedLabelCounts[labelID, default: 0] += 1
+            }
         }
+
+        sectionCounts = [
+            .allDocuments: activeDocuments.count,
+            .recent: min(activeDocuments.count, recentLimit),
+            .needsLabels: needsLabelsCount,
+            .bin: trashedDocuments.count
+        ]
+        labelCounts = computedLabelCounts
+    }
+
+    func count(for section: LibrarySection) -> Int {
+        sectionCounts[section, default: 0]
+    }
+
+    func count(for label: LabelTag) -> Int {
+        labelCounts[label.persistentModelID, default: 0]
     }
 }
 
@@ -303,6 +440,13 @@ struct LibrarySidebarView: View {
     LibrarySidebarView(
         selectedSection: .constant(.allDocuments),
         labels: [labels.finance, labels.tax, labels.contracts],
+        counts: LibrarySidebarCounts(documents: DocumentRecord.makeSamples(labels: labels), labels: [labels.finance, labels.tax, labels.contracts], recentLimit: 10),
+        canRestoreAllFromBin: false,
+        canRemoveAllFromBin: false,
+        onRestoreAllFromBin: {},
+        onRemoveAllFromBin: {},
+        onDropDocumentsToBin: { _ in false },
+        onDropDocumentsToLabel: { _, _ in false },
         selectedLabelIDs: .constant([])
     )
 }
