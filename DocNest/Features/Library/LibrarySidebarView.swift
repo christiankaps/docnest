@@ -21,6 +21,8 @@ struct LibrarySidebarView: View {
     @State private var editingLabelID: PersistentIdentifier?
     @State private var editedLabelName = ""
     @State private var errorMessage: String?
+    @State private var labelSelectionState = SidebarLabelSelectionState<PersistentIdentifier>()
+    @State private var pendingSelectionPropagationTask: Task<Void, Never>?
 
     private var sortedLabels: [LabelTag] {
         labels.sorted {
@@ -38,7 +40,8 @@ struct LibrarySidebarView: View {
                     Button {
                         selectedSection = section
                         if section == .needsLabels {
-                            selectedLabelIDs.removeAll()
+                            labelSelectionState.clear()
+                            propagateDisplayedSelection()
                         }
                     } label: {
                         HStack {
@@ -57,9 +60,10 @@ struct LibrarySidebarView: View {
             Section("Label Filters") {
                 HStack {
                     Button("Clear Label Filters") {
-                        selectedLabelIDs.removeAll()
+                        labelSelectionState.clear()
+                        propagateDisplayedSelection()
                     }
-                    .disabled(selectedLabelIDs.isEmpty)
+                    .disabled(labelSelectionState.displayedSelection.isEmpty)
 
                     Spacer()
 
@@ -137,7 +141,7 @@ struct LibrarySidebarView: View {
                                         .frame(width: 10, height: 10)
                                     Text(label.name)
                                     Spacer()
-                                    if selectedLabelIDs.contains(label.persistentModelID) {
+                                    if labelSelectionState.displayedSelection.contains(label.persistentModelID) {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundStyle(.tint)
                                     }
@@ -185,6 +189,18 @@ struct LibrarySidebarView: View {
         } message: {
             Text(errorMessage ?? "Unknown label error.")
         }
+        .onAppear {
+            labelSelectionState.replaceDisplayedSelection(with: selectedLabelIDs)
+        }
+        .onChange(of: selectedLabelIDs) { _, newSelection in
+            labelSelectionState.replaceDisplayedSelection(with: newSelection)
+        }
+        .onChange(of: labels.map(\.persistentModelID)) { _, labelIDs in
+            labelSelectionState.syncAvailableSelections(Set(labelIDs))
+        }
+        .onDisappear {
+            pendingSelectionPropagationTask?.cancel()
+        }
     }
 
     private var errorBinding: Binding<Bool> {
@@ -199,12 +215,8 @@ struct LibrarySidebarView: View {
     }
 
     private func toggleLabelSelection(_ label: LabelTag) {
-        let labelID = label.persistentModelID
-        if selectedLabelIDs.contains(labelID) {
-            selectedLabelIDs.remove(labelID)
-        } else {
-            selectedLabelIDs.insert(labelID)
-        }
+        labelSelectionState.toggle(label.persistentModelID)
+        propagateDisplayedSelection()
     }
 
     private func addLabel() {
@@ -244,7 +256,8 @@ struct LibrarySidebarView: View {
     private func deleteLabel(_ label: LabelTag) {
         do {
             try ManageLabelsUseCase.delete(label, using: modelContext)
-            selectedLabelIDs.remove(label.persistentModelID)
+            labelSelectionState.syncAvailableSelections(Set(labels.map(\.persistentModelID)))
+            propagateDisplayedSelection()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -266,6 +279,21 @@ struct LibrarySidebarView: View {
             "clock"
         case .needsLabels:
             "tag.slash"
+        }
+    }
+
+    private func propagateDisplayedSelection() {
+        pendingSelectionPropagationTask?.cancel()
+
+        let displayedSelection = labelSelectionState.displayedSelection
+        pendingSelectionPropagationTask = Task { @MainActor in
+            await Task.yield()
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            selectedLabelIDs = displayedSelection
         }
     }
 }

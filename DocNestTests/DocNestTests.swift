@@ -247,6 +247,32 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(state.appliedSelection, ["tax"])
     }
 
+    func testSidebarLabelSelectionStateUpdatesDisplayedSelectionImmediately() {
+        var state = SidebarLabelSelectionState<String>()
+
+        state.toggle("finance")
+
+        XCTAssertEqual(state.displayedSelection, ["finance"])
+    }
+
+    func testSidebarLabelSelectionStateClearsDisplayedSelection() {
+        var state = SidebarLabelSelectionState<String>()
+
+        state.replaceDisplayedSelection(with: ["finance", "tax"])
+        state.clear()
+
+        XCTAssertTrue(state.displayedSelection.isEmpty)
+    }
+
+    func testSidebarLabelSelectionStateSyncsAvailableSelections() {
+        var state = SidebarLabelSelectionState<String>()
+
+        state.replaceDisplayedSelection(with: ["finance", "tax", "legal"])
+        state.syncAvailableSelections(["tax", "contracts"])
+
+        XCTAssertEqual(state.displayedSelection, ["tax"])
+    }
+
     @MainActor
     func testLibraryContainersStayIsolated() throws {
         let tempRoot = FileManager.default.temporaryDirectory

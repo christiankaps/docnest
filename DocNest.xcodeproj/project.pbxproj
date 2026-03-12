@@ -27,6 +27,7 @@
 		BE2517F95F869DB2842C1F08 /* LabelChip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E121E80E607DB634883795 /* LabelChip.swift */; };
 		EB82992B3C2494D927CD3370 /* DocNestUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */; };
 		EFE086EED508E58D74F74FD9 /* SearchDocumentsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9CF39DD2A6316E2DFD9361 /* SearchDocumentsUseCase.swift */; };
+		F6ABB1DC45B766AD5419EAFE /* SidebarLabelSelectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8797DFFE81CB9CAC18E358D6 /* SidebarLabelSelectionState.swift */; };
 		FE3E50539F4B142C71550969 /* ImportPDFDocumentsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC772C7F97D15E871FCAB48C /* ImportPDFDocumentsUseCase.swift */; };
 /* End PBXBuildFile section */
 
@@ -60,6 +61,7 @@
 		54801B6E1BCE4A70FCDB2E29 /* PDFViewRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewRepresentable.swift; sourceTree = "<group>"; };
 		6D9CF39DD2A6316E2DFD9361 /* SearchDocumentsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchDocumentsUseCase.swift; sourceTree = "<group>"; };
 		83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestUITests.swift; sourceTree = "<group>"; };
+		8797DFFE81CB9CAC18E358D6 /* SidebarLabelSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarLabelSelectionState.swift; sourceTree = "<group>"; };
 		A1C271308AF16C589CE96C8B /* DeferredSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeferredSelectionState.swift; sourceTree = "<group>"; };
 		A28DA505FA162562D9E4D07F /* DocNest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DocNest.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5E121E80E607DB634883795 /* LabelChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelChip.swift; sourceTree = "<group>"; };
@@ -203,6 +205,7 @@
 				EC92D622E6EF259A9AF5A669 /* AppSplitViewLayout.swift */,
 				A1C271308AF16C589CE96C8B /* DeferredSelectionState.swift */,
 				EA07191F675258A004D68388 /* ResizeHandleCursorState.swift */,
+				8797DFFE81CB9CAC18E358D6 /* SidebarLabelSelectionState.swift */,
 				DFFA402AACB7259B8D838914 /* Design */,
 			);
 			path = Shared;
@@ -387,6 +390,7 @@
 				6332EE665429D0D47E89D7F4 /* ResizeHandleCursorState.swift in Sources */,
 				4C1368A6F47101D34D33808A /* RootView.swift in Sources */,
 				EFE086EED508E58D74F74FD9 /* SearchDocumentsUseCase.swift in Sources */,
+				F6ABB1DC45B766AD5419EAFE /* SidebarLabelSelectionState.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
