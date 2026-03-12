@@ -84,10 +84,11 @@ struct LibrarySidebarView: View {
                                     Button {
                                         newLabelColor = color
                                     } label: {
-                                        HStack {
+                                        HStack(spacing: 8) {
                                             Circle()
                                                 .fill(color.color)
-                                                .frame(width: 12, height: 12)
+                                                .frame(width: 16, height: 16)
+                                                .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
                                             Text(color.displayName)
                                             if newLabelColor == color {
                                                 Image(systemName: "checkmark")
