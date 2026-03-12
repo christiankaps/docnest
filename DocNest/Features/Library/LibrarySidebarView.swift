@@ -36,6 +36,9 @@ struct LibrarySidebarView: View {
                 ForEach(LibrarySection.allCases) { section in
                     Button {
                         selectedSection = section
+                        if section == .needsLabels {
+                            selectedLabelIDs.removeAll()
+                        }
                     } label: {
                         HStack {
                             Label(section.rawValue, systemImage: iconName(for: section))

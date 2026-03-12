@@ -165,6 +165,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Volltextnahe Suche ueber Dateiname, Titel, Notizen und Labels.
 - Kombination aus Suchtext und Label-Filtern.
 - Sortierung nach Importdatum, Dokumentdatum, Name, Dateigroesse.
+- "Needs Labels"-Filter zeigt nur Dokumente ohne Labels an. Wenn dieser Filter aktiv ist, werden aktive Label-Filter automatisch geloescht, um logische Konflikte zu vermeiden (ein Dokument kann nicht gleichzeitig keine Labels haben und bestimmte Labels enthalten).
 
 #### Sollte
 - Gespeicherte Smart Filter.
