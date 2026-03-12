@@ -174,7 +174,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 ### 6.5 Suche und Filter
 
 #### Muss
-- Volltextnahe Suche ueber Dateiname, Titel, Notizen und Labels.
+- Volltextnahe Suche ueber Dateiname, Titel und Labels.
 - Kombination aus Suchtext und Label-Filtern.
 - Die Library-Buckets in der linken Seitenleiste zeigen die jeweilige Dokumentanzahl fuer "All Documents", "Recent Imports" und "Needs Labels".
 - Die linke Seitenleiste enthaelt zusaetzlich einen "Bin"-Bucket mit der Anzahl aktuell geloeschter Dokumente.
@@ -196,7 +196,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 ### 6.6 Metadatenbearbeitung
 
 #### Muss
-- Nutzer kann Titel, Notizen, Dokumentdatum und Labels bearbeiten.
+- Nutzer kann Titel, Dokumentdatum und Labels bearbeiten.
 - Technische Metadaten bleiben nachvollziehbar, auch wenn der Titel geaendert wird.
 
 #### Sollte
@@ -292,7 +292,6 @@ Meine Dokumente.docnestlibrary/
 - `importedAt`
 - `pageCount`
 - `fileSize`
-- `textContent` oder Referenz auf Suchindex
 - `isDeleted` oder Statusfeld falls Soft Delete genutzt wird
 
 ### 9.2 Entity Label
@@ -442,14 +441,14 @@ Aktueller Stand:
 ### Phase 5: Suche und Wiederfinden
 Ziel: Dokumente lassen sich schnell wiederfinden.
 
-- Suche ueber Titel, Dateiname, Notizen, Labels.
+- Suche ueber Titel, Dateiname, Labels.
 - Optional Textindex fuer PDF-Inhalte.
 - Kombinierbare Filter.
 - Gespeicherte Smart Filter, wenn Phase 4 stabil ist.
 
 Aktueller Stand:
 - Die Hauptansicht bietet ein eingebautes Suchfeld fuer die geoeffnete Library.
-- Die Suche filtert live ueber Titel, Originaldateiname, Notizen und Labelnamen.
+- Die Suche filtert live ueber Titel, Originaldateiname und Labelnamen.
 - Mehrwort-Suchen arbeiten token-basiert; ein Dokument bleibt nur sichtbar, wenn alle Suchterme ueber die durchsuchbaren Metadaten hinweg gefunden werden.
 - Suchtext und Label-Filter lassen sich kombinieren und wirken gemeinsam auf dieselbe Dokumentliste.
 - PDF-Volltextsuche oder ein separater Suchindex sind noch nicht Teil des aktuellen Schritts.

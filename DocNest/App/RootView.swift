@@ -14,6 +14,7 @@ struct RootView: View {
     @State private var searchFocusRequestToken = 0
     @State private var isImporting = false
     @State private var isDropTargeted = false
+    @State private var documentListViewMode: DocumentListViewMode = .list
     @State private var importSummaryMessage: String?
     @State private var pendingLabelFilterApplyTask: Task<Void, Never>?
     @State private var isConfirmingBinRemoval = false
@@ -94,9 +95,14 @@ struct RootView: View {
                 DocumentListView(
                     documents: filtered,
                     selectedSection: selectedSection,
+                    libraryURL: libraryURL,
+                    allLabels: allLabels,
                     onRestoreDocument: restoreDocumentFromBin,
+                    onMoveToBin: moveToBinFromContextMenu,
+                    onToggleLabel: toggleLabelFromContextMenu,
                     onAssignDroppedLabelToDocument: assignDroppedLabelToDocument,
-                    selectedDocumentIDs: $selectedDocumentIDs
+                    selectedDocumentIDs: $selectedDocumentIDs,
+                    viewMode: $documentListViewMode
                 )
 
                 if isDropTargeted {
@@ -146,6 +152,15 @@ struct RootView: View {
                 } label: {
                     Label("Import", systemImage: "plus")
                 }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                let shareURLs = shareableFileURLs(from: selected)
+                ShareLink(items: shareURLs) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                .disabled(shareURLs.isEmpty)
+                .help("Share selected documents")
             }
         }
         .fileImporter(
@@ -469,6 +484,38 @@ struct RootView: View {
         }
 
         return "Assign this label to \(pendingDroppedLabelAssignment.documentIDs.count) documents?"
+    }
+
+    private func moveToBinFromContextMenu(_ documents: [DocumentRecord]) {
+        do {
+            try DeleteDocumentsUseCase.moveToBin(documents, using: modelContext)
+        } catch {
+            importSummaryMessage = error.localizedDescription
+        }
+    }
+
+    private func toggleLabelFromContextMenu(_ label: LabelTag, _ documents: [DocumentRecord]) {
+        do {
+            if documents.allSatisfy({ doc in
+                doc.labels.contains(where: { $0.persistentModelID == label.persistentModelID })
+            }) {
+                try ManageLabelsUseCase.remove(label, from: documents, using: modelContext)
+            } else {
+                try ManageLabelsUseCase.assign(label, to: documents, using: modelContext)
+            }
+        } catch {
+            importSummaryMessage = error.localizedDescription
+        }
+    }
+
+    private func shareableFileURLs(from documents: [DocumentRecord]) -> [URL] {
+        documents.compactMap { document in
+            guard let path = document.storedFilePath,
+                  DocumentStorageService.fileExists(at: path, libraryURL: libraryURL) else {
+                return nil
+            }
+            return DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
+        }
     }
 
     private func parseDroppedDocumentIDs(_ payloadItems: [String]) -> Set<UUID> {

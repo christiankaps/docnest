@@ -1,6 +1,8 @@
+import AppKit
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import PDFKit
 
 enum DocumentLabelDragPayload {
     static let prefix = "docnest-label:"
@@ -42,14 +44,25 @@ enum DocumentFileDragPayload {
     }
 }
 
+enum DocumentListViewMode: String, CaseIterable {
+    case list
+    case thumbnails
+}
+
 struct DocumentListView: View {
     let documents: [DocumentRecord]
     let selectedSection: LibrarySection
+    let libraryURL: URL?
+    let allLabels: [LabelTag]
     let onRestoreDocument: (DocumentRecord) -> Void
+    let onMoveToBin: ([DocumentRecord]) -> Void
+    let onToggleLabel: (LabelTag, [DocumentRecord]) -> Void
     let onAssignDroppedLabelToDocument: (UUID, DocumentRecord) -> Bool
     @Binding var selectedDocumentIDs: Set<PersistentIdentifier>
+    @Binding var viewMode: DocumentListViewMode
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
+    @AppStorage("docListThumbnailSize") private var thumbnailSize = 160.0
     @AppStorage("docListColumnWidthDocument") private var documentColumnWidth = 300.0
     @AppStorage("docListColumnWidthImported") private var importedColumnWidth = 120.0
     @AppStorage("docListColumnWidthCreated") private var createdColumnWidth = 120.0
@@ -79,7 +92,27 @@ struct DocumentListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
+            listHeader
+
+            if sortedDocuments.isEmpty {
+                ContentUnavailableView(
+                    "No Documents",
+                    systemImage: "doc.text",
+                    description: Text("Import PDFs to populate the library and review them here.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if viewMode == .list {
+                listContent
+            } else {
+                thumbnailContent
+            }
+        }
+        .navigationTitle("Documents")
+    }
+
+    private var listHeader: some View {
+        HStack(spacing: 10) {
+            if viewMode == .list {
                 ResizableColumnHeader(width: $documentColumnWidth, minWidth: 220) {
                     sortButton("Document", column: .title)
                 }
@@ -115,9 +148,32 @@ struct DocumentListView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+            } else {
+                sortButton("Document", column: .title)
+                sortButton("Imported", column: .importedAt)
+                sortButton("Created", column: .createdAt)
+                sortButton("Size", column: .fileSize)
 
                 Spacer(minLength: 0)
 
+                Slider(value: $thumbnailSize, in: 100...320)
+                    .frame(width: 120)
+                    .help("Thumbnail size")
+            }
+
+            Spacer(minLength: 0)
+
+            Picker("View", selection: $viewMode) {
+                Image(systemName: "list.bullet")
+                    .tag(DocumentListViewMode.list)
+                Image(systemName: "square.grid.2x2")
+                    .tag(DocumentListViewMode.thumbnails)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 60)
+            .help("Switch between list and thumbnail view")
+
+            if viewMode == .list {
                 Menu {
                     Text("Visible Attributes")
                     Toggle("Imported", isOn: $showsImportedColumn)
@@ -130,113 +186,201 @@ struct DocumentListView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(Color.secondary.opacity(0.08))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color.secondary.opacity(0.08))
+    }
 
-            if sortedDocuments.isEmpty {
-                ContentUnavailableView(
-                    "No Documents",
-                    systemImage: "doc.text",
-                    description: Text("Import PDFs to populate the library and review them here.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(sortedDocuments, id: \.persistentModelID, selection: $selectedDocumentIDs) { document in
-                    HStack(alignment: .center, spacing: 10) {
-                        HStack(spacing: 10) {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.accentColor.opacity(0.12))
-                                .frame(width: 30, height: 30)
-                                .overlay {
-                                    Image(systemName: "doc.richtext")
-                                        .foregroundStyle(.tint)
-                                        .font(AppTypography.listTitle)
-                                }
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(document.title)
-                                    .font(AppTypography.listTitle)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .frame(width: documentColumnWidth, alignment: .leading)
-
-                        if showsImportedColumn {
-                            Text(document.importedAt, format: .dateTime.year().month().day())
-                                .font(AppTypography.listMeta.monospacedDigit())
-                                .frame(width: importedColumnWidth, alignment: .leading)
-                        }
-
-                        if showsCreatedColumn {
-                            Group {
-                                if let sourceCreatedAt = document.sourceCreatedAt {
-                                    Text(sourceCreatedAt, format: .dateTime.year().month().day())
-                                } else {
-                                    Text("-")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .font(AppTypography.listMeta.monospacedDigit())
-                            .frame(width: createdColumnWidth, alignment: .leading)
-                        }
-
-                        if showsPagesColumn {
-                            Text("\(document.pageCount)")
-                                .font(AppTypography.listMeta.monospacedDigit())
-                                .frame(width: pagesColumnWidth, alignment: .leading)
-                        }
-
-                        if showsSizeColumn {
-                            Text(document.formattedFileSize)
-                                .font(AppTypography.listMeta.monospacedDigit())
-                                .frame(width: sizeColumnWidth, alignment: .leading)
-                        }
-
-                        if showsLabelsColumn {
-                            DocumentLabelStrip(labels: document.labels)
-                                .frame(width: labelsColumnWidth, alignment: .leading)
-                        }
-
-                        Spacer(minLength: 0)
+    private var listContent: some View {
+        List(sortedDocuments, id: \.persistentModelID, selection: $selectedDocumentIDs) { document in
+            documentRow(for: document)
+                .tag(document.persistentModelID)
+                .contextMenu { documentContextMenu(for: document) }
+                .onDrag { dragProvider(for: document) }
+                .dropDestination(for: String.self) { items, _ in
+                    guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
+                        return false
                     }
-                    .padding(.vertical, 4)
-                    .tag(document.persistentModelID)
-                    .contextMenu {
-                        if selectedSection == .bin {
-                            Button("Restore") {
-                                onRestoreDocument(document)
-                            }
-                        }
-                    }
-                    .onDrag {
-                        let documentIDsToDrag: [UUID]
+                    return onAssignDroppedLabelToDocument(labelID, document)
+                }
+        }
+        .listStyle(.plain)
+    }
 
-                        if selectedDocumentIDs.contains(document.persistentModelID) {
-                            documentIDsToDrag = sortedDocuments
-                                .filter { selectedDocumentIDs.contains($0.persistentModelID) }
-                                .map(\.id)
+    private var thumbnailContent: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbnailSize), spacing: 16)], spacing: 16) {
+                ForEach(sortedDocuments, id: \.persistentModelID) { document in
+                    DocumentThumbnailCell(
+                        document: document,
+                        libraryURL: libraryURL,
+                        size: thumbnailSize,
+                        isSelected: selectedDocumentIDs.contains(document.persistentModelID)
+                    )
+                    .onTapGesture {
+                        if NSEvent.modifierFlags.contains(.command) {
+                            if selectedDocumentIDs.contains(document.persistentModelID) {
+                                selectedDocumentIDs.remove(document.persistentModelID)
+                            } else {
+                                selectedDocumentIDs.insert(document.persistentModelID)
+                            }
                         } else {
-                            documentIDsToDrag = [document.id]
+                            selectedDocumentIDs = [document.persistentModelID]
                         }
-
-                        return NSItemProvider(
-                            item: DocumentFileDragPayload.payload(for: documentIDsToDrag) as NSString,
-                            typeIdentifier: UTType.plainText.identifier
-                        )
                     }
-                    .dropDestination(for: String.self) { items, _ in
-                        guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
-                            return false
-                        }
+                    .contextMenu { documentContextMenu(for: document) }
+                    .onDrag { dragProvider(for: document) }
+                }
+            }
+            .padding(16)
+        }
+    }
 
-                        return onAssignDroppedLabelToDocument(labelID, document)
+    @ViewBuilder
+    private func documentRow(for document: DocumentRecord) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.accentColor.opacity(0.12))
+                    .frame(width: 30, height: 30)
+                    .overlay {
+                        Image(systemName: "doc.richtext")
+                            .foregroundStyle(.tint)
+                            .font(AppTypography.listTitle)
+                    }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(document.title)
+                        .font(AppTypography.listTitle)
+                        .lineLimit(1)
+                }
+            }
+            .frame(width: documentColumnWidth, alignment: .leading)
+
+            if showsImportedColumn {
+                Text(document.importedAt, format: .dateTime.year().month().day())
+                    .font(AppTypography.listMeta.monospacedDigit())
+                    .frame(width: importedColumnWidth, alignment: .leading)
+            }
+
+            if showsCreatedColumn {
+                Group {
+                    if let sourceCreatedAt = document.sourceCreatedAt {
+                        Text(sourceCreatedAt, format: .dateTime.year().month().day())
+                    } else {
+                        Text("-")
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .listStyle(.plain)
+                .font(AppTypography.listMeta.monospacedDigit())
+                .frame(width: createdColumnWidth, alignment: .leading)
+            }
+
+            if showsPagesColumn {
+                Text("\(document.pageCount)")
+                    .font(AppTypography.listMeta.monospacedDigit())
+                    .frame(width: pagesColumnWidth, alignment: .leading)
+            }
+
+            if showsSizeColumn {
+                Text(document.formattedFileSize)
+                    .font(AppTypography.listMeta.monospacedDigit())
+                    .frame(width: sizeColumnWidth, alignment: .leading)
+            }
+
+            if showsLabelsColumn {
+                DocumentLabelStrip(labels: document.labels) { label in
+                    onRemoveLabelFromDocument(label, document)
+                }
+                .frame(width: labelsColumnWidth, alignment: .leading)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func onRemoveLabelFromDocument(_ label: LabelTag, _ document: DocumentRecord) {
+        onToggleLabel(label, [document])
+    }
+
+    private func contextMenuDocuments(for document: DocumentRecord) -> [DocumentRecord] {
+        if selectedDocumentIDs.contains(document.persistentModelID) {
+            return sortedDocuments.filter { selectedDocumentIDs.contains($0.persistentModelID) }
+        }
+        return [document]
+    }
+
+    @ViewBuilder
+    private func documentContextMenu(for document: DocumentRecord) -> some View {
+        let targets = contextMenuDocuments(for: document)
+
+        if selectedSection == .bin {
+            Button("Restore") {
+                onRestoreDocument(document)
+            }
+        } else {
+            if !allLabels.isEmpty {
+                Menu("Labels") {
+                    ForEach(allLabels) { label in
+                        Button {
+                            onToggleLabel(label, targets)
+                        } label: {
+                            HStack {
+                                Text(label.name)
+                                if targets.allSatisfy({ doc in doc.labels.contains(where: { $0.persistentModelID == label.persistentModelID }) }) {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            if let fileURL = originalFileURL(for: document) {
+                Button("Open Original") {
+                    NSWorkspace.shared.open(fileURL)
+                }
+
+                Button("Show in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                }
+
+                Divider()
+            }
+
+            Button("Move to Bin") {
+                onMoveToBin(targets)
             }
         }
-        .navigationTitle("Documents")
+    }
+
+    private func originalFileURL(for document: DocumentRecord) -> URL? {
+        guard let path = document.storedFilePath, let libraryURL,
+              DocumentStorageService.fileExists(at: path, libraryURL: libraryURL) else {
+            return nil
+        }
+        return DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
+    }
+
+    private func dragProvider(for document: DocumentRecord) -> NSItemProvider {
+        let documentIDsToDrag: [UUID]
+
+        if selectedDocumentIDs.contains(document.persistentModelID) {
+            documentIDsToDrag = sortedDocuments
+                .filter { selectedDocumentIDs.contains($0.persistentModelID) }
+                .map(\.id)
+        } else {
+            documentIDsToDrag = [document.id]
+        }
+
+        return NSItemProvider(
+            item: DocumentFileDragPayload.payload(for: documentIDsToDrag) as NSString,
+            typeIdentifier: UTType.plainText.identifier
+        )
     }
 
     private func sortButton(_ title: String, column: SortColumn) -> some View {
@@ -385,6 +529,7 @@ private enum SortDirection {
 
 private struct DocumentLabelStrip: View {
     let labels: [LabelTag]
+    var onRemove: ((LabelTag) -> Void)?
 
     private var sortedLabels: [LabelTag] {
         labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -398,6 +543,11 @@ private struct DocumentLabelStrip: View {
         max(sortedLabels.count - visibleLabels.count, 0)
     }
 
+    init(labels: [LabelTag], onRemove: ((LabelTag) -> Void)? = nil) {
+        self.labels = labels
+        self.onRemove = onRemove
+    }
+
     var body: some View {
         if sortedLabels.isEmpty {
             Text("No labels")
@@ -406,7 +556,7 @@ private struct DocumentLabelStrip: View {
         } else {
             HStack(spacing: 6) {
                 ForEach(visibleLabels) { label in
-                    LabelChip(name: label.name, color: label.labelColor, size: .compact)
+                    RemovableLabelChip(label: label, onRemove: onRemove)
                 }
 
                 if hiddenLabelCount > 0 {
@@ -416,6 +566,87 @@ private struct DocumentLabelStrip: View {
                 }
             }
             .lineLimit(1)
+        }
+    }
+}
+
+private struct RemovableLabelChip: View {
+    let label: LabelTag
+    var onRemove: ((LabelTag) -> Void)?
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 3) {
+            LabelChip(name: label.name, color: label.labelColor, size: .compact)
+
+            if isHovering, onRemove != nil {
+                Button {
+                    onRemove?(label)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(label.labelColor.color.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity)
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovering = hovering
+            }
+        }
+    }
+}
+
+private struct DocumentThumbnailCell: View {
+    let document: DocumentRecord
+    let libraryURL: URL?
+    let size: Double
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(spacing: 6) {
+            thumbnailImage
+                .frame(width: size, height: size * 1.3)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+                )
+
+            Text(document.title)
+                .font(AppTypography.labelChip)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(width: size)
+        }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+        )
+    }
+
+    @ViewBuilder
+    private var thumbnailImage: some View {
+        if let path = document.storedFilePath,
+           let libraryURL,
+           DocumentStorageService.fileExists(at: path, libraryURL: libraryURL),
+           let pdfDocument = PDFDocument(url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)),
+           let page = pdfDocument.page(at: 0) {
+            let nsImage = page.thumbnail(of: NSSize(width: size * 2, height: size * 2.6), for: .mediaBox)
+            Image(nsImage: nsImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        } else {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.secondary.opacity(0.08))
+                .overlay {
+                    Image(systemName: "doc.richtext")
+                        .font(.system(size: size * 0.25))
+                        .foregroundStyle(.secondary)
+                }
         }
     }
 }
@@ -437,9 +668,14 @@ private struct DocumentLabelStrip: View {
     return DocumentListView(
         documents: samples,
         selectedSection: .allDocuments,
+        libraryURL: nil,
+        allLabels: [labels.finance, labels.tax, labels.contracts],
         onRestoreDocument: { _ in },
+        onMoveToBin: { _ in },
+        onToggleLabel: { _, _ in },
         onAssignDroppedLabelToDocument: { _, _ in false },
-        selectedDocumentIDs: .constant(Set(samples.first.map { [$0.persistentModelID] } ?? []))
+        selectedDocumentIDs: .constant(Set(samples.first.map { [$0.persistentModelID] } ?? [])),
+        viewMode: .constant(.list)
     )
     .modelContainer(container)
 }

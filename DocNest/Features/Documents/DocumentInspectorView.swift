@@ -11,6 +11,10 @@ struct DocumentInspectorView: View {
     @State private var newLabelName = ""
     @State private var inspectorErrorMessage: String?
     @State private var pendingDeletion: [DocumentRecord] = []
+    @State private var editingTitle = ""
+    @State private var isEditingTitle = false
+    @State private var editingDocumentDate: Date = .now
+    @State private var isEditingDocumentDate = false
 
     private var singleSelectedDocument: DocumentRecord? {
         documents.count == 1 ? documents.first : nil
@@ -67,6 +71,10 @@ struct DocumentInspectorView: View {
             }
         } message: {
             Text(pendingDeletionMessage)
+        }
+        .onChange(of: documents.first?.persistentModelID) {
+            isEditingTitle = false
+            isEditingDocumentDate = false
         }
         .alert("Inspector Error", isPresented: inspectorErrorBinding) {
             Button("OK", role: .cancel) {
@@ -125,8 +133,25 @@ struct DocumentInspectorView: View {
     private func documentMetadataSection(for document: DocumentRecord) -> some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(document.title)
-                    .font(AppTypography.title)
+                if isEditingTitle {
+                    TextField("Title", text: $editingTitle)
+                        .font(AppTypography.title)
+                        .textFieldStyle(.plain)
+                        .onSubmit {
+                            commitTitleEdit(for: document)
+                        }
+                        .onExitCommand {
+                            isEditingTitle = false
+                        }
+                } else {
+                    Text(document.title)
+                        .font(AppTypography.title)
+                        .onTapGesture(count: 2) {
+                            editingTitle = document.title
+                            isEditingTitle = true
+                        }
+                        .help("Double-click to edit title")
+                }
 
                 Text(document.originalFileName)
                     .font(AppTypography.body)
@@ -136,10 +161,42 @@ struct DocumentInspectorView: View {
                     .font(AppTypography.body)
                     .foregroundStyle(.secondary)
 
-                if let sourceCreatedAt = document.sourceCreatedAt {
-                    Text("Created \(sourceCreatedAt.formatted(date: .abbreviated, time: .omitted))")
+                HStack(spacing: 6) {
+                    if isEditingDocumentDate {
+                        DatePicker(
+                            "Document Date",
+                            selection: $editingDocumentDate,
+                            displayedComponents: .date
+                        )
+                        .labelsHidden()
+                        .datePickerStyle(.field)
+
+                        Button("Save") {
+                            commitDocumentDateEdit(for: document)
+                        }
+                        .buttonStyle(.borderless)
+
+                        Button("Cancel") {
+                            isEditingDocumentDate = false
+                        }
+                        .buttonStyle(.borderless)
+                    } else if let sourceCreatedAt = document.sourceCreatedAt {
+                        Text("Document Date \(sourceCreatedAt.formatted(date: .abbreviated, time: .omitted))")
+                            .font(AppTypography.body)
+                            .foregroundStyle(.secondary)
+                            .onTapGesture(count: 2) {
+                                editingDocumentDate = sourceCreatedAt
+                                isEditingDocumentDate = true
+                            }
+                            .help("Double-click to edit document date")
+                    } else {
+                        Button("Set Document Date") {
+                            editingDocumentDate = .now
+                            isEditingDocumentDate = true
+                        }
+                        .buttonStyle(.borderless)
                         .font(AppTypography.body)
-                        .foregroundStyle(.secondary)
+                    }
                 }
 
                 Text("\(document.pageCount) pages")
@@ -447,6 +504,32 @@ struct DocumentInspectorView: View {
         } catch {
             inspectorErrorMessage = error.localizedDescription
         }
+    }
+
+    private func commitTitleEdit(for document: DocumentRecord) {
+        let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            isEditingTitle = false
+            return
+        }
+
+        document.title = trimmed
+        do {
+            try modelContext.save()
+        } catch {
+            inspectorErrorMessage = error.localizedDescription
+        }
+        isEditingTitle = false
+    }
+
+    private func commitDocumentDateEdit(for document: DocumentRecord) {
+        document.sourceCreatedAt = editingDocumentDate
+        do {
+            try modelContext.save()
+        } catch {
+            inspectorErrorMessage = error.localizedDescription
+        }
+        isEditingDocumentDate = false
     }
 
     private func promptDeletionAction(for documents: [DocumentRecord]) {
