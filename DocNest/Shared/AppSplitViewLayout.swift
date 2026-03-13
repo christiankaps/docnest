@@ -4,7 +4,6 @@ enum AppSplitViewLayout {
     static let documentListMinWidth = 280.0
     static let documentListIdealWidth = 740.0
     static let closedLibraryContentMinWidth = 360.0
-    static let closedLibraryContentIdealWidth = 740.0
     static let minimumWindowHeight = 700.0
     static let defaultWindowWidth = 1480.0
     static let defaultWindowHeight = 860.0

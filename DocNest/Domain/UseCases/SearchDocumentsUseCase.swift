@@ -1,15 +1,6 @@
 import SwiftData
 
 enum SearchDocumentsUseCase {
-    static func matches(_ document: DocumentRecord, query: String) -> Bool {
-        let searchTerms = normalizedSearchTerms(from: query)
-        guard !searchTerms.isEmpty else {
-            return true
-        }
-
-        return matchesAllSearchTerms(document, searchTerms: searchTerms)
-    }
-
     static func filter(
         _ documents: [DocumentRecord],
         query: String,

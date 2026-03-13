@@ -96,11 +96,10 @@ struct RootView: View {
         }
 
         ToolbarItem(placement: .primaryAction) {
-            let shareURLs = coordinator.shareableFileURLs(from: coordinator.selectedDocuments)
-            ShareLink(items: shareURLs) {
+            ShareLink(items: coordinator.cachedShareURLs) {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
-            .disabled(shareURLs.isEmpty)
+            .disabled(coordinator.cachedShareURLs.isEmpty)
             .help("Share selected documents")
         }
     }
@@ -186,6 +185,28 @@ private struct RootViewChangeHandlers: ViewModifier {
     let allDocuments: [DocumentRecord]
     let allLabels: [LabelTag]
 
+    /// Lightweight fingerprint that changes when documents are added, removed,
+    /// trashed/restored, or have their labels modified -- covering mutations
+    /// that `allDocuments.count` alone would miss.
+    private var documentFingerprint: Int {
+        var hasher = Hasher()
+        for document in allDocuments {
+            hasher.combine(document.persistentModelID)
+            hasher.combine(document.trashedAt)
+            hasher.combine(document.labels.count)
+        }
+        return hasher.finalize()
+    }
+
+    private var labelFingerprint: Int {
+        var hasher = Hasher()
+        for label in allLabels {
+            hasher.combine(label.persistentModelID)
+            hasher.combine(label.name)
+        }
+        return hasher.finalize()
+    }
+
     func body(content: Content) -> some View {
         content
             .onReceive(NotificationCenter.default.publisher(for: .docNestFocusSearch)) { _ in
@@ -212,10 +233,10 @@ private struct RootViewChangeHandlers: ViewModifier {
                 coordinator.recomputeFilteredDocuments()
                 coordinator.pruneSelectedDocumentIDs()
             }
-            .onChange(of: allDocuments.count) {
+            .onChange(of: documentFingerprint) {
                 coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels)
             }
-            .onChange(of: allLabels.count) {
+            .onChange(of: labelFingerprint) {
                 coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
                 coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels)
             }

@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
-import PDFKit
 
 enum DocumentLabelDragPayload {
     static let prefix = "docnest-label:"
@@ -142,18 +141,19 @@ struct DocumentListView: View {
     }
 
     var body: some View {
+        let documents = sortedDocuments
         VStack(spacing: 0) {
-            if sortedDocuments.isEmpty || coordinator.documentListViewMode != .list {
+            if documents.isEmpty || coordinator.documentListViewMode != .list {
                 listHeader
             }
 
             Group {
-                if sortedDocuments.isEmpty {
+                if documents.isEmpty {
                     emptyContent
                 } else if coordinator.documentListViewMode == .list {
-                    listContent
+                    listContent(documents)
                 } else {
-                    thumbnailContent
+                    thumbnailContent(documents)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -254,11 +254,11 @@ struct DocumentListView: View {
         }
     }
 
-    private var listContent: some View {
+    private func listContent(_ sortedDocs: [DocumentRecord]) -> some View {
         ScrollView {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 Section {
-                ForEach(Array(sortedDocuments.enumerated()), id: \.element.persistentModelID) { index, document in
+                ForEach(Array(sortedDocs.enumerated()), id: \.element.persistentModelID) { index, document in
                     let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
 
                     documentRow(for: document)
@@ -312,12 +312,12 @@ struct DocumentListView: View {
         return index.isMultiple(of: 2) ? Color.clear : Color.secondary.opacity(0.06)
     }
 
-    private var thumbnailContent: some View {
+    private func thumbnailContent(_ sortedDocs: [DocumentRecord]) -> some View {
         @Bindable var coordinator = coordinator
 
         return ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbnailSize), spacing: 16)], spacing: 16) {
-                ForEach(sortedDocuments, id: \.persistentModelID) { document in
+                ForEach(sortedDocs, id: \.persistentModelID) { document in
                     DocumentThumbnailCell(
                         document: document,
                         libraryURL: coordinator.libraryURL,
@@ -412,7 +412,7 @@ struct DocumentListView: View {
 
     private func contextMenuDocuments(for document: DocumentRecord) -> [DocumentRecord] {
         if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
-            return sortedDocuments.filter { coordinator.selectedDocumentIDs.contains($0.persistentModelID) }
+            return coordinator.filteredDocuments.filter { coordinator.selectedDocumentIDs.contains($0.persistentModelID) }
         }
         return [document]
     }
@@ -475,7 +475,7 @@ struct DocumentListView: View {
         let documentIDsToDrag: [UUID]
 
         if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
-            documentIDsToDrag = sortedDocuments
+            documentIDsToDrag = coordinator.filteredDocuments
                 .filter { coordinator.selectedDocumentIDs.contains($0.persistentModelID) }
                 .map(\.id)
         } else {

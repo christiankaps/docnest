@@ -38,6 +38,7 @@ struct LibrarySidebarView: View {
 
     var body: some View {
         let renderStartTime = Date().timeIntervalSinceReferenceDate
+        let labels = sortedLabels
         @Bindable var coordinator = coordinator
 
         List {
@@ -148,7 +149,7 @@ struct LibrarySidebarView: View {
                         .font(AppTypography.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(sortedLabels) { label in
+                    ForEach(labels) { label in
                         if editingLabelID == label.persistentModelID {
                             TextField("Label name", text: $editedLabelName)
                                 .textFieldStyle(.roundedBorder)
@@ -420,14 +421,6 @@ struct LibrarySidebarView: View {
         }
     }
 
-    private func moveLabels(from source: IndexSet, to destination: Int) {
-        do {
-            try ManageLabelsUseCase.reorderLabels(from: source, to: destination, labels: sortedLabels, using: modelContext)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     private func iconName(for section: LibrarySection) -> String {
         switch section {
         case .allDocuments:
@@ -522,9 +515,7 @@ struct LibrarySidebarCounts {
     private let sectionCounts: [LibrarySection: Int]
     private let labelCounts: [PersistentIdentifier: Int]
 
-    init(documents: [DocumentRecord], labels: [LabelTag], recentLimit: Int) {
-        let activeDocuments = documents.filter { $0.trashedAt == nil }
-        let trashedDocuments = documents.filter { $0.trashedAt != nil }
+    init(activeDocuments: [DocumentRecord], trashedCount: Int, labels: [LabelTag], recentLimit: Int) {
         var needsLabelsCount = 0
         var computedLabelCounts = Dictionary(uniqueKeysWithValues: labels.map { ($0.persistentModelID, 0) })
 
@@ -542,7 +533,7 @@ struct LibrarySidebarCounts {
             .allDocuments: activeDocuments.count,
             .recent: min(activeDocuments.count, recentLimit),
             .needsLabels: needsLabelsCount,
-            .bin: trashedDocuments.count
+            .bin: trashedCount
         ]
         labelCounts = computedLabelCounts
     }

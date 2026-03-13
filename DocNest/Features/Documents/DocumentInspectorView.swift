@@ -221,16 +221,21 @@ struct DocumentInspectorView: View {
                 }
             }
 
+            let resolvedFileURL = originalFileURL(for: document)
             HStack(spacing: 12) {
                 Button("Open Original") {
-                    openOriginalFile(for: document)
+                    if let fileURL = resolvedFileURL {
+                        NSWorkspace.shared.open(fileURL)
+                    }
                 }
-                .disabled(originalFileURL(for: document) == nil)
+                .disabled(resolvedFileURL == nil)
 
                 Button("Show in Finder") {
-                    showOriginalFileInFinder(for: document)
+                    if let fileURL = resolvedFileURL {
+                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+                    }
                 }
-                .disabled(originalFileURL(for: document) == nil)
+                .disabled(resolvedFileURL == nil)
 
                 if let libraryURL {
                     Button("Show Library") {
@@ -286,7 +291,7 @@ struct DocumentInspectorView: View {
                     .foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(document.labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { label in
+                    ForEach(document.labels) { label in
                         HStack {
                             LabelChip(name: label.name, color: label.labelColor)
                             Spacer()
@@ -613,35 +618,12 @@ struct DocumentInspectorView: View {
 }
 
 private struct BatchLabelSelectionSummary {
-    let documents: [DocumentRecord]
-    let availableLabels: [LabelTag]
+    let labelsOnAllSelectedDocuments: [LabelTag]
+    let partiallyAssignedLabels: [LabelTag]
+    private let labelStatesByID: [PersistentIdentifier: BatchLabelState]
 
-    var labelsOnAllSelectedDocuments: [LabelTag] {
-        labelStates.filter(\.isAssignedToAllSelectedDocuments).map(\.label)
-    }
-
-    var partiallyAssignedLabels: [LabelTag] {
-        labelStates.filter(\.isPartiallyAssigned).map(\.label)
-    }
-
-    func actionTitle(for label: LabelTag) -> String {
-        guard let state = labelStates.first(where: { $0.label.persistentModelID == label.persistentModelID }) else {
-            return "Add to all"
-        }
-
-        if state.isAssignedToAllSelectedDocuments {
-            return "Remove from all"
-        }
-
-        if state.isPartiallyAssigned {
-            return "Add to remaining"
-        }
-
-        return "Add to all"
-    }
-
-    private var labelStates: [BatchLabelState] {
-        availableLabels.compactMap { label in
+    init(documents: [DocumentRecord], availableLabels: [LabelTag]) {
+        let states: [BatchLabelState] = availableLabels.compactMap { label in
             let assignedDocumentCount = documents.reduce(into: 0) { count, document in
                 if document.labels.contains(where: { $0.persistentModelID == label.persistentModelID }) {
                     count += 1
@@ -659,6 +641,26 @@ private struct BatchLabelSelectionSummary {
             )
         }
         .sorted { $0.label.name.localizedCaseInsensitiveCompare($1.label.name) == .orderedAscending }
+
+        labelsOnAllSelectedDocuments = states.filter(\.isAssignedToAllSelectedDocuments).map(\.label)
+        partiallyAssignedLabels = states.filter(\.isPartiallyAssigned).map(\.label)
+        labelStatesByID = Dictionary(uniqueKeysWithValues: states.map { ($0.label.persistentModelID, $0) })
+    }
+
+    func actionTitle(for label: LabelTag) -> String {
+        guard let state = labelStatesByID[label.persistentModelID] else {
+            return "Add to all"
+        }
+
+        if state.isAssignedToAllSelectedDocuments {
+            return "Remove from all"
+        }
+
+        if state.isPartiallyAssigned {
+            return "Add to remaining"
+        }
+
+        return "Add to all"
     }
 }
 

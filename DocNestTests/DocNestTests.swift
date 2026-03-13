@@ -247,32 +247,6 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(state.appliedSelection, ["tax"])
     }
 
-    func testSidebarLabelSelectionStateUpdatesDisplayedSelectionImmediately() {
-        var state = SidebarLabelSelectionState<String>()
-
-        state.toggle("finance")
-
-        XCTAssertEqual(state.displayedSelection, ["finance"])
-    }
-
-    func testSidebarLabelSelectionStateClearsDisplayedSelection() {
-        var state = SidebarLabelSelectionState<String>()
-
-        state.replaceDisplayedSelection(with: ["finance", "tax"])
-        state.clear()
-
-        XCTAssertTrue(state.displayedSelection.isEmpty)
-    }
-
-    func testSidebarLabelSelectionStateSyncsAvailableSelections() {
-        var state = SidebarLabelSelectionState<String>()
-
-        state.replaceDisplayedSelection(with: ["finance", "tax", "legal"])
-        state.syncAvailableSelections(["tax", "contracts"])
-
-        XCTAssertEqual(state.displayedSelection, ["tax"])
-    }
-
     func testLibrarySidebarCountsReflectSectionBucketsAndLabels() {
         let finance = LabelTag(name: "Finance")
         let tax = LabelTag(name: "Tax")
@@ -283,7 +257,7 @@ final class DocNestTests: XCTestCase {
             DocumentRecord(originalFileName: "contract.pdf", title: "Contract", importedAt: .now, pageCount: 1)
         ]
 
-        let counts = LibrarySidebarCounts(documents: documents, labels: [finance, tax, archive], recentLimit: 10)
+        let counts = LibrarySidebarCounts(activeDocuments: documents, trashedCount: 0, labels: [finance, tax, archive], recentLimit: 10)
 
         XCTAssertEqual(counts.count(for: .allDocuments), 3)
         XCTAssertEqual(counts.count(for: .recent), 3)
@@ -303,7 +277,7 @@ final class DocNestTests: XCTestCase {
             )
         }
 
-        let counts = LibrarySidebarCounts(documents: documents, labels: [], recentLimit: 10)
+        let counts = LibrarySidebarCounts(activeDocuments: documents, trashedCount: 0, labels: [], recentLimit: 10)
 
         XCTAssertEqual(counts.count(for: .allDocuments), 12)
         XCTAssertEqual(counts.count(for: .recent), 10)
@@ -312,13 +286,12 @@ final class DocNestTests: XCTestCase {
 
     func testLibrarySidebarCountsExcludesBinItemsFromActiveBuckets() {
         let label = LabelTag(name: "Finance")
-        let documents = [
+        let activeDocuments = [
             DocumentRecord(originalFileName: "active-a.pdf", title: "A", importedAt: .now, pageCount: 1, labels: [label]),
-            DocumentRecord(originalFileName: "active-b.pdf", title: "B", importedAt: .now, pageCount: 1),
-            DocumentRecord(originalFileName: "bin.pdf", title: "Bin", importedAt: .now, pageCount: 1, trashedAt: .now, labels: [label])
+            DocumentRecord(originalFileName: "active-b.pdf", title: "B", importedAt: .now, pageCount: 1)
         ]
 
-        let counts = LibrarySidebarCounts(documents: documents, labels: [label], recentLimit: 10)
+        let counts = LibrarySidebarCounts(activeDocuments: activeDocuments, trashedCount: 1, labels: [label], recentLimit: 10)
 
         XCTAssertEqual(counts.count(for: .allDocuments), 2)
         XCTAssertEqual(counts.count(for: .needsLabels), 1)
@@ -386,7 +359,7 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
-    func testImportUseCaseCopiesPdfAndCreatesRecord() throws {
+    func testImportUseCaseCopiesPdfAndCreatesRecord() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let sourcePDFURL = tempRoot.appendingPathComponent("invoice_march-2026.pdf")
@@ -406,7 +379,7 @@ final class DocNestTests: XCTestCase {
         let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
         let context = container.mainContext
 
-        let importResult = ImportPDFDocumentsUseCase.execute(
+        let importResult = await ImportPDFDocumentsUseCase.execute(
             urls: [sourcePDFURL],
             into: libraryURL,
             using: context
@@ -433,7 +406,7 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
-    func testImportUseCaseContinuesAfterPerFileFailure() throws {
+    func testImportUseCaseContinuesAfterPerFileFailure() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let missingPDFURL = tempRoot.appendingPathComponent("missing.pdf")
@@ -454,7 +427,7 @@ final class DocNestTests: XCTestCase {
         let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
         let context = container.mainContext
 
-        let importResult = ImportPDFDocumentsUseCase.execute(
+        let importResult = await ImportPDFDocumentsUseCase.execute(
             urls: [missingPDFURL, validPDFURL],
             into: libraryURL,
             using: context
@@ -469,7 +442,7 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
-    func testImportUseCaseSkipsDuplicatePdfByHash() throws {
+    func testImportUseCaseSkipsDuplicatePdfByHash() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let sourcePDFURL = tempRoot.appendingPathComponent("original.pdf")
@@ -491,14 +464,14 @@ final class DocNestTests: XCTestCase {
         let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
         let context = container.mainContext
 
-        let firstImport = ImportPDFDocumentsUseCase.execute(
+        let firstImport = await ImportPDFDocumentsUseCase.execute(
             urls: [sourcePDFURL],
             into: libraryURL,
             using: context
         )
         XCTAssertEqual(firstImport.importedCount, 1)
 
-        let secondImport = ImportPDFDocumentsUseCase.execute(
+        let secondImport = await ImportPDFDocumentsUseCase.execute(
             urls: [duplicatePDFURL],
             into: libraryURL,
             using: context
@@ -512,7 +485,7 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
-    func testImportUseCaseReportsUnsupportedFilesAndImportsValidPDFs() throws {
+    func testImportUseCaseReportsUnsupportedFilesAndImportsValidPDFs() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let validPDFURL = tempRoot.appendingPathComponent("invoice.pdf")
@@ -534,7 +507,7 @@ final class DocNestTests: XCTestCase {
         let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
         let context = container.mainContext
 
-        let importResult = ImportPDFDocumentsUseCase.execute(
+        let importResult = await ImportPDFDocumentsUseCase.execute(
             urls: [validPDFURL, unsupportedTextURL],
             into: libraryURL,
             using: context
@@ -562,8 +535,8 @@ final class DocNestTests: XCTestCase {
         )
         context.insert(document)
 
-        let firstLabel = try ManageLabelsUseCase.createAndAssignLabel(named: "  Finance   Team  ", to: document, using: context)
-        let secondLabel = try ManageLabelsUseCase.createAndAssignLabel(named: "finance team", to: document, using: context)
+        let firstLabel = try ManageLabelsUseCase.createAndAssignLabel(named: "  Finance   Team  ", to: [document], using: context)
+        let secondLabel = try ManageLabelsUseCase.createAndAssignLabel(named: "finance team", to: [document], using: context)
 
         let labels = try context.fetch(FetchDescriptor<LabelTag>())
         XCTAssertEqual(labels.count, 1)
@@ -848,10 +821,12 @@ final class DocNestTests: XCTestCase {
             labels: [finance]
         )
 
-        XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "march"))
-        XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "invoice-march-2026"))
-        XCTAssertFalse(SearchDocumentsUseCase.matches(document, query: "accountant"))
-        XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "finance"))
+        let docs = [document]
+        let noLabels = Set<PersistentIdentifier>()
+        XCTAssertFalse(SearchDocumentsUseCase.filter(docs, query: "march", selectedLabelIDs: noLabels).isEmpty)
+        XCTAssertFalse(SearchDocumentsUseCase.filter(docs, query: "invoice-march-2026", selectedLabelIDs: noLabels).isEmpty)
+        XCTAssertTrue(SearchDocumentsUseCase.filter(docs, query: "accountant", selectedLabelIDs: noLabels).isEmpty)
+        XCTAssertFalse(SearchDocumentsUseCase.filter(docs, query: "finance", selectedLabelIDs: noLabels).isEmpty)
     }
 
     func testSearchDocumentsRequiresAllTermsToMatch() {
@@ -864,8 +839,10 @@ final class DocNestTests: XCTestCase {
             labels: [finance]
         )
 
-        XCTAssertTrue(SearchDocumentsUseCase.matches(document, query: "march finance"))
-        XCTAssertFalse(SearchDocumentsUseCase.matches(document, query: "march archive"))
+        let docs = [document]
+        let noLabels = Set<PersistentIdentifier>()
+        XCTAssertFalse(SearchDocumentsUseCase.filter(docs, query: "march finance", selectedLabelIDs: noLabels).isEmpty)
+        XCTAssertTrue(SearchDocumentsUseCase.filter(docs, query: "march archive", selectedLabelIDs: noLabels).isEmpty)
     }
 
     func testSearchDocumentsFilterCombinesTextAndSelectedLabels() {

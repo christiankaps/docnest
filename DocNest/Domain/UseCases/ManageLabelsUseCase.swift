@@ -3,11 +3,6 @@ import SwiftData
 
 enum ManageLabelsUseCase {
     @discardableResult
-    static func createLabel(named name: String, using modelContext: ModelContext) throws -> LabelTag {
-        try createLabel(named: name, color: .blue, using: modelContext)
-    }
-
-    @discardableResult
     static func createLabel(named name: String, color: LabelColor, using modelContext: ModelContext) throws -> LabelTag {
         let result = try createOrFetchLabel(named: name, color: color, using: modelContext)
 
@@ -16,11 +11,6 @@ enum ManageLabelsUseCase {
         }
 
         return result.label
-    }
-
-    @discardableResult
-    static func createAndAssignLabel(named name: String, to document: DocumentRecord, using modelContext: ModelContext) throws -> LabelTag {
-        try createAndAssignLabel(named: name, to: [document], using: modelContext)
     }
 
     @discardableResult

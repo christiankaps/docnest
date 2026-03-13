@@ -7,8 +7,10 @@ final class ThumbnailCache {
     private(set) var loadedThumbnails: [String: NSImage] = [:]
     private let backingCache = NSCache<NSString, NSImage>()
     private var inFlightTasks: [String: Task<Void, Never>] = [:]
+    private let countLimit: Int
 
     init(countLimit: Int = 500) {
+        self.countLimit = countLimit
         backingCache.countLimit = countLimit
     }
 
@@ -31,11 +33,14 @@ final class ThumbnailCache {
         return nil
     }
 
-    func invalidate() {
-        backingCache.removeAllObjects()
-        for task in inFlightTasks.values { task.cancel() }
-        inFlightTasks.removeAll()
-        loadedThumbnails.removeAll()
+    private func pruneStaleEntries() {
+        guard loadedThumbnails.count > countLimit else { return }
+        let keysToRemove = loadedThumbnails.keys.filter { key in
+            backingCache.object(forKey: key as NSString) == nil
+        }
+        for key in keysToRemove {
+            loadedThumbnails.removeValue(forKey: key)
+        }
     }
 
     private func loadThumbnailAsync(storedFilePath: String, libraryURL: URL, size: CGSize, key: String) {
@@ -56,6 +61,7 @@ final class ThumbnailCache {
                 self.backingCache.setObject(nsImage, forKey: key as NSString)
                 self.loadedThumbnails[key] = nsImage
                 self.inFlightTasks.removeValue(forKey: key)
+                self.pruneStaleEntries()
             }
         }
     }

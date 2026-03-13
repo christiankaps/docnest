@@ -36,6 +36,7 @@ final class LibraryCoordinator {
     private(set) var trashedDocuments: [DocumentRecord] = []
     private(set) var filteredDocuments: [DocumentRecord] = []
     private(set) var selectedDocuments: [DocumentRecord] = []
+    private(set) var cachedShareURLs: [URL] = []
     private(set) var sidebarCounts = LibrarySidebarCounts.empty
 
     // MARK: - Internal
@@ -47,10 +48,22 @@ final class LibraryCoordinator {
 
     func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag]) {
         self.allLabels = allLabels
-        activeDocuments = allDocuments.filter { $0.trashedAt == nil }
-        trashedDocuments = allDocuments.filter { $0.trashedAt != nil }
+
+        var active: [DocumentRecord] = []
+        var trashed: [DocumentRecord] = []
+        for document in allDocuments {
+            if document.trashedAt == nil {
+                active.append(document)
+            } else {
+                trashed.append(document)
+            }
+        }
+        activeDocuments = active
+        trashedDocuments = trashed
+
         sidebarCounts = LibrarySidebarCounts(
-            documents: allDocuments,
+            activeDocuments: active,
+            trashedCount: trashed.count,
             labels: allLabels,
             recentLimit: recentDocumentLimit
         )
@@ -103,6 +116,7 @@ final class LibraryCoordinator {
                 selectedDocumentIDs = []
             }
         }
+        cachedShareURLs = shareableFileURLs(from: selectedDocuments)
     }
 
     func pruneSelectedDocumentIDs() {
@@ -355,15 +369,17 @@ final class LibraryCoordinator {
             labelFilterSelection.visualSelection.contains(label.persistentModelID)
         }
 
-        let importResult = ImportPDFDocumentsUseCase.execute(
-            urls: urls,
-            into: libraryURL,
-            autoAssignLabels: activeFilterLabels,
-            using: modelContext
-        )
+        Task { @MainActor in
+            let importResult = await ImportPDFDocumentsUseCase.execute(
+                urls: urls,
+                into: libraryURL,
+                autoAssignLabels: activeFilterLabels,
+                using: modelContext
+            )
 
-        if importResult.hasUserMessage {
-            importSummaryMessage = importResult.summaryMessage
+            if importResult.hasUserMessage {
+                importSummaryMessage = importResult.summaryMessage
+            }
         }
     }
 
@@ -472,5 +488,5 @@ final class LibraryCoordinator {
 }
 
 extension LibrarySidebarCounts {
-    static let empty = LibrarySidebarCounts(documents: [], labels: [], recentLimit: 10)
+    static let empty = LibrarySidebarCounts(activeDocuments: [], trashedCount: 0, labels: [], recentLimit: 10)
 }

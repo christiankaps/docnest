@@ -100,7 +100,7 @@ enum ImportPDFDocumentsUseCase {
         into libraryURL: URL,
         autoAssignLabels: [LabelTag] = [],
         using modelContext: ModelContext
-    ) -> ImportPDFDocumentsResult {
+    ) async -> ImportPDFDocumentsResult {
         let autoAssignedLabelNames = autoAssignLabels
             .map(\.name)
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
@@ -127,7 +127,7 @@ enum ImportPDFDocumentsUseCase {
 
             do {
                 let importedAt = Date.now
-                let metadata = try importMetadata(for: url)
+                let metadata = try await importMetadata(for: url)
 
                 if batchHashes.contains(metadata.contentHash) || documentExists(withContentHash: metadata.contentHash, using: modelContext) {
                     duplicates.append(.init(fileName: url.lastPathComponent))
@@ -234,16 +234,20 @@ enum ImportPDFDocumentsUseCase {
         return (try? modelContext.fetchCount(descriptor)) ?? 0 > 0
     }
 
-    private static func importMetadata(for url: URL) throws -> ImportMetadata {
-        let resourceValues = try url.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
-        let contentHash = try hashFile(at: url)
+    private static func importMetadata(for url: URL) async throws -> ImportMetadata {
+        let fileURL = url
+        return try await Task.detached(priority: .userInitiated) {
+            let resourceValues = try fileURL.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
+            let contentHash = try hashFile(at: fileURL)
+            let pageCount = PDFDocument(url: fileURL)?.pageCount ?? 0
 
-        return ImportMetadata(
-            contentHash: contentHash,
-            fileSize: Int64(resourceValues.fileSize ?? 0),
-            pageCount: PDFDocument(url: url)?.pageCount ?? 0,
-            sourceCreatedAt: resourceValues.creationDate
-        )
+            return ImportMetadata(
+                contentHash: contentHash,
+                fileSize: Int64(resourceValues.fileSize ?? 0),
+                pageCount: pageCount,
+                sourceCreatedAt: resourceValues.creationDate
+            )
+        }.value
     }
 
     private static func hashFile(at url: URL) throws -> String {
