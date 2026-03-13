@@ -34,7 +34,6 @@ struct DocNestApp: App {
 private struct AppRootView: View {
     @StateObject private var librarySession = LibrarySessionController()
     @State private var isClosedLibraryDropTargeted = false
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         Group {
@@ -44,7 +43,7 @@ private struct AppRootView: View {
                     .modelContainer(modelContainer)
                     .accessibilityIdentifier("library-open-root")
             } else {
-                NavigationSplitView(columnVisibility: $columnVisibility) {
+                HSplitView {
                     List {
                         Section("Library") {
                             Label("All Documents", systemImage: "doc.richtext")
@@ -58,13 +57,12 @@ private struct AppRootView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .navigationTitle("Library")
-                    .navigationSplitViewColumnWidth(
-                        min: AppSplitViewLayout.sidebarWidth,
-                        ideal: AppSplitViewLayout.sidebarWidth,
-                        max: AppSplitViewLayout.sidebarWidth
+                    .listStyle(.sidebar)
+                    .frame(
+                        minWidth: AppSplitViewLayout.sidebarWidth,
+                        maxWidth: AppSplitViewLayout.sidebarWidth
                     )
-                } content: {
+
                     ZStack {
                         ContentUnavailableView {
                             Label("No Library Open", systemImage: "books.vertical")
@@ -90,29 +88,19 @@ private struct AppRootView: View {
                     } isTargeted: { isTargeted in
                         isClosedLibraryDropTargeted = isTargeted
                     }
-                    .navigationTitle("Documents")
-                    .navigationSplitViewColumnWidth(
-                        min: AppSplitViewLayout.closedLibraryContentMinWidth,
-                        ideal: AppSplitViewLayout.closedLibraryContentIdealWidth
-                    )
-                } detail: {
+                    .frame(minWidth: AppSplitViewLayout.closedLibraryContentMinWidth)
+
                     ContentUnavailableView(
                         "No Document Selected",
                         systemImage: "doc.text",
                         description: Text("Open or create a library to inspect document details and preview PDFs.")
                     )
-                    .navigationTitle("Preview")
-                    .navigationSplitViewColumnWidth(
-                        min: AppSplitViewLayout.inspectorWidth,
-                        ideal: AppSplitViewLayout.inspectorWidth,
-                        max: AppSplitViewLayout.inspectorWidth
+                    .frame(
+                        minWidth: AppSplitViewLayout.inspectorWidth,
+                        maxWidth: AppSplitViewLayout.inspectorWidth
                     )
                 }
-                .navigationSplitViewStyle(.balanced)
                 .accessibilityIdentifier("library-closed-root")
-                .onAppear {
-                    columnVisibility = .all
-                }
             }
         }
         .toolbar {

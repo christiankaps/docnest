@@ -217,6 +217,7 @@ struct LibrarySidebarView: View {
                 }
             }
         }
+        .listStyle(.sidebar)
         .navigationTitle("Library")
         .confirmationDialog(
             pendingLabelDeletion?.title ?? "Delete Label",

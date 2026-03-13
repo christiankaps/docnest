@@ -6,7 +6,6 @@ struct RootView: View {
 
     @State private var coordinator = LibraryCoordinator()
     @State private var thumbnailCache = ThumbnailCache()
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     @Environment(\.modelContext) private var modelContext
 
@@ -20,7 +19,6 @@ struct RootView: View {
         mainContent
             .environment(coordinator)
             .environment(thumbnailCache)
-            .onAppear { columnVisibility = .all }
             .toolbar { toolbarContent }
             .modifier(RootViewImportModifier(coordinator: coordinator, allDocuments: allDocuments))
             .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
@@ -33,31 +31,23 @@ struct RootView: View {
     }
 
     private var mainContent: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        HSplitView {
             LibrarySidebarView()
-                .navigationSplitViewColumnWidth(
-                    min: AppSplitViewLayout.sidebarWidth,
-                    ideal: AppSplitViewLayout.sidebarWidth,
-                    max: AppSplitViewLayout.sidebarWidth
+                .frame(
+                    minWidth: AppSplitViewLayout.sidebarWidth,
+                    maxWidth: AppSplitViewLayout.sidebarWidth
                 )
-        } content: {
             documentListPanel
-                .navigationSplitViewColumnWidth(
-                    min: AppSplitViewLayout.documentListMinWidth,
-                    ideal: AppSplitViewLayout.documentListIdealWidth
-                )
-        } detail: {
+                .frame(minWidth: AppSplitViewLayout.documentListMinWidth)
             DocumentInspectorView(
                 documents: coordinator.selectedDocuments,
                 libraryURL: libraryURL
             )
-            .navigationSplitViewColumnWidth(
-                min: AppSplitViewLayout.inspectorWidth,
-                ideal: AppSplitViewLayout.inspectorWidth,
-                max: AppSplitViewLayout.inspectorWidth
+            .frame(
+                minWidth: AppSplitViewLayout.inspectorWidth,
+                maxWidth: AppSplitViewLayout.inspectorWidth
             )
         }
-        .navigationSplitViewStyle(.balanced)
     }
 
     private var documentListPanel: some View {
