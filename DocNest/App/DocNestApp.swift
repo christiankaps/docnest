@@ -28,12 +28,63 @@ struct DocNestApp: App {
             CommandGroup(replacing: .importExport) { }
             CommandGroup(replacing: .printItem) { }
         }
+
+        Settings {
+            AppSettingsView()
+        }
     }
 }
+
+// MARK: - Appearance
+
+enum AppearanceMode: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: "System"
+        case .light:  "Light"
+        case .dark:   "Dark"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light:  .light
+        case .dark:   .dark
+        }
+    }
+}
+
+private struct AppSettingsView: View {
+    @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
+
+    var body: some View {
+        Form {
+            Picker("Appearance", selection: $appearanceMode) {
+                ForEach(AppearanceMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.radioGroup)
+        }
+        .formStyle(.grouped)
+        .frame(width: 300)
+        .navigationTitle("Settings")
+    }
+}
+
+// MARK: - Root View
 
 private struct AppRootView: View {
     @StateObject private var librarySession = LibrarySessionController()
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
 
     var body: some View {
         Group {
@@ -47,6 +98,7 @@ private struct AppRootView: View {
                     .accessibilityIdentifier("library-closed-root")
             }
         }
+        .preferredColorScheme(appearanceMode.colorScheme)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Menu("Library") {

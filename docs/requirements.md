@@ -244,6 +244,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Alle zentralen Ansichten muessen in Light Mode und Dark Mode visuell konsistent und gut lesbar sein.
 - Farben fuer Labels, Selektionen, Trennlinien und Vorschau-Container muessen in beiden Erscheinungsbildern ausreichend Kontrast haben.
 - Eigene Farben oder Hintergruende duerfen die systemweite Appearance nicht brechen.
+- Ueber das Settings-Fenster (Cmd+,) kann der Nutzer die Darstellung zwischen System, Light und Dark umschalten. Die Auswahl wird persistent in @AppStorage gespeichert.
 
 ### 7.6 Datenschutz
 - Alle Daten werden lokal verarbeitet.
