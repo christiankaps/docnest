@@ -81,7 +81,13 @@ final class LibraryCoordinator {
         if !explicitSelection.isEmpty {
             selectedDocuments = explicitSelection
         } else {
-            selectedDocuments = filteredDocuments.first.map { [$0] } ?? []
+            if let fallback = filteredDocuments.first {
+                selectedDocuments = [fallback]
+                selectedDocumentIDs = [fallback.persistentModelID]
+            } else {
+                selectedDocuments = []
+                selectedDocumentIDs = []
+            }
         }
     }
 
