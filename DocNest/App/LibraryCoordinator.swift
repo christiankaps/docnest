@@ -5,6 +5,7 @@ import SwiftData
 struct PendingDroppedLabelAssignment {
     let labelID: PersistentIdentifier
     let documentIDs: Set<PersistentIdentifier>
+    let alreadyAssignedCount: Int
 }
 
 @MainActor
@@ -249,9 +250,35 @@ final class LibraryCoordinator {
             return false
         }
 
+        // Fast path: assigning one file should be immediate and not require confirmation.
+        if candidateDocuments.count == 1, let document = candidateDocuments.first, let modelContext {
+            let alreadyAssigned = document.labels.contains { $0.persistentModelID == label.persistentModelID }
+
+            if alreadyAssigned {
+                importSummaryMessage = "\"\(label.name)\" is already assigned to this document."
+                return true
+            }
+
+            do {
+                try ManageLabelsUseCase.assign(label, to: document, using: modelContext)
+                importSummaryMessage = "Assigned \"\(label.name)\" to 1 document."
+                return true
+            } catch {
+                importSummaryMessage = error.localizedDescription
+                return false
+            }
+        }
+
+        let alreadyAssignedCount = candidateDocuments.reduce(into: 0) { count, document in
+            if document.labels.contains(where: { $0.persistentModelID == label.persistentModelID }) {
+                count += 1
+            }
+        }
+
         pendingDroppedLabelAssignment = PendingDroppedLabelAssignment(
             labelID: label.persistentModelID,
-            documentIDs: Set(candidateDocuments.map(\.persistentModelID))
+            documentIDs: Set(candidateDocuments.map(\.persistentModelID)),
+            alreadyAssignedCount: alreadyAssignedCount
         )
         return true
     }
@@ -270,8 +297,24 @@ final class LibraryCoordinator {
             return
         }
 
+        let missingAssignments = documentsToAssign.filter { document in
+            !document.labels.contains(where: { $0.persistentModelID == label.persistentModelID })
+        }
+
+        guard !missingAssignments.isEmpty else {
+            pendingDroppedLabelAssignment = nil
+            importSummaryMessage = "\"\(label.name)\" is already assigned to all selected documents."
+            return
+        }
+
         do {
-            try ManageLabelsUseCase.assign(label, to: documentsToAssign, using: modelContext)
+            try ManageLabelsUseCase.assign(label, to: missingAssignments, using: modelContext)
+            let skippedCount = documentsToAssign.count - missingAssignments.count
+            if skippedCount > 0 {
+                importSummaryMessage = "Assigned \"\(label.name)\" to \(missingAssignments.count) documents (\(skippedCount) already had it)."
+            } else {
+                importSummaryMessage = "Assigned \"\(label.name)\" to \(missingAssignments.count) documents."
+            }
             pendingDroppedLabelAssignment = nil
         } catch {
             pendingDroppedLabelAssignment = nil
@@ -382,11 +425,15 @@ final class LibraryCoordinator {
             return ""
         }
 
-        if pending.documentIDs.count == 1 {
-            return "Assign this label to 1 document?"
+        let total = pending.documentIDs.count
+        let alreadyAssigned = pending.alreadyAssignedCount
+        let newlyAssigned = max(total - alreadyAssigned, 0)
+
+        if alreadyAssigned == 0 {
+            return "Assign this label to \(total) documents?"
         }
 
-        return "Assign this label to \(pending.documentIDs.count) documents?"
+        return "Assign this label to \(total) documents? \(newlyAssigned) will be updated and \(alreadyAssigned) already have this label."
     }
 
     // MARK: - Private helpers

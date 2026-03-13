@@ -25,6 +25,7 @@ struct LibrarySidebarView: View {
     @State private var editedLabelName = ""
     @State private var errorMessage: String?
     @State private var pendingLabelDeletion: PendingLabelDeletion?
+    @State private var hoveredLabelDropTargetID: PersistentIdentifier?
 
     private var sortedLabels: [LabelTag] {
         coordinator.allLabels.sorted {
@@ -155,25 +156,37 @@ struct LibrarySidebarView: View {
                                     renameLabel(label)
                                 }
                         } else {
-                            Button {
+                            LibraryLabelRowView(
+                                name: label.name,
+                                color: label.labelColor.color,
+                                count: coordinator.sidebarCounts.count(for: label),
+                                isSelected: coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID)
+                            )
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.accentColor.opacity(hoveredLabelDropTargetID == label.persistentModelID ? 0.16 : 0))
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture {
                                 toggleLabelSelection(label)
-                            } label: {
-                                LibraryLabelRowView(
-                                    name: label.name,
-                                    color: label.labelColor.color,
-                                    count: coordinator.sidebarCounts.count(for: label),
-                                    isSelected: coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID)
-                                )
                             }
-                            .buttonStyle(.plain)
                             .onDrag {
                                 NSItemProvider(
                                     item: DocumentLabelDragPayload.payload(for: label.id) as NSString,
                                     typeIdentifier: UTType.plainText.identifier
                                 )
                             }
-                            .dropDestination(for: String.self) { items, _ in
-                                coordinator.handleDroppedDocumentsOnLabel(items, label: label)
+                            .onDrop(of: [UTType.plainText], isTargeted: Binding(
+                                get: { hoveredLabelDropTargetID == label.persistentModelID },
+                                set: { isTargeted in
+                                    if isTargeted {
+                                        hoveredLabelDropTargetID = label.persistentModelID
+                                    } else if hoveredLabelDropTargetID == label.persistentModelID {
+                                        hoveredLabelDropTargetID = nil
+                                    }
+                                }
+                            )) { providers in
+                                return handleDroppedProviders(providers, onto: label)
                             }
                             .contextMenu {
                                 Button("Rename") {
@@ -204,7 +217,8 @@ struct LibrarySidebarView: View {
                             }
                         }
                     }
-                    .onMove(perform: moveLabels)
+                    // .onMove removed: List's built-in drag machinery would intercept
+                    // drop events on label rows. Reordering is handled via .onDrop.
                 }
             }
         }
@@ -338,6 +352,72 @@ struct LibrarySidebarView: View {
 
     private func performDeleteLabel(_ label: LabelTag) throws {
         try ManageLabelsUseCase.delete(label, using: modelContext)
+    }
+
+    private func handleDroppedProviders(_ providers: [NSItemProvider], onto label: LabelTag) -> Bool {
+        let plainTextIdentifier = UTType.plainText.identifier
+        let supportedProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(plainTextIdentifier) }
+
+        guard !supportedProviders.isEmpty else { return false }
+
+        var payloads: [String] = []
+        let payloadLock = NSLock()
+        let group = DispatchGroup()
+
+        for provider in supportedProviders {
+            group.enter()
+            provider.loadItem(forTypeIdentifier: plainTextIdentifier, options: nil) { item, _ in
+                defer { group.leave() }
+
+                if let value = item as? String {
+                    payloadLock.lock()
+                    payloads.append(value)
+                    payloadLock.unlock()
+                    return
+                }
+
+                if let value = item as? NSString {
+                    payloadLock.lock()
+                    payloads.append(value as String)
+                    payloadLock.unlock()
+                    return
+                }
+
+                if let value = item as? Data, let decoded = String(data: value, encoding: .utf8) {
+                    payloadLock.lock()
+                    payloads.append(decoded)
+                    payloadLock.unlock()
+                }
+            }
+        }
+
+        group.notify(queue: .main) {
+            // A label-label drag is a reorder operation; document drags are assignments.
+            if let payload = payloads.first,
+               let sourceLabelID = DocumentLabelDragPayload.labelID(from: payload) {
+                reorderLabel(sourceID: sourceLabelID, onto: label)
+            } else {
+                _ = coordinator.handleDroppedDocumentsOnLabel(payloads, label: label)
+            }
+        }
+
+        return true
+    }
+
+    private func reorderLabel(sourceID: UUID, onto targetLabel: LabelTag) {
+        let labels = sortedLabels
+        guard let sourceIndex = labels.firstIndex(where: { $0.id == sourceID }),
+              let targetIndex = labels.firstIndex(where: { $0.persistentModelID == targetLabel.persistentModelID }),
+              sourceIndex != targetIndex else { return }
+
+        let source = IndexSet(integer: sourceIndex)
+        let destination = sourceIndex < targetIndex ? targetIndex + 1 : targetIndex
+
+        do {
+            try ManageLabelsUseCase.reorderLabels(from: source, to: destination, labels: labels, using: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func moveLabels(from source: IndexSet, to destination: Int) {

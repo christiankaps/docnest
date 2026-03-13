@@ -50,9 +50,26 @@ enum DocumentListViewMode: String, CaseIterable {
 }
 
 struct DocumentListView: View {
+    private struct OptionalColumnVisibility {
+        var imported: Bool
+        var created: Bool
+        var pages: Bool
+        var size: Bool
+        var labels: Bool
+
+        var visibleCount: Int {
+            [imported, created, pages, size, labels].filter { $0 }.count
+        }
+    }
+
+    private let documentColumnMinWidth = 260.0
+    private let listColumnSpacing = 10.0
+    private let listHorizontalPadding = 24.0
+
     @Environment(LibraryCoordinator.self) private var coordinator
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
+    @State private var availableListWidth = AppSplitViewLayout.documentListIdealWidth
     @AppStorage("docListThumbnailSize") private var thumbnailSize = 160.0
     @AppStorage("docListColumnWidthImported") private var importedColumnWidth = 120.0
     @AppStorage("docListColumnWidthCreated") private var createdColumnWidth = 120.0
@@ -80,6 +97,50 @@ struct DocumentListView: View {
         }
     }
 
+    private var effectiveOptionalColumns: OptionalColumnVisibility {
+        var visibility = OptionalColumnVisibility(
+            imported: showsImportedColumn,
+            created: showsCreatedColumn,
+            pages: showsPagesColumn,
+            size: showsSizeColumn,
+            labels: showsLabelsColumn
+        )
+
+        let optionalColumnsAvailableWidth = max(
+            availableListWidth - listHorizontalPadding - documentColumnMinWidth,
+            0
+        )
+
+        func requiredOptionalColumnsWidth(for visibility: OptionalColumnVisibility) -> Double {
+            var width = 0.0
+
+            if visibility.imported { width += importedColumnWidth }
+            if visibility.created { width += createdColumnWidth }
+            if visibility.pages { width += pagesColumnWidth }
+            if visibility.size { width += sizeColumnWidth }
+            if visibility.labels { width += labelsColumnWidth }
+
+            width += Double(visibility.visibleCount) * listColumnSpacing
+            return width
+        }
+
+        let hideOrder: [WritableKeyPath<OptionalColumnVisibility, Bool>] = [
+            \.labels,
+            \.size,
+            \.pages,
+            \.created,
+            \.imported
+        ]
+
+        for keyPath in hideOrder where requiredOptionalColumnsWidth(for: visibility) > optionalColumnsAvailableWidth {
+            if visibility[keyPath: keyPath] {
+                visibility[keyPath: keyPath] = false
+            }
+        }
+
+        return visibility
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if sortedDocuments.isEmpty || coordinator.documentListViewMode != .list {
@@ -96,6 +157,17 @@ struct DocumentListView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear {
+                        availableListWidth = proxy.size.width
+                    }
+                    .onChange(of: proxy.size.width) { _, newWidth in
+                        availableListWidth = newWidth
+                    }
+            }
         }
     }
 
@@ -124,33 +196,33 @@ struct DocumentListView: View {
             if coordinator.documentListViewMode == .list {
                 HStack(spacing: 10) {
                     sortButton("Document", column: .title)
-                        .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
+                        .frame(minWidth: documentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
 
-                    if showsImportedColumn {
+                    if effectiveOptionalColumns.imported {
                         ResizableColumnHeader(width: $importedColumnWidth, minWidth: 96) {
                             sortButton("Imported", column: .importedAt)
                         }
                     }
 
-                    if showsCreatedColumn {
+                    if effectiveOptionalColumns.created {
                         ResizableColumnHeader(width: $createdColumnWidth, minWidth: 96) {
                             sortButton("Created", column: .createdAt)
                         }
                     }
 
-                    if showsPagesColumn {
+                    if effectiveOptionalColumns.pages {
                         ResizableColumnHeader(width: $pagesColumnWidth, minWidth: 54) {
                             sortButton("Pages", column: .pageCount)
                         }
                     }
 
-                    if showsSizeColumn {
+                    if effectiveOptionalColumns.size {
                         ResizableColumnHeader(width: $sizeColumnWidth, minWidth: 72) {
                             sortButton("Size", column: .fileSize)
                         }
                     }
 
-                    if showsLabelsColumn {
+                    if effectiveOptionalColumns.labels {
                         ResizableColumnHeader(width: $labelsColumnWidth, minWidth: 120) {
                             Text("Labels")
                                 .font(AppTypography.columnHeader)
@@ -290,15 +362,15 @@ struct DocumentListView: View {
                         .lineLimit(1)
                 }
             }
-            .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: documentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
 
-            if showsImportedColumn {
+            if effectiveOptionalColumns.imported {
                 Text(document.importedAt, format: .dateTime.year().month().day())
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: importedColumnWidth, alignment: .leading)
             }
 
-            if showsCreatedColumn {
+            if effectiveOptionalColumns.created {
                 Group {
                     if let sourceCreatedAt = document.sourceCreatedAt {
                         Text(sourceCreatedAt, format: .dateTime.year().month().day())
@@ -311,19 +383,19 @@ struct DocumentListView: View {
                 .frame(width: createdColumnWidth, alignment: .leading)
             }
 
-            if showsPagesColumn {
+            if effectiveOptionalColumns.pages {
                 Text("\(document.pageCount)")
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: pagesColumnWidth, alignment: .leading)
             }
 
-            if showsSizeColumn {
+            if effectiveOptionalColumns.size {
                 Text(document.formattedFileSize)
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: sizeColumnWidth, alignment: .leading)
             }
 
-            if showsLabelsColumn {
+            if effectiveOptionalColumns.labels {
                 DocumentLabelStrip(labels: document.labels) { label in
                     onRemoveLabelFromDocument(label, document)
                 }
