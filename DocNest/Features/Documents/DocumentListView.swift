@@ -84,13 +84,16 @@ struct DocumentListView: View {
         VStack(spacing: 0) {
             listHeader
 
-            if sortedDocuments.isEmpty {
-                emptyContent
-            } else if coordinator.documentListViewMode == .list {
-                listContent
-            } else {
-                thumbnailContent
+            Group {
+                if sortedDocuments.isEmpty {
+                    emptyContent
+                } else if coordinator.documentListViewMode == .list {
+                    listContent
+                } else {
+                    thumbnailContent
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -100,7 +103,6 @@ struct DocumentListView: View {
             systemImage: "doc.text",
             description: Text("Import PDFs to populate the library and review them here.")
         )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .controlBackgroundColor))
         .contextMenu {
             Text("Visible Attributes")
