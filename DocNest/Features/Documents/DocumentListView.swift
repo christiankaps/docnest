@@ -81,25 +81,35 @@ struct DocumentListView: View {
     }
 
     var body: some View {
-        @Bindable var coordinator = coordinator
-
         VStack(spacing: 0) {
             listHeader
 
             if sortedDocuments.isEmpty {
-                ContentUnavailableView(
-                    "No Documents",
-                    systemImage: "doc.text",
-                    description: Text("Import PDFs to populate the library and review them here.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                emptyContent
             } else if coordinator.documentListViewMode == .list {
                 listContent
             } else {
                 thumbnailContent
             }
         }
-        .navigationTitle("Documents")
+    }
+
+    private var emptyContent: some View {
+        ContentUnavailableView(
+            "No Documents",
+            systemImage: "doc.text",
+            description: Text("Import PDFs to populate the library and review them here.")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .contextMenu {
+            Text("Visible Attributes")
+            Toggle("Imported", isOn: $showsImportedColumn)
+            Toggle("Created", isOn: $showsCreatedColumn)
+            Toggle("Pages", isOn: $showsPagesColumn)
+            Toggle("Size", isOn: $showsSizeColumn)
+            Toggle("Labels", isOn: $showsLabelsColumn)
+        }
     }
 
     private var listHeader: some View {
@@ -164,25 +174,29 @@ struct DocumentListView: View {
     }
 
     private var listContent: some View {
-        @Bindable var coordinator = coordinator
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(Array(sortedDocuments.enumerated()), id: \.element.persistentModelID) { index, document in
+                    let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
 
-        return List(selection: $coordinator.selectedDocumentIDs) {
-            ForEach(Array(sortedDocuments.enumerated()), id: \.element.persistentModelID) { index, document in
-                documentRow(for: document)
-                    .tag(document.persistentModelID)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
-                    .listRowBackground(alternatingRowBackground(for: index))
-                    .contextMenu { documentContextMenu(for: document) }
-                    .onDrag { dragProvider(for: document) }
-                    .dropDestination(for: String.self) { items, _ in
-                        guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
-                            return false
+                    documentRow(for: document)
+                        .padding(.horizontal, 12)
+                        .background(rowBackground(index: index, isSelected: isSelected))
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            handleRowTap(document: document)
                         }
-                        return coordinator.assignDroppedLabelToDocument(labelID, document: document)
-                    }
+                        .contextMenu { documentContextMenu(for: document) }
+                        .onDrag { dragProvider(for: document) }
+                        .dropDestination(for: String.self) { items, _ in
+                            guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
+                                return false
+                            }
+                            return coordinator.assignDroppedLabelToDocument(labelID, document: document)
+                        }
+                }
             }
         }
-        .listStyle(.plain)
         .contextMenu {
             Text("Visible Attributes")
             Toggle("Imported", isOn: $showsImportedColumn)
@@ -191,6 +205,26 @@ struct DocumentListView: View {
             Toggle("Size", isOn: $showsSizeColumn)
             Toggle("Labels", isOn: $showsLabelsColumn)
         }
+    }
+
+    private func handleRowTap(document: DocumentRecord) {
+        let id = document.persistentModelID
+        if NSEvent.modifierFlags.contains(.command) {
+            if coordinator.selectedDocumentIDs.contains(id) {
+                coordinator.selectedDocumentIDs.remove(id)
+            } else {
+                coordinator.selectedDocumentIDs.insert(id)
+            }
+        } else {
+            coordinator.selectedDocumentIDs = [id]
+        }
+    }
+
+    private func rowBackground(index: Int, isSelected: Bool) -> Color {
+        if isSelected {
+            return Color.accentColor.opacity(0.18)
+        }
+        return index.isMultiple(of: 2) ? Color.clear : Color.secondary.opacity(0.06)
     }
 
     private var thumbnailContent: some View {
@@ -285,14 +319,6 @@ struct DocumentListView: View {
 
         }
         .padding(.vertical, 4)
-    }
-
-    private func alternatingRowBackground(for index: Int) -> Color {
-        if index.isMultiple(of: 2) {
-            return .clear
-        }
-
-        return Color.secondary.opacity(0.08)
     }
 
     private func onRemoveLabelFromDocument(_ label: LabelTag, _ document: DocumentRecord) {
