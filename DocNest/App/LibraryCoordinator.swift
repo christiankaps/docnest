@@ -57,6 +57,8 @@ final class LibraryCoordinator {
     // MARK: - Recomputation
 
     func recomputeFilteredDocuments() {
+        let startTime = Date().timeIntervalSinceReferenceDate
+
         let sectionDocuments: [DocumentRecord] = switch selectedSection {
         case .allDocuments:
             activeDocuments
@@ -72,6 +74,14 @@ final class LibraryCoordinator {
             sectionDocuments,
             query: searchText,
             selectedLabelIDs: labelFilterSelection.appliedSelection
+        )
+
+        debugLogFilterTiming(
+            startTime: startTime,
+            sourceCount: sectionDocuments.count,
+            filteredCount: filteredDocuments.count,
+            queryLength: searchText.count,
+            activeLabelFilters: labelFilterSelection.appliedSelection.count
         )
     }
 
@@ -397,6 +407,29 @@ final class LibraryCoordinator {
         }
 
         return documentIDs
+    }
+
+    private func debugLogFilterTiming(
+        startTime: TimeInterval,
+        sourceCount: Int,
+        filteredCount: Int,
+        queryLength: Int,
+        activeLabelFilters: Int
+    ) {
+        #if DEBUG
+        let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
+        print(
+            String(
+                format: "[Performance][Filter] section=%@ source=%d filtered=%d query=%d labels=%d duration=%.2fms",
+                selectedSection.rawValue,
+                sourceCount,
+                filteredCount,
+                queryLength,
+                activeLabelFilters,
+                elapsedMs
+            )
+        )
+        #endif
     }
 }
 
