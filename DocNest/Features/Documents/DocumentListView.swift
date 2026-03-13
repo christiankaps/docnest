@@ -95,6 +95,7 @@ struct DocumentListView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyContent: some View {
