@@ -166,17 +166,21 @@ struct DocumentListView: View {
     private var listContent: some View {
         @Bindable var coordinator = coordinator
 
-        return List(sortedDocuments, id: \.persistentModelID, selection: $coordinator.selectedDocumentIDs) { document in
-            documentRow(for: document)
-                .tag(document.persistentModelID)
-                .contextMenu { documentContextMenu(for: document) }
-                .onDrag { dragProvider(for: document) }
-                .dropDestination(for: String.self) { items, _ in
-                    guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
-                        return false
+        return List(selection: $coordinator.selectedDocumentIDs) {
+            ForEach(Array(sortedDocuments.enumerated()), id: \.element.persistentModelID) { index, document in
+                documentRow(for: document)
+                    .tag(document.persistentModelID)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+                    .listRowBackground(alternatingRowBackground(for: index))
+                    .contextMenu { documentContextMenu(for: document) }
+                    .onDrag { dragProvider(for: document) }
+                    .dropDestination(for: String.self) { items, _ in
+                        guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
+                            return false
+                        }
+                        return coordinator.assignDroppedLabelToDocument(labelID, document: document)
                     }
-                    return coordinator.assignDroppedLabelToDocument(labelID, document: document)
-                }
+            }
         }
         .listStyle(.plain)
         .contextMenu {
@@ -281,6 +285,14 @@ struct DocumentListView: View {
 
         }
         .padding(.vertical, 4)
+    }
+
+    private func alternatingRowBackground(for index: Int) -> Color {
+        if index.isMultiple(of: 2) {
+            return .clear
+        }
+
+        return Color.secondary.opacity(0.08)
     }
 
     private func onRemoveLabelFromDocument(_ label: LabelTag, _ document: DocumentRecord) {
