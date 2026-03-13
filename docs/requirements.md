@@ -415,6 +415,7 @@ Aktueller Stand:
 - Die Dokumentliste verwendet alternierende Zeilenhintergruende fuer bessere visuelle Trennung benachbarter Eintraege.
 - Der Inspector bietet Finder-Aktionen fuer Originaldatei und Library.
 - Die Split-View reserviert mehr Breite fuer Seitenleiste und Detailbereich, damit Library-Namen und die PDF-Vorschau im Alltagsbetrieb besser lesbar bleiben.
+- Das Drei-Panel-Layout verwendet NavigationSplitView mit drei Spalten (sidebar, content, detail). NavigationSplitView liefert nativ volle Spaltenhoehe, einen integrierten Sidebar-Toggle und konsistentes Resize-Verhalten auf macOS. Die Spaltenbreiten werden ueber navigationSplitViewColumnWidth gesteuert: Sidebar min 200/ideal 260/max 320, Inspector min 360/ideal 420/max 480, Dokumentliste flexibel.
 - Die Detailansicht trennt PDF-Vorschau und Metadaten ueber einen vertikal verschiebbaren Splitter, damit Nutzer die Vorschauhoehe direkt anpassen koennen.
 - Die App startet mit einer Fensterbreite und Split-View-Konfiguration, in der die linke Seitenleiste standardmaessig sichtbar bleibt; Nutzer sollen die Library-Navigation nicht erst durch manuelles Verbreitern des Fensters wiederherstellen muessen.
 - Ein Sidebar-Toggle-Button in der Toolbar bleibt immer sichtbar und erlaubt das Ein- und Ausblenden der Seitenleiste unabhaengig vom aktuellen Layout-Zustand.

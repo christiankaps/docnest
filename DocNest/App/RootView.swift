@@ -3,6 +3,7 @@ import SwiftData
 
 struct RootView: View {
     let libraryURL: URL
+    @Binding var columnVisibility: NavigationSplitViewVisibility
 
     @State private var coordinator = LibraryCoordinator()
     @State private var thumbnailCache = ThumbnailCache()
@@ -16,37 +17,29 @@ struct RootView: View {
     private var allLabels: [LabelTag]
 
     var body: some View {
-        mainContent
-            .environment(coordinator)
-            .environment(thumbnailCache)
-            .toolbar { toolbarContent }
-            .modifier(RootViewImportModifier(coordinator: coordinator, allDocuments: allDocuments))
-            .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
-            .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels))
-            .task {
-                coordinator.libraryURL = libraryURL
-                coordinator.modelContext = modelContext
-                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels)
-            }
-    }
-
-    private var mainContent: some View {
-        HSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             LibrarySidebarView()
-                .frame(
-                    minWidth: AppSplitViewLayout.sidebarWidth,
-                    maxWidth: AppSplitViewLayout.sidebarWidth
-                )
+                .navigationSplitViewColumnWidth(min: 200, ideal: AppSplitViewLayout.sidebarWidth, max: 320)
+        } content: {
             documentListPanel
-                .frame(minWidth: AppSplitViewLayout.documentListMinWidth)
+        } detail: {
             DocumentInspectorView(
                 documents: coordinator.selectedDocuments,
                 libraryURL: libraryURL
             )
-            .frame(
-                minWidth: AppSplitViewLayout.inspectorWidth,
-                maxWidth: AppSplitViewLayout.inspectorWidth
-            )
+            .navigationSplitViewColumnWidth(min: 360, ideal: AppSplitViewLayout.inspectorWidth, max: 480)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .environment(coordinator)
+        .environment(thumbnailCache)
+        .toolbar { toolbarContent }
+        .modifier(RootViewImportModifier(coordinator: coordinator, allDocuments: allDocuments))
+        .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
+        .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels))
+        .task {
+            coordinator.libraryURL = libraryURL
+            coordinator.modelContext = modelContext
+            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels)
         }
     }
 
@@ -254,6 +247,6 @@ struct DocumentImportDropOverlay: View {
 }
 
 #Preview {
-    RootView(libraryURL: URL(fileURLWithPath: "/tmp/preview.docnestlibrary"))
+    RootView(libraryURL: URL(fileURLWithPath: "/tmp/preview.docnestlibrary"), columnVisibility: .constant(.all))
         .modelContainer(for: DocumentRecord.self, inMemory: true)
 }

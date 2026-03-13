@@ -95,7 +95,6 @@ struct DocumentListView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyContent: some View {
@@ -104,7 +103,8 @@ struct DocumentListView: View {
             systemImage: "doc.text",
             description: Text("Import PDFs to populate the library and review them here.")
         )
-        .background(Color(nsColor: .controlBackgroundColor))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
         .contextMenu {
             Text("Visible Attributes")
             Toggle("Imported", isOn: $showsImportedColumn)

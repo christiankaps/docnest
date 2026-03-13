@@ -33,43 +33,18 @@ struct DocNestApp: App {
 
 private struct AppRootView: View {
     @StateObject private var librarySession = LibrarySessionController()
-    @State private var isClosedLibraryDropTargeted = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         Group {
             if let libraryURL = librarySession.selectedLibraryURL,
                let modelContainer = librarySession.modelContainer {
-                RootView(libraryURL: libraryURL)
+                RootView(libraryURL: libraryURL, columnVisibility: $columnVisibility)
                     .modelContainer(modelContainer)
                     .accessibilityIdentifier("library-open-root")
             } else {
-                ZStack {
-                    ContentUnavailableView {
-                        Label("No Library Open", systemImage: "books.vertical")
-                    } description: {
-                        Text("Create a DocNest library or open an existing one before importing documents.")
-                    } actions: {
-                        HStack(spacing: 12) {
-                            Button("Create Library", action: librarySession.createLibrary)
-                            Button("Open Library", action: librarySession.openLibrary)
-                        }
-                    }
-
-                    if isClosedLibraryDropTargeted {
-                        DocumentImportDropOverlay(
-                            title: "Open a Library First",
-                            message: "Create or open a DocNest library before dropping PDFs into the app."
-                        )
-                        .padding(20)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .dropDestination(for: URL.self) { urls, _ in
-                    handleDroppedURLsWithoutLibrary(urls)
-                } isTargeted: { isTargeted in
-                    isClosedLibraryDropTargeted = isTargeted
-                }
-                .accessibilityIdentifier("library-closed-root")
+                closedLibraryContent
+                    .accessibilityIdentifier("library-closed-root")
             }
         }
         .toolbar {
@@ -102,6 +77,64 @@ private struct AppRootView: View {
             Text(librarySession.libraryErrorMessage ?? "Unknown library error.")
         }
     }
+
+    // MARK: - Closed-library three-panel layout (req 10.5)
+
+    @State private var isClosedLibraryDropTargeted = false
+
+    private var closedLibraryContent: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            List {
+                Section("Library") {
+                    Text("No library open")
+                        .foregroundStyle(.secondary)
+                }
+                Section("Label Filters") {
+                    Text("No labels")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .listStyle(.sidebar)
+            .navigationTitle("Library")
+            .navigationSplitViewColumnWidth(min: 200, ideal: AppSplitViewLayout.sidebarWidth, max: 320)
+        } content: {
+            ZStack {
+                ContentUnavailableView {
+                    Label("No Library Open", systemImage: "books.vertical")
+                } description: {
+                    Text("Create a DocNest library or open an existing one before importing documents.")
+                } actions: {
+                    HStack(spacing: 12) {
+                        Button("Create Library", action: librarySession.createLibrary)
+                        Button("Open Library", action: librarySession.openLibrary)
+                    }
+                }
+
+                if isClosedLibraryDropTargeted {
+                    DocumentImportDropOverlay(
+                        title: "Open a Library First",
+                        message: "Create or open a DocNest library before dropping PDFs into the app."
+                    )
+                    .padding(20)
+                }
+            }
+            .dropDestination(for: URL.self) { urls, _ in
+                handleDroppedURLsWithoutLibrary(urls)
+            } isTargeted: { isTargeted in
+                isClosedLibraryDropTargeted = isTargeted
+            }
+        } detail: {
+            ContentUnavailableView(
+                "No Document Selected",
+                systemImage: "doc.text",
+                description: Text("Open a library and select a document to see its details.")
+            )
+            .navigationSplitViewColumnWidth(min: 360, ideal: AppSplitViewLayout.inspectorWidth, max: 480)
+        }
+        .navigationSplitViewStyle(.balanced)
+    }
+
+    // MARK: - Helpers
 
     private var libraryErrorBinding: Binding<Bool> {
         Binding(
