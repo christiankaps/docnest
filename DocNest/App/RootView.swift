@@ -205,6 +205,9 @@ private struct RootViewChangeHandlers: ViewModifier {
                 coordinator.recomputeFilteredDocuments()
                 coordinator.pruneSelectedDocumentIDs()
             }
+            .onChange(of: coordinator.selectedDocumentIDs) {
+                coordinator.recomputeSelectedDocuments()
+            }
             .onChange(of: coordinator.labelFilterSelection.appliedSelection) {
                 coordinator.recomputeFilteredDocuments()
                 coordinator.pruneSelectedDocumentIDs()
