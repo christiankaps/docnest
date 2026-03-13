@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftData
 
@@ -55,6 +56,17 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
         case .dark:   .dark
         }
     }
+
+    var appAppearance: NSAppearance? {
+        switch self {
+        case .system:
+            nil
+        case .light:
+            NSAppearance(named: .aqua)
+        case .dark:
+            NSAppearance(named: .darkAqua)
+        }
+    }
 }
 
 // MARK: - Root View
@@ -76,6 +88,12 @@ private struct AppRootView: View {
             }
         }
         .preferredColorScheme(appearanceMode.colorScheme)
+        .onAppear {
+            NSApp.appearance = appearanceMode.appAppearance
+        }
+        .onChange(of: appearanceMode) { _, newMode in
+            NSApp.appearance = newMode.appAppearance
+        }
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Menu("Library") {
