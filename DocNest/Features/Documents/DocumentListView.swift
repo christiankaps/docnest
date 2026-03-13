@@ -54,7 +54,6 @@ struct DocumentListView: View {
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
     @AppStorage("docListThumbnailSize") private var thumbnailSize = 160.0
-    @AppStorage("docListColumnWidthDocument") private var documentColumnWidth = 300.0
     @AppStorage("docListColumnWidthImported") private var importedColumnWidth = 120.0
     @AppStorage("docListColumnWidthCreated") private var createdColumnWidth = 120.0
     @AppStorage("docListColumnWidthPages") private var pagesColumnWidth = 72.0
@@ -108,9 +107,8 @@ struct DocumentListView: View {
 
         return HStack(spacing: 10) {
             if coordinator.documentListViewMode == .list {
-                ResizableColumnHeader(width: $documentColumnWidth, minWidth: 220) {
-                    sortButton("Document", column: .title)
-                }
+                sortButton("Document", column: .title)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 if showsImportedColumn {
                     ResizableColumnHeader(width: $importedColumnWidth, minWidth: 96) {
@@ -155,8 +153,6 @@ struct DocumentListView: View {
                     .frame(width: 120)
                     .help("Thumbnail size")
             }
-
-            Spacer(minLength: 0)
 
             Picker("View", selection: $coordinator.documentListViewMode) {
                 Image(systemName: "list.bullet")
@@ -255,7 +251,7 @@ struct DocumentListView: View {
                         .lineLimit(1)
                 }
             }
-            .frame(width: documentColumnWidth, alignment: .leading)
+            .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
 
             if showsImportedColumn {
                 Text(document.importedAt, format: .dateTime.year().month().day())
@@ -295,7 +291,6 @@ struct DocumentListView: View {
                 .frame(width: labelsColumnWidth, alignment: .leading)
             }
 
-            Spacer(minLength: 0)
         }
         .padding(.vertical, 4)
     }
