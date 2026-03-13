@@ -2,6 +2,23 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeIconFile</key>
+			<string>DocNestLibrary.icns</string>
+			<key>CFBundleTypeName</key>
+			<string>DocNest Library</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.kaps.docnest.library</string>
+			</array>
+			<key>LSTypeIsPackage</key>
+			<true/>
+		</dict>
+	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
@@ -9,6 +26,8 @@
 			<string>com.kaps.docnest.library</string>
 			<key>UTTypeDescription</key>
 			<string>DocNest Library</string>
+			<key>UTTypeIconFile</key>
+			<string>DocNestLibrary.icns</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>com.apple.package</string>

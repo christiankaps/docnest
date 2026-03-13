@@ -93,6 +93,7 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 
 #### Should
 - Library is treated as a macOS package (UTExportedTypeDeclarations with com.apple.package conformance), appearing as a single file in Finder and app file dialogs.
+- The .docnestlibrary package uses a dedicated file icon in Finder and in macOS open/save panels.
 - App provides a "Show in Finder" action for libraries and individual documents.
 
 ### 6.2 Document Import
@@ -277,6 +278,7 @@ My Documents.docnestlibrary/
   Originals/
     2026/
       03/
+      
         <document-id>.pdf
   Previews/
     <document-id>.jpg
