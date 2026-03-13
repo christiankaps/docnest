@@ -105,76 +105,56 @@ struct DocumentListView: View {
     private var listHeader: some View {
         @Bindable var coordinator = coordinator
 
-        return HStack(spacing: 10) {
+        return Group {
             if coordinator.documentListViewMode == .list {
-                sortButton("Document", column: .title)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 10) {
+                    sortButton("Document", column: .title)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                if showsImportedColumn {
-                    ResizableColumnHeader(width: $importedColumnWidth, minWidth: 96) {
-                        sortButton("Imported", column: .importedAt)
+                    if showsImportedColumn {
+                        ResizableColumnHeader(width: $importedColumnWidth, minWidth: 96) {
+                            sortButton("Imported", column: .importedAt)
+                        }
                     }
-                }
 
-                if showsCreatedColumn {
-                    ResizableColumnHeader(width: $createdColumnWidth, minWidth: 96) {
-                        sortButton("Created", column: .createdAt)
+                    if showsCreatedColumn {
+                        ResizableColumnHeader(width: $createdColumnWidth, minWidth: 96) {
+                            sortButton("Created", column: .createdAt)
+                        }
                     }
-                }
 
-                if showsPagesColumn {
-                    ResizableColumnHeader(width: $pagesColumnWidth, minWidth: 54) {
-                        sortButton("Pages", column: .pageCount)
+                    if showsPagesColumn {
+                        ResizableColumnHeader(width: $pagesColumnWidth, minWidth: 54) {
+                            sortButton("Pages", column: .pageCount)
+                        }
                     }
-                }
 
-                if showsSizeColumn {
-                    ResizableColumnHeader(width: $sizeColumnWidth, minWidth: 72) {
-                        sortButton("Size", column: .fileSize)
+                    if showsSizeColumn {
+                        ResizableColumnHeader(width: $sizeColumnWidth, minWidth: 72) {
+                            sortButton("Size", column: .fileSize)
+                        }
                     }
-                }
 
-                if showsLabelsColumn {
-                    ResizableColumnHeader(width: $labelsColumnWidth, minWidth: 120) {
-                        Text("Labels")
-                            .font(AppTypography.columnHeader)
-                            .foregroundStyle(.secondary)
+                    if showsLabelsColumn {
+                        ResizableColumnHeader(width: $labelsColumnWidth, minWidth: 120) {
+                            Text("Labels")
+                                .font(AppTypography.columnHeader)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             } else {
-                sortButton("Document", column: .title)
-                sortButton("Imported", column: .importedAt)
-                sortButton("Created", column: .createdAt)
-                sortButton("Size", column: .fileSize)
+                HStack(spacing: 10) {
+                    sortButton("Document", column: .title)
+                    sortButton("Imported", column: .importedAt)
+                    sortButton("Created", column: .createdAt)
+                    sortButton("Size", column: .fileSize)
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                Slider(value: $thumbnailSize, in: 100...320)
-                    .frame(width: 120)
-                    .help("Thumbnail size")
-            }
-
-            Picker("View", selection: $coordinator.documentListViewMode) {
-                Image(systemName: "list.bullet")
-                    .tag(DocumentListViewMode.list)
-                Image(systemName: "square.grid.2x2")
-                    .tag(DocumentListViewMode.thumbnails)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 60)
-            .help("Switch between list and thumbnail view")
-
-            if coordinator.documentListViewMode == .list {
-                Menu {
-                    Text("Visible Attributes")
-                    Toggle("Imported", isOn: $showsImportedColumn)
-                    Toggle("Created", isOn: $showsCreatedColumn)
-                    Toggle("Pages", isOn: $showsPagesColumn)
-                    Toggle("Size", isOn: $showsSizeColumn)
-                    Toggle("Labels", isOn: $showsLabelsColumn)
-                } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .foregroundStyle(.secondary)
+                    Slider(value: $thumbnailSize, in: 100...320)
+                        .frame(width: 120)
+                        .help("Thumbnail size")
                 }
             }
         }
@@ -199,6 +179,14 @@ struct DocumentListView: View {
                 }
         }
         .listStyle(.plain)
+        .contextMenu {
+            Text("Visible Attributes")
+            Toggle("Imported", isOn: $showsImportedColumn)
+            Toggle("Created", isOn: $showsCreatedColumn)
+            Toggle("Pages", isOn: $showsPagesColumn)
+            Toggle("Size", isOn: $showsSizeColumn)
+            Toggle("Labels", isOn: $showsLabelsColumn)
+        }
     }
 
     private var thumbnailContent: some View {

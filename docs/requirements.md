@@ -85,7 +85,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Nutzer kann eine neue Library anlegen.
 - Nutzer kann eine bestehende Library oeffnen.
 - App merkt sich die zuletzt erfolgreich geoeffnete Library und versucht sie beim naechsten Start automatisch wieder zu oeffnen.
-- Wenn keine zuletzt geoeffnete Library bekannt ist oder die gespeicherte Library nicht mehr validiert werden kann, zeigt die App keinen modalen Popup-Dialog. Stattdessen wird der Willkommenszustand direkt in das leere App-Layout integriert: Die drei Panels bleiben sichtbar, und der Hauptbereich zeigt eine eingebettete Willkommensansicht mit den Optionen "Library oeffnen" und "Library erstellen" als Teil des normalen Fensterinhalts.
+- Wenn keine zuletzt geoeffnete Library bekannt ist oder die gespeicherte Library nicht mehr validiert werden kann, zeigt die App keinen modalen Popup-Dialog. Stattdessen wird der Willkommenszustand direkt als normaler Fensterinhalt angezeigt und bietet die Optionen "Library oeffnen" und "Library erstellen".
 - Der Save-Dialog zum Erstellen einer Library zeigt nur den Bibliotheksnamen ohne die interne Dateiendung (.docnestlibrary); die App haengt die Endung automatisch an.
 - App prueft beim Oeffnen, ob Struktur und Metadaten konsistent sind.
 - App zeigt Fehlerzustand verstaendlich an, falls eine Library beschaedigt oder unvollstaendig ist.
@@ -139,6 +139,8 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 - Finder-Integration: Originaldatei oeffnen, im Finder zeigen, exportieren.
 
 - Die Dokumentliste unterstuetzt zwei Darstellungsmodi: Listenansicht und Miniaturansicht. In der Miniaturansicht werden Dokumente als Thumbnail-Kacheln dargestellt, aehnlich der Finder-Symbolansicht. Die Groesse der Thumbnails ist ueber einen Schieberegler stufenlos einstellbar.
+- Der Wechsel zwischen Listenansicht und Miniaturansicht erfolgt ueber ein Segment-Control in der oberen Toolbar des App-Fensters.
+- Das Ein- und Ausblenden optionaler Dateiattribute in der Listenansicht erfolgt ueber ein Rechtsklick-Kontextmenu in der Dokumentliste, nicht ueber einen separaten Header-Button.
 - Die Toolbar enthaelt einen Share-Button, der das native macOS-Teilen-Sheet fuer das aktuell selektierte Dokument oder alle selektierten Dokumente oeffnet. Drucken ist ueber das Share-Sheet erreichbar.
 - Ein Rechtsklick auf ein Dokument in der Liste oeffnet ein Kontextmenu mit Schnellaktionen: Labels zuweisen, im Finder anzeigen, in den Bin verschieben und weitere kontextbezogene Optionen.
 - In der Dokumentliste zeigt jedes einem Dokument zugewiesene Label-Badge beim Hover ein "x"-Symbol. Ein Klick auf dieses "x" entfernt das Label sofort vom Dokument, ohne Bestatigungsdialog.

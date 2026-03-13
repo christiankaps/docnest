@@ -88,6 +88,18 @@ struct RootView: View {
         }
 
         ToolbarItem(placement: .primaryAction) {
+            Picker("View", selection: Bindable(coordinator).documentListViewMode) {
+                Image(systemName: "list.bullet")
+                    .tag(DocumentListViewMode.list)
+                Image(systemName: "square.grid.2x2")
+                    .tag(DocumentListViewMode.thumbnails)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 60)
+            .help("Switch between list and thumbnail view")
+        }
+
+        ToolbarItem(placement: .primaryAction) {
             let shareURLs = coordinator.shareableFileURLs(from: coordinator.selectedDocuments)
             ShareLink(items: shareURLs) {
                 Label("Share", systemImage: "square.and.arrow.up")
