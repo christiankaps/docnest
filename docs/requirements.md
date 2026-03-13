@@ -165,7 +165,7 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 - Filtering by one or more labels is supported.
 - Left sidebar shows document count for each label.
 - Dragging a label from sidebar onto a document assigns that label to the document.
-- Dragging one or more documents onto a label in the sidebar assigns the label to all dropped documents, but only after a native confirmation dialog.
+- Dragging one or more documents onto a label in the sidebar assigns the label to those documents. Single-file drops are assigned immediately without confirmation. Multi-file drops show a native confirmation dialog with the count of documents that will be newly assigned and the count already having the label; already-assigned documents are always skipped.
 - If multiple labels are selected as filters, logic is AND: only documents with all selected labels are shown.
 - Deleting a label must never delete documents; it only removes label associations.
 - If a label is assigned to one or more documents, app shows a native confirmation dialog before deletion with the affected document count. Labels with no assignments can be deleted without extra confirmation.
@@ -354,7 +354,9 @@ My Documents.docnestlibrary/
 ### 10.6 Sidebar-Integrated Label Management
 - Labels are managed directly in left sidebar, not in separate modal dialog.
 - Inline sidebar actions: create label (via + with color selectable during creation), rename (double-click or context menu), delete (context menu), change color (context menu or inline picker).
-- Label order is reorderable via drag-and-drop in sidebar. Custom order is persisted.
+- Label order is reorderable via drag-and-drop in sidebar (drag label onto another label). Custom order is persisted.
+- Label drop targets show a visual hover highlight (accent color tint) during document drags.
+- Technical constraint: label rows must not use SwiftUI List `.onMove`, as this activates the List drop engine which intercepts all row-level drop events. Reordering is implemented via the row `.onDrop` handler by detecting label-type payloads.
 - Label filters use AND logic for multi-selection.
 
 ### 10.7 Automatic Label Assignment During Import
