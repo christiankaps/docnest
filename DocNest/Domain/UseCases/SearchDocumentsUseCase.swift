@@ -7,12 +7,7 @@ enum SearchDocumentsUseCase {
             return true
         }
 
-        let searchableValues = searchableValues(for: document)
-        return searchTerms.allSatisfy { term in
-            searchableValues.contains { value in
-                value.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-            }
-        }
+        return matchesAllSearchTerms(document, searchTerms: searchTerms)
     }
 
     static func filter(
@@ -20,9 +15,11 @@ enum SearchDocumentsUseCase {
         query: String,
         selectedLabelIDs: Set<PersistentIdentifier>
     ) -> [DocumentRecord] {
-        documents.filter { document in
+        let searchTerms = normalizedSearchTerms(from: query)
+
+        return documents.filter { document in
             matchesAllSelectedLabels(document, selectedLabelIDs: selectedLabelIDs)
-                && matches(document, query: query)
+                && matchesAllSearchTerms(document, searchTerms: searchTerms)
         }
     }
 
@@ -31,14 +28,42 @@ enum SearchDocumentsUseCase {
             return true
         }
 
-        let documentLabelIDs = Set(document.labels.map(\.persistentModelID))
-        return selectedLabelIDs.isSubset(of: documentLabelIDs)
+        for selectedLabelID in selectedLabelIDs {
+            let hasLabel = document.labels.contains { $0.persistentModelID == selectedLabelID }
+            if !hasLabel {
+                return false
+            }
+        }
+
+        return true
     }
 
-    private static func searchableValues(for document: DocumentRecord) -> [String] {
-        var values = [document.title, document.originalFileName]
-        values.append(contentsOf: document.labels.map(\.name))
-        return values
+    private static func matchesAllSearchTerms(_ document: DocumentRecord, searchTerms: [String]) -> Bool {
+        guard !searchTerms.isEmpty else {
+            return true
+        }
+
+        for term in searchTerms {
+            let titleMatches = document.title.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            if titleMatches {
+                continue
+            }
+
+            let fileNameMatches = document.originalFileName.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            if fileNameMatches {
+                continue
+            }
+
+            let labelMatches = document.labels.contains { label in
+                label.name.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            }
+
+            if !labelMatches {
+                return false
+            }
+        }
+
+        return true
     }
 
     private static func normalizedSearchTerms(from query: String) -> [String] {
