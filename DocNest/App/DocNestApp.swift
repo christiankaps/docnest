@@ -89,9 +89,16 @@ private struct AppRootView: View {
 
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Picker("Appearance", selection: $appearanceMode) {
-                        ForEach(AppearanceMode.allCases) { mode in
-                            Text(mode.label).tag(mode)
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Button {
+                            appearanceMode = mode
+                        } label: {
+                            HStack {
+                                Text(mode.label)
+                                if appearanceMode == mode {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
                         }
                     }
                 } label: {
