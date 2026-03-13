@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 import SwiftData
 
@@ -9,6 +10,8 @@ struct PendingDroppedLabelAssignment {
 @MainActor
 @Observable
 final class LibraryCoordinator {
+    private static let performanceLogger = Logger(subsystem: "com.kaps.docnest", category: "performance")
+
     // MARK: - Injected dependencies (set once by RootView)
     var libraryURL: URL?
     var modelContext: ModelContext?
@@ -114,8 +117,6 @@ final class LibraryCoordinator {
 
         guard !immediately else {
             labelFilterSelection.commitVisualSelection()
-            recomputeFilteredDocuments()
-            pruneSelectedDocumentIDs()
             return
         }
 
@@ -127,8 +128,6 @@ final class LibraryCoordinator {
             }
 
             labelFilterSelection.commitVisualSelection()
-            recomputeFilteredDocuments()
-            pruneSelectedDocumentIDs()
         }
     }
 
@@ -418,16 +417,8 @@ final class LibraryCoordinator {
     ) {
         #if DEBUG
         let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
-        print(
-            String(
-                format: "[Performance][Filter] section=%@ source=%d filtered=%d query=%d labels=%d duration=%.2fms",
-                selectedSection.rawValue,
-                sourceCount,
-                filteredCount,
-                queryLength,
-                activeLabelFilters,
-                elapsedMs
-            )
+        Self.performanceLogger.log(
+            "[Performance][Filter] section=\(self.selectedSection.rawValue, privacy: .public) source=\(sourceCount) filtered=\(filteredCount) query=\(queryLength) labels=\(activeLabelFilters) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
         )
         #endif
     }
