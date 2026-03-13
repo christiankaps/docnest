@@ -28,10 +28,6 @@ struct DocNestApp: App {
             CommandGroup(replacing: .importExport) { }
             CommandGroup(replacing: .printItem) { }
         }
-
-        Settings {
-            AppSettingsView()
-        }
     }
 }
 
@@ -58,24 +54,6 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
         case .light:  .light
         case .dark:   .dark
         }
-    }
-}
-
-private struct AppSettingsView: View {
-    @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
-
-    var body: some View {
-        Form {
-            Picker("Appearance", selection: $appearanceMode) {
-                ForEach(AppearanceMode.allCases) { mode in
-                    Text(mode.label).tag(mode)
-                }
-            }
-            .pickerStyle(.radioGroup)
-        }
-        .formStyle(.grouped)
-        .frame(width: 300)
-        .navigationTitle("Settings")
     }
 }
 
@@ -107,6 +85,19 @@ private struct AppRootView: View {
                         Button("Close Library", role: .destructive, action: librarySession.closeLibrary)
                     }
                 }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Picker("Appearance", selection: $appearanceMode) {
+                        ForEach(AppearanceMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                } label: {
+                    Label("Appearance", systemImage: "circle.lefthalf.filled")
+                }
+                .help("Switch appearance")
             }
         }
         .task {
