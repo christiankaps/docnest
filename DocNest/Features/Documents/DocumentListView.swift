@@ -82,7 +82,9 @@ struct DocumentListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            listHeader
+            if sortedDocuments.isEmpty || coordinator.documentListViewMode != .list {
+                listHeader
+            }
 
             Group {
                 if sortedDocuments.isEmpty {
@@ -173,12 +175,16 @@ struct DocumentListView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(Color.secondary.opacity(0.08))
+        .background {
+            Color(nsColor: .windowBackgroundColor)
+                .overlay(Color.secondary.opacity(0.08))
+        }
     }
 
     private var listContent: some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                Section {
                 ForEach(Array(sortedDocuments.enumerated()), id: \.element.persistentModelID) { index, document in
                     let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
 
@@ -197,6 +203,9 @@ struct DocumentListView: View {
                             }
                             return coordinator.assignDroppedLabelToDocument(labelID, document: document)
                         }
+                }
+                } header: {
+                    listHeader
                 }
             }
         }
@@ -280,7 +289,7 @@ struct DocumentListView: View {
                         .lineLimit(1)
                 }
             }
-            .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if showsImportedColumn {
                 Text(document.importedAt, format: .dateTime.year().month().day())
