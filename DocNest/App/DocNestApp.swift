@@ -43,62 +43,31 @@ private struct AppRootView: View {
                     .modelContainer(modelContainer)
                     .accessibilityIdentifier("library-open-root")
             } else {
-                HSplitView {
-                    List {
-                        Section("Library") {
-                            Label("All Documents", systemImage: "doc.richtext")
-                            Label("Recent Imports", systemImage: "clock")
-                            Label("Needs Labels", systemImage: "tag.slash")
-                        }
-
-                        Section("Label Filters") {
-                            Text("No labels yet")
-                                .font(AppTypography.caption)
-                                .foregroundStyle(.secondary)
+                ZStack {
+                    ContentUnavailableView {
+                        Label("No Library Open", systemImage: "books.vertical")
+                    } description: {
+                        Text("Create a DocNest library or open an existing one before importing documents.")
+                    } actions: {
+                        HStack(spacing: 12) {
+                            Button("Create Library", action: librarySession.createLibrary)
+                            Button("Open Library", action: librarySession.openLibrary)
                         }
                     }
-                    .listStyle(.sidebar)
-                    .frame(
-                        minWidth: AppSplitViewLayout.sidebarWidth,
-                        maxWidth: AppSplitViewLayout.sidebarWidth
-                    )
 
-                    ZStack {
-                        ContentUnavailableView {
-                            Label("No Library Open", systemImage: "books.vertical")
-                        } description: {
-                            Text("Create a DocNest library or open an existing one before importing documents.")
-                        } actions: {
-                            HStack(spacing: 12) {
-                                Button("Create Library", action: librarySession.createLibrary)
-                                Button("Open Library", action: librarySession.openLibrary)
-                            }
-                        }
-
-                        if isClosedLibraryDropTargeted {
-                            DocumentImportDropOverlay(
-                                title: "Open a Library First",
-                                message: "Create or open a DocNest library before dropping PDFs into the app."
-                            )
-                            .padding(20)
-                        }
+                    if isClosedLibraryDropTargeted {
+                        DocumentImportDropOverlay(
+                            title: "Open a Library First",
+                            message: "Create or open a DocNest library before dropping PDFs into the app."
+                        )
+                        .padding(20)
                     }
-                    .dropDestination(for: URL.self) { urls, _ in
-                        handleDroppedURLsWithoutLibrary(urls)
-                    } isTargeted: { isTargeted in
-                        isClosedLibraryDropTargeted = isTargeted
-                    }
-                    .frame(minWidth: AppSplitViewLayout.closedLibraryContentMinWidth)
-
-                    ContentUnavailableView(
-                        "No Document Selected",
-                        systemImage: "doc.text",
-                        description: Text("Open or create a library to inspect document details and preview PDFs.")
-                    )
-                    .frame(
-                        minWidth: AppSplitViewLayout.inspectorWidth,
-                        maxWidth: AppSplitViewLayout.inspectorWidth
-                    )
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .dropDestination(for: URL.self) { urls, _ in
+                    handleDroppedURLsWithoutLibrary(urls)
+                } isTargeted: { isTargeted in
+                    isClosedLibraryDropTargeted = isTargeted
                 }
                 .accessibilityIdentifier("library-closed-root")
             }
