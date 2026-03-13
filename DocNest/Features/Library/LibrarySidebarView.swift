@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import OSLog
 
 enum LibrarySection: String, CaseIterable, Identifiable {
     case allDocuments = "All Documents"
@@ -12,6 +13,8 @@ enum LibrarySection: String, CaseIterable, Identifiable {
 }
 
 struct LibrarySidebarView: View {
+    private static let performanceLogger = Logger(subsystem: "com.kaps.docnest", category: "performance")
+
     @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(\.modelContext) private var modelContext
 
@@ -33,6 +36,7 @@ struct LibrarySidebarView: View {
     }
 
     var body: some View {
+        let renderStartTime = Date().timeIntervalSinceReferenceDate
         @Bindable var coordinator = coordinator
 
         List {
@@ -44,17 +48,12 @@ struct LibrarySidebarView: View {
                             coordinator.labelFilterSelection.replaceVisualSelection(with: [])
                         }
                     } label: {
-                        HStack {
-                            Label(section.rawValue, systemImage: iconName(for: section))
-                            Spacer()
-                            Text("\(coordinator.sidebarCounts.count(for: section))")
-                                .font(AppTypography.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                                .opacity(coordinator.selectedSection == section ? 1 : 0)
-                                .frame(width: 14, alignment: .trailing)
-                        }
+                        LibrarySectionRowView(
+                            title: section.rawValue,
+                            systemImage: iconName(for: section),
+                            count: coordinator.sidebarCounts.count(for: section),
+                            isSelected: coordinator.selectedSection == section
+                        )
                     }
                     .buttonStyle(.plain)
                     .dropDestination(for: String.self) { items, _ in
@@ -159,20 +158,12 @@ struct LibrarySidebarView: View {
                             Button {
                                 toggleLabelSelection(label)
                             } label: {
-                                HStack {
-                                    Circle()
-                                        .fill(label.labelColor.color)
-                                        .frame(width: 10, height: 10)
-                                    Text(label.name)
-                                    Spacer()
-                                    Text("\(coordinator.sidebarCounts.count(for: label))")
-                                        .font(AppTypography.caption.monospacedDigit())
-                                        .foregroundStyle(.secondary)
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.tint)
-                                        .opacity(coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID) ? 1 : 0)
-                                        .frame(width: 14, alignment: .trailing)
-                                }
+                                LibraryLabelRowView(
+                                    name: label.name,
+                                    color: label.labelColor.color,
+                                    count: coordinator.sidebarCounts.count(for: label),
+                                    isSelected: coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID)
+                                )
                             }
                             .buttonStyle(.plain)
                             .onDrag {
@@ -241,7 +232,19 @@ struct LibrarySidebarView: View {
         } message: {
             Text(errorMessage ?? "Unknown label error.")
         }
+        .onAppear {
+            debugLogSidebarRenderTiming(startTime: renderStartTime, coordinator: coordinator)
+        }
 
+    }
+
+    private func debugLogSidebarRenderTiming(startTime: TimeInterval, coordinator: LibraryCoordinator) {
+        #if DEBUG
+        let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
+        Self.performanceLogger.log(
+            "[Performance][SidebarRender] section=\(coordinator.selectedSection.rawValue, privacy: .public) labels=\(coordinator.allLabels.count) visualFilters=\(coordinator.labelFilterSelection.visualSelection.count) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
+        )
+        #endif
     }
 
     private var errorBinding: Binding<Bool> {
@@ -358,6 +361,55 @@ struct LibrarySidebarView: View {
         }
     }
 
+}
+
+private struct LibrarySectionRowView: View {
+    let title: String
+    let systemImage: String
+    let count: Int
+    let isSelected: Bool
+
+    var body: some View {
+        HStack {
+            Label(title, systemImage: systemImage)
+            Spacer()
+            Text("\(count)")
+                .font(AppTypography.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Image(systemName: "checkmark")
+                .foregroundStyle(.tint)
+                .opacity(isSelected ? 1 : 0)
+                .frame(width: 14, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct LibraryLabelRowView: View {
+    let name: String
+    let color: Color
+    let count: Int
+    let isSelected: Bool
+
+    var body: some View {
+        HStack {
+            Circle()
+                .fill(color)
+                .frame(width: 10, height: 10)
+            Text(name)
+            Spacer()
+            Text("\(count)")
+                .font(AppTypography.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.tint)
+                .opacity(isSelected ? 1 : 0)
+                .frame(width: 14, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
 }
 
 struct PendingLabelDeletion {
