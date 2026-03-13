@@ -3,7 +3,6 @@ import SwiftData
 
 struct RootView: View {
     let libraryURL: URL
-    @Binding var columnVisibility: NavigationSplitViewVisibility
 
     @State private var coordinator = LibraryCoordinator()
     @State private var thumbnailCache = ThumbnailCache()
@@ -17,19 +16,23 @@ struct RootView: View {
     private var allLabels: [LabelTag]
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        HStack(spacing: 0) {
             LibrarySidebarView()
-                .navigationSplitViewColumnWidth(min: 200, ideal: AppSplitViewLayout.sidebarWidth, max: 320)
-        } content: {
+                .frame(width: AppSplitViewLayout.sidebarWidth)
+
+            Divider()
+
             documentListPanel
-        } detail: {
+                .frame(minWidth: AppSplitViewLayout.documentListMinWidth)
+
+            Divider()
+
             DocumentInspectorView(
                 documents: coordinator.selectedDocuments,
                 libraryURL: libraryURL
             )
-            .navigationSplitViewColumnWidth(min: 360, ideal: AppSplitViewLayout.inspectorWidth, max: 480)
+            .frame(width: AppSplitViewLayout.inspectorWidth)
         }
-        .navigationSplitViewStyle(.balanced)
         .environment(coordinator)
         .environment(thumbnailCache)
         .toolbar { toolbarContent }
@@ -247,6 +250,6 @@ struct DocumentImportDropOverlay: View {
 }
 
 #Preview {
-    RootView(libraryURL: URL(fileURLWithPath: "/tmp/preview.docnestlibrary"), columnVisibility: .constant(.all))
+    RootView(libraryURL: URL(fileURLWithPath: "/tmp/preview.docnestlibrary"))
         .modelContainer(for: DocumentRecord.self, inMemory: true)
 }

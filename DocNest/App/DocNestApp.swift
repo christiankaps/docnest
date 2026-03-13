@@ -83,14 +83,13 @@ private struct AppSettingsView: View {
 
 private struct AppRootView: View {
     @StateObject private var librarySession = LibrarySessionController()
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
 
     var body: some View {
         Group {
             if let libraryURL = librarySession.selectedLibraryURL,
                let modelContainer = librarySession.modelContainer {
-                RootView(libraryURL: libraryURL, columnVisibility: $columnVisibility)
+                RootView(libraryURL: libraryURL)
                     .modelContainer(modelContainer)
                     .accessibilityIdentifier("library-open-root")
             } else {
@@ -135,7 +134,7 @@ private struct AppRootView: View {
     @State private var isClosedLibraryDropTargeted = false
 
     private var closedLibraryContent: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        HStack(spacing: 0) {
             List {
                 Section("Library") {
                     Text("No library open")
@@ -147,9 +146,10 @@ private struct AppRootView: View {
                 }
             }
             .listStyle(.sidebar)
-            .navigationTitle("Library")
-            .navigationSplitViewColumnWidth(min: 200, ideal: AppSplitViewLayout.sidebarWidth, max: 320)
-        } content: {
+            .frame(width: AppSplitViewLayout.sidebarWidth)
+
+            Divider()
+
             ZStack {
                 ContentUnavailableView {
                     Label("No Library Open", systemImage: "books.vertical")
@@ -175,15 +175,16 @@ private struct AppRootView: View {
             } isTargeted: { isTargeted in
                 isClosedLibraryDropTargeted = isTargeted
             }
-        } detail: {
+
+            Divider()
+
             ContentUnavailableView(
                 "No Document Selected",
                 systemImage: "doc.text",
                 description: Text("Open a library and select a document to see its details.")
             )
-            .navigationSplitViewColumnWidth(min: 360, ideal: AppSplitViewLayout.inspectorWidth, max: 480)
+            .frame(width: AppSplitViewLayout.inspectorWidth)
         }
-        .navigationSplitViewStyle(.balanced)
     }
 
     // MARK: - Helpers

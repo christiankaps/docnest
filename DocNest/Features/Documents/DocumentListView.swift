@@ -124,7 +124,7 @@ struct DocumentListView: View {
             if coordinator.documentListViewMode == .list {
                 HStack(spacing: 10) {
                     sortButton("Document", column: .title)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
 
                     if showsImportedColumn {
                         ResizableColumnHeader(width: $importedColumnWidth, minWidth: 96) {
@@ -154,6 +154,7 @@ struct DocumentListView: View {
                         ResizableColumnHeader(width: $labelsColumnWidth, minWidth: 120) {
                             Text("Labels")
                                 .font(AppTypography.columnHeader)
+                                .lineLimit(1)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -289,7 +290,7 @@ struct DocumentListView: View {
                         .lineLimit(1)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 220, maxWidth: .infinity, alignment: .leading)
 
             if showsImportedColumn {
                 Text(document.importedAt, format: .dateTime.year().month().day())
@@ -427,6 +428,7 @@ struct DocumentListView: View {
             HStack(spacing: 4) {
                 Text(title)
                     .font(AppTypography.columnHeader)
+                    .lineLimit(1)
                 if sortColumn == column {
                     Image(systemName: sortDirection == .ascending ? "arrow.up" : "arrow.down")
                         .font(AppTypography.captionStrong)
