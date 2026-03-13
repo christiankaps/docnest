@@ -49,14 +49,6 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
         }
     }
 
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .system: nil
-        case .light:  .light
-        case .dark:   .dark
-        }
-    }
-
     var appAppearance: NSAppearance? {
         switch self {
         case .system:
@@ -75,6 +67,13 @@ private struct AppRootView: View {
     @StateObject private var librarySession = LibrarySessionController()
     @AppStorage("appearanceMode") private var appearanceMode: AppearanceMode = .system
 
+    private func applyAppearance(_ mode: AppearanceMode) {
+        NSApp.appearance = mode.appAppearance
+        for window in NSApp.windows {
+            window.appearance = mode.appAppearance
+        }
+    }
+
     var body: some View {
         Group {
             if let libraryURL = librarySession.selectedLibraryURL,
@@ -87,12 +86,11 @@ private struct AppRootView: View {
                     .accessibilityIdentifier("library-closed-root")
             }
         }
-        .preferredColorScheme(appearanceMode.colorScheme)
         .onAppear {
-            NSApp.appearance = appearanceMode.appAppearance
+            applyAppearance(appearanceMode)
         }
         .onChange(of: appearanceMode) { _, newMode in
-            NSApp.appearance = newMode.appAppearance
+            applyAppearance(newMode)
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
