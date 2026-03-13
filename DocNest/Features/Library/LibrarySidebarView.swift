@@ -12,16 +12,7 @@ enum LibrarySection: String, CaseIterable, Identifiable {
 }
 
 struct LibrarySidebarView: View {
-    @Binding var selectedSection: LibrarySection
-    let labels: [LabelTag]
-    let counts: LibrarySidebarCounts
-    let canRestoreAllFromBin: Bool
-    let canRemoveAllFromBin: Bool
-    let onRestoreAllFromBin: () -> Void
-    let onRemoveAllFromBin: () -> Void
-    let onDropDocumentsToBin: ([String]) -> Bool
-    let onDropDocumentsToLabel: ([String], LabelTag) -> Bool
-    @Binding var selectedLabelIDs: Set<PersistentIdentifier>
+    @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(\.modelContext) private var modelContext
 
     @State private var isAddingLabel = false
@@ -33,7 +24,7 @@ struct LibrarySidebarView: View {
     @State private var pendingLabelDeletion: PendingLabelDeletion?
 
     private var sortedLabels: [LabelTag] {
-        labels.sorted {
+        coordinator.allLabels.sorted {
             if $0.sortOrder == $1.sortOrder {
                 return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
@@ -42,22 +33,24 @@ struct LibrarySidebarView: View {
     }
 
     var body: some View {
+        @Bindable var coordinator = coordinator
+
         List {
             Section("Library") {
                 ForEach(LibrarySection.allCases) { section in
                     Button {
-                        selectedSection = section
+                        coordinator.selectedSection = section
                         if section == .needsLabels {
-                            selectedLabelIDs = []
+                            coordinator.labelFilterSelection.replaceVisualSelection(with: [])
                         }
                     } label: {
                         HStack {
                             Label(section.rawValue, systemImage: iconName(for: section))
                             Spacer()
-                            Text("\(counts.count(for: section))")
+                            Text("\(coordinator.sidebarCounts.count(for: section))")
                                 .font(AppTypography.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
-                            if selectedSection == section {
+                            if coordinator.selectedSection == section {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(.tint)
                             }
@@ -69,21 +62,21 @@ struct LibrarySidebarView: View {
                             return false
                         }
 
-                        return onDropDocumentsToBin(items)
+                        return coordinator.handleDroppedDocumentIDs(items)
                     }
                 }
 
-                if selectedSection == .bin {
+                if coordinator.selectedSection == .bin {
                     HStack(spacing: 8) {
                         Button("Restore All") {
-                            onRestoreAllFromBin()
+                            coordinator.restoreAllFromBin()
                         }
-                        .disabled(!canRestoreAllFromBin)
+                        .disabled(coordinator.trashedDocuments.isEmpty)
 
                         Button("Remove All", role: .destructive) {
-                            onRemoveAllFromBin()
+                            coordinator.isConfirmingBinRemoval = true
                         }
-                        .disabled(!canRemoveAllFromBin)
+                        .disabled(coordinator.trashedDocuments.isEmpty)
                     }
                     .font(AppTypography.caption)
                 }
@@ -92,9 +85,9 @@ struct LibrarySidebarView: View {
             Section("Label Filters") {
                 HStack {
                     Button("Clear Label Filters") {
-                        selectedLabelIDs = []
+                        coordinator.labelFilterSelection.replaceVisualSelection(with: [])
                     }
-                    .disabled(selectedLabelIDs.isEmpty)
+                    .disabled(coordinator.labelFilterSelection.visualSelection.isEmpty)
 
                     Spacer()
 
@@ -150,7 +143,7 @@ struct LibrarySidebarView: View {
                     }
                 }
 
-                if labels.isEmpty {
+                if coordinator.allLabels.isEmpty {
                     Text("No labels yet")
                         .font(AppTypography.caption)
                         .foregroundStyle(.secondary)
@@ -172,10 +165,10 @@ struct LibrarySidebarView: View {
                                         .frame(width: 10, height: 10)
                                     Text(label.name)
                                     Spacer()
-                                    Text("\(counts.count(for: label))")
+                                    Text("\(coordinator.sidebarCounts.count(for: label))")
                                         .font(AppTypography.caption.monospacedDigit())
                                         .foregroundStyle(.secondary)
-                                    if selectedLabelIDs.contains(label.persistentModelID) {
+                                    if coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID) {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundStyle(.tint)
                                     }
@@ -189,7 +182,7 @@ struct LibrarySidebarView: View {
                                 )
                             }
                             .dropDestination(for: String.self) { items, _ in
-                                onDropDocumentsToLabel(items, label)
+                                coordinator.handleDroppedDocumentsOnLabel(items, label: label)
                             }
                             .contextMenu {
                                 Button("Rename") {
@@ -273,11 +266,7 @@ struct LibrarySidebarView: View {
     }
 
     private func toggleLabelSelection(_ label: LabelTag) {
-        if selectedLabelIDs.contains(label.persistentModelID) {
-            selectedLabelIDs.remove(label.persistentModelID)
-        } else {
-            selectedLabelIDs.insert(label.persistentModelID)
-        }
+        coordinator.labelFilterSelection.toggleVisualSelection(for: label.persistentModelID)
     }
 
     private func addLabel() {
@@ -345,7 +334,6 @@ struct LibrarySidebarView: View {
 
     private func performDeleteLabel(_ label: LabelTag) throws {
         try ManageLabelsUseCase.delete(label, using: modelContext)
-        selectedLabelIDs.remove(label.persistentModelID)
     }
 
     private func moveLabels(from source: IndexSet, to destination: Int) {
@@ -436,17 +424,7 @@ struct LibrarySidebarCounts {
 }
 
 #Preview {
-    let labels = LabelTag.makeSamples()
-    LibrarySidebarView(
-        selectedSection: .constant(.allDocuments),
-        labels: [labels.finance, labels.tax, labels.contracts],
-        counts: LibrarySidebarCounts(documents: DocumentRecord.makeSamples(labels: labels), labels: [labels.finance, labels.tax, labels.contracts], recentLimit: 10),
-        canRestoreAllFromBin: false,
-        canRemoveAllFromBin: false,
-        onRestoreAllFromBin: {},
-        onRemoveAllFromBin: {},
-        onDropDocumentsToBin: { _ in false },
-        onDropDocumentsToLabel: { _, _ in false },
-        selectedLabelIDs: .constant([])
-    )
+    LibrarySidebarView()
+        .environment(LibraryCoordinator())
+        .modelContainer(for: DocumentRecord.self, inMemory: true)
 }

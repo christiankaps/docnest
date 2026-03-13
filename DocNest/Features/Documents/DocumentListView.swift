@@ -50,16 +50,7 @@ enum DocumentListViewMode: String, CaseIterable {
 }
 
 struct DocumentListView: View {
-    let documents: [DocumentRecord]
-    let selectedSection: LibrarySection
-    let libraryURL: URL?
-    let allLabels: [LabelTag]
-    let onRestoreDocument: (DocumentRecord) -> Void
-    let onMoveToBin: ([DocumentRecord]) -> Void
-    let onToggleLabel: (LabelTag, [DocumentRecord]) -> Void
-    let onAssignDroppedLabelToDocument: (UUID, DocumentRecord) -> Bool
-    @Binding var selectedDocumentIDs: Set<PersistentIdentifier>
-    @Binding var viewMode: DocumentListViewMode
+    @Environment(LibraryCoordinator.self) private var coordinator
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
     @AppStorage("docListThumbnailSize") private var thumbnailSize = 160.0
@@ -76,7 +67,7 @@ struct DocumentListView: View {
     @AppStorage("docListShowLabels") private var showsLabelsColumn = true
 
     private var sortedDocuments: [DocumentRecord] {
-        documents.sorted { lhs, rhs in
+        coordinator.filteredDocuments.sorted { lhs, rhs in
             let comparison = compare(lhs, rhs, for: sortColumn)
             if comparison == .orderedSame {
                 return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
@@ -91,6 +82,8 @@ struct DocumentListView: View {
     }
 
     var body: some View {
+        @Bindable var coordinator = coordinator
+
         VStack(spacing: 0) {
             listHeader
 
@@ -101,7 +94,7 @@ struct DocumentListView: View {
                     description: Text("Import PDFs to populate the library and review them here.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewMode == .list {
+            } else if coordinator.documentListViewMode == .list {
                 listContent
             } else {
                 thumbnailContent
@@ -111,8 +104,10 @@ struct DocumentListView: View {
     }
 
     private var listHeader: some View {
-        HStack(spacing: 10) {
-            if viewMode == .list {
+        @Bindable var coordinator = coordinator
+
+        return HStack(spacing: 10) {
+            if coordinator.documentListViewMode == .list {
                 ResizableColumnHeader(width: $documentColumnWidth, minWidth: 220) {
                     sortButton("Document", column: .title)
                 }
@@ -163,7 +158,7 @@ struct DocumentListView: View {
 
             Spacer(minLength: 0)
 
-            Picker("View", selection: $viewMode) {
+            Picker("View", selection: $coordinator.documentListViewMode) {
                 Image(systemName: "list.bullet")
                     .tag(DocumentListViewMode.list)
                 Image(systemName: "square.grid.2x2")
@@ -173,7 +168,7 @@ struct DocumentListView: View {
             .frame(width: 60)
             .help("Switch between list and thumbnail view")
 
-            if viewMode == .list {
+            if coordinator.documentListViewMode == .list {
                 Menu {
                     Text("Visible Attributes")
                     Toggle("Imported", isOn: $showsImportedColumn)
@@ -193,7 +188,9 @@ struct DocumentListView: View {
     }
 
     private var listContent: some View {
-        List(sortedDocuments, id: \.persistentModelID, selection: $selectedDocumentIDs) { document in
+        @Bindable var coordinator = coordinator
+
+        return List(sortedDocuments, id: \.persistentModelID, selection: $coordinator.selectedDocumentIDs) { document in
             documentRow(for: document)
                 .tag(document.persistentModelID)
                 .contextMenu { documentContextMenu(for: document) }
@@ -202,31 +199,33 @@ struct DocumentListView: View {
                     guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
                         return false
                     }
-                    return onAssignDroppedLabelToDocument(labelID, document)
+                    return coordinator.assignDroppedLabelToDocument(labelID, document: document)
                 }
         }
         .listStyle(.plain)
     }
 
     private var thumbnailContent: some View {
-        ScrollView {
+        @Bindable var coordinator = coordinator
+
+        return ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbnailSize), spacing: 16)], spacing: 16) {
                 ForEach(sortedDocuments, id: \.persistentModelID) { document in
                     DocumentThumbnailCell(
                         document: document,
-                        libraryURL: libraryURL,
+                        libraryURL: coordinator.libraryURL,
                         size: thumbnailSize,
-                        isSelected: selectedDocumentIDs.contains(document.persistentModelID)
+                        isSelected: coordinator.selectedDocumentIDs.contains(document.persistentModelID)
                     )
                     .onTapGesture {
                         if NSEvent.modifierFlags.contains(.command) {
-                            if selectedDocumentIDs.contains(document.persistentModelID) {
-                                selectedDocumentIDs.remove(document.persistentModelID)
+                            if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
+                                coordinator.selectedDocumentIDs.remove(document.persistentModelID)
                             } else {
-                                selectedDocumentIDs.insert(document.persistentModelID)
+                                coordinator.selectedDocumentIDs.insert(document.persistentModelID)
                             }
                         } else {
-                            selectedDocumentIDs = [document.persistentModelID]
+                            coordinator.selectedDocumentIDs = [document.persistentModelID]
                         }
                     }
                     .contextMenu { documentContextMenu(for: document) }
@@ -302,12 +301,12 @@ struct DocumentListView: View {
     }
 
     private func onRemoveLabelFromDocument(_ label: LabelTag, _ document: DocumentRecord) {
-        onToggleLabel(label, [document])
+        coordinator.toggleLabel(label, on: [document])
     }
 
     private func contextMenuDocuments(for document: DocumentRecord) -> [DocumentRecord] {
-        if selectedDocumentIDs.contains(document.persistentModelID) {
-            return sortedDocuments.filter { selectedDocumentIDs.contains($0.persistentModelID) }
+        if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
+            return sortedDocuments.filter { coordinator.selectedDocumentIDs.contains($0.persistentModelID) }
         }
         return [document]
     }
@@ -316,16 +315,16 @@ struct DocumentListView: View {
     private func documentContextMenu(for document: DocumentRecord) -> some View {
         let targets = contextMenuDocuments(for: document)
 
-        if selectedSection == .bin {
+        if coordinator.selectedSection == .bin {
             Button("Restore") {
-                onRestoreDocument(document)
+                coordinator.restoreDocumentFromBin(document)
             }
         } else {
-            if !allLabels.isEmpty {
+            if !coordinator.allLabels.isEmpty {
                 Menu("Labels") {
-                    ForEach(allLabels) { label in
+                    ForEach(coordinator.allLabels) { label in
                         Button {
-                            onToggleLabel(label, targets)
+                            coordinator.toggleLabel(label, on: targets)
                         } label: {
                             HStack {
                                 Text(label.name)
@@ -353,13 +352,13 @@ struct DocumentListView: View {
             }
 
             Button("Move to Bin") {
-                onMoveToBin(targets)
+                coordinator.moveToBin(targets)
             }
         }
     }
 
     private func originalFileURL(for document: DocumentRecord) -> URL? {
-        guard let path = document.storedFilePath, let libraryURL,
+        guard let path = document.storedFilePath, let libraryURL = coordinator.libraryURL,
               DocumentStorageService.fileExists(at: path, libraryURL: libraryURL) else {
             return nil
         }
@@ -369,9 +368,9 @@ struct DocumentListView: View {
     private func dragProvider(for document: DocumentRecord) -> NSItemProvider {
         let documentIDsToDrag: [UUID]
 
-        if selectedDocumentIDs.contains(document.persistentModelID) {
+        if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
             documentIDsToDrag = sortedDocuments
-                .filter { selectedDocumentIDs.contains($0.persistentModelID) }
+                .filter { coordinator.selectedDocumentIDs.contains($0.persistentModelID) }
                 .map(\.id)
         } else {
             documentIDsToDrag = [document.id]
@@ -605,6 +604,8 @@ private struct DocumentThumbnailCell: View {
     let size: Double
     let isSelected: Bool
 
+    @Environment(ThumbnailCache.self) private var thumbnailCache
+
     var body: some View {
         VStack(spacing: 6) {
             thumbnailImage
@@ -631,14 +632,19 @@ private struct DocumentThumbnailCell: View {
     @ViewBuilder
     private var thumbnailImage: some View {
         if let path = document.storedFilePath,
-           let libraryURL,
-           DocumentStorageService.fileExists(at: path, libraryURL: libraryURL),
-           let pdfDocument = PDFDocument(url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)),
-           let page = pdfDocument.page(at: 0) {
-            let nsImage = page.thumbnail(of: NSSize(width: size * 2, height: size * 2.6), for: .mediaBox)
-            Image(nsImage: nsImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+           let libraryURL {
+            let targetSize = CGSize(width: size * 2, height: size * 2.6)
+            if let image = thumbnailCache.thumbnail(for: path, libraryURL: libraryURL, size: targetSize) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.secondary.opacity(0.08))
+                    .overlay {
+                        ProgressView()
+                    }
+            }
         } else {
             RoundedRectangle(cornerRadius: 8)
                 .fill(Color.secondary.opacity(0.08))
@@ -665,17 +671,8 @@ private struct DocumentThumbnailCell: View {
         container.mainContext.insert(sample)
     }
 
-    return DocumentListView(
-        documents: samples,
-        selectedSection: .allDocuments,
-        libraryURL: nil,
-        allLabels: [labels.finance, labels.tax, labels.contracts],
-        onRestoreDocument: { _ in },
-        onMoveToBin: { _ in },
-        onToggleLabel: { _, _ in },
-        onAssignDroppedLabelToDocument: { _, _ in false },
-        selectedDocumentIDs: .constant(Set(samples.first.map { [$0.persistentModelID] } ?? [])),
-        viewMode: .constant(.list)
-    )
-    .modelContainer(container)
+    return DocumentListView()
+        .environment(LibraryCoordinator())
+        .environment(ThumbnailCache())
+        .modelContainer(container)
 }

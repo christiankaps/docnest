@@ -6,8 +6,8 @@ struct DocumentInspectorView: View {
     let documents: [DocumentRecord]
     let libraryURL: URL?
 
+    @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: [SortDescriptor(\LabelTag.sortOrder, order: .forward), SortDescriptor(\LabelTag.name, order: .forward)]) private var allLabels: [LabelTag]
     @State private var newLabelName = ""
     @State private var inspectorErrorMessage: String?
     @State private var pendingDeletion: [DocumentRecord] = []
@@ -273,6 +273,8 @@ struct DocumentInspectorView: View {
 
     @ViewBuilder
     private func labelSection(for document: DocumentRecord) -> some View {
+        let availableLabels = coordinator.allLabels
+
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Labels")
@@ -301,10 +303,10 @@ struct DocumentInspectorView: View {
             }
 
             Menu("Assign Existing Label") {
-                if allLabels.isEmpty {
+                if availableLabels.isEmpty {
                     Text("No labels available")
                 } else {
-                    ForEach(allLabels) { label in
+                    ForEach(availableLabels) { label in
                         Button {
                             toggleLabel(label, for: document)
                         } label: {
@@ -335,7 +337,8 @@ struct DocumentInspectorView: View {
     }
 
     private var multiSelectionInspector: some View {
-        let selectionSummary = BatchLabelSelectionSummary(documents: documents, availableLabels: allLabels)
+        let availableLabels = coordinator.allLabels
+        let selectionSummary = BatchLabelSelectionSummary(documents: documents, availableLabels: availableLabels)
 
         return VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
@@ -385,10 +388,10 @@ struct DocumentInspectorView: View {
             }
 
             Menu("Apply or Remove Existing Label") {
-                if allLabels.isEmpty {
+                if availableLabels.isEmpty {
                     Text("No labels available")
                 } else {
-                    ForEach(allLabels) { label in
+                    ForEach(availableLabels) { label in
                         Button {
                             toggleLabel(label, for: documents)
                         } label: {
@@ -703,5 +706,6 @@ private enum DocumentInspectorPreviewData {
     let previewData = DocumentInspectorPreviewData.make()
 
     DocumentInspectorView(documents: [previewData.document], libraryURL: nil)
+        .environment(LibraryCoordinator())
         .modelContainer(previewData.container)
 }
