@@ -50,10 +50,10 @@ struct LibrarySidebarView: View {
                             Text("\(coordinator.sidebarCounts.count(for: section))")
                                 .font(AppTypography.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
-                            if coordinator.selectedSection == section {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                            }
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.tint)
+                                .opacity(coordinator.selectedSection == section ? 1 : 0)
+                                .frame(width: 14, alignment: .trailing)
                         }
                     }
                     .buttonStyle(.plain)
@@ -168,10 +168,10 @@ struct LibrarySidebarView: View {
                                     Text("\(coordinator.sidebarCounts.count(for: label))")
                                         .font(AppTypography.caption.monospacedDigit())
                                         .foregroundStyle(.secondary)
-                                    if coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(.tint)
-                                    }
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.tint)
+                                        .opacity(coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID) ? 1 : 0)
+                                        .frame(width: 14, alignment: .trailing)
                                 }
                             }
                             .buttonStyle(.plain)
