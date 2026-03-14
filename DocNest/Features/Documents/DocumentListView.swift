@@ -66,6 +66,7 @@ struct DocumentListView: View {
     private let listHorizontalPadding = 24.0
 
     @Environment(LibraryCoordinator.self) private var coordinator
+    @State private var selectionAnchor: PersistentIdentifier?
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
     @State private var availableListWidth = AppSplitViewLayout.documentListIdealWidth
@@ -266,7 +267,7 @@ struct DocumentListView: View {
                         .background(rowBackground(index: index, isSelected: isSelected))
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            handleRowTap(document: document)
+                            handleRowTap(document: document, in: sortedDocs)
                         }
                         .contextMenu { documentContextMenu(for: document) }
                         .draggable(dragPayload(for: document))
@@ -274,7 +275,8 @@ struct DocumentListView: View {
                             guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
                                 return false
                             }
-                            return coordinator.assignDroppedLabelToDocument(labelID, document: document)
+                            let targets = dropTargetDocuments(for: document)
+                            return coordinator.assignDroppedLabelToDocuments(labelID, documents: targets)
                         }
                 }
                 } header: {
@@ -292,16 +294,32 @@ struct DocumentListView: View {
         }
     }
 
-    private func handleRowTap(document: DocumentRecord) {
+    private func handleRowTap(document: DocumentRecord, in sortedDocs: [DocumentRecord]) {
         let id = document.persistentModelID
-        if NSEvent.modifierFlags.contains(.command) {
+        let modifiers = NSEvent.modifierFlags
+
+        if modifiers.contains(.shift), let anchor = selectionAnchor {
+            let ids = sortedDocs.map(\.persistentModelID)
+            if let anchorIndex = ids.firstIndex(of: anchor),
+               let clickIndex = ids.firstIndex(of: id) {
+                let range = min(anchorIndex, clickIndex)...max(anchorIndex, clickIndex)
+                let rangeIDs = Set(ids[range])
+                if modifiers.contains(.command) {
+                    coordinator.selectedDocumentIDs.formUnion(rangeIDs)
+                } else {
+                    coordinator.selectedDocumentIDs = rangeIDs
+                }
+            }
+        } else if modifiers.contains(.command) {
             if coordinator.selectedDocumentIDs.contains(id) {
                 coordinator.selectedDocumentIDs.remove(id)
             } else {
                 coordinator.selectedDocumentIDs.insert(id)
             }
+            selectionAnchor = id
         } else {
             coordinator.selectedDocumentIDs = [id]
+            selectionAnchor = id
         }
     }
 
@@ -325,15 +343,7 @@ struct DocumentListView: View {
                         isSelected: coordinator.selectedDocumentIDs.contains(document.persistentModelID)
                     )
                     .onTapGesture {
-                        if NSEvent.modifierFlags.contains(.command) {
-                            if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
-                                coordinator.selectedDocumentIDs.remove(document.persistentModelID)
-                            } else {
-                                coordinator.selectedDocumentIDs.insert(document.persistentModelID)
-                            }
-                        } else {
-                            coordinator.selectedDocumentIDs = [document.persistentModelID]
-                        }
+                        handleRowTap(document: document, in: sortedDocs)
                     }
                     .contextMenu { documentContextMenu(for: document) }
                     .draggable(dragPayload(for: document))
@@ -469,6 +479,15 @@ struct DocumentListView: View {
             return nil
         }
         return DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
+    }
+
+    private func dropTargetDocuments(for document: DocumentRecord) -> [DocumentRecord] {
+        if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
+            return coordinator.filteredDocuments.filter {
+                coordinator.selectedDocumentIDs.contains($0.persistentModelID)
+            }
+        }
+        return [document]
     }
 
     private func dragPayload(for document: DocumentRecord) -> String {

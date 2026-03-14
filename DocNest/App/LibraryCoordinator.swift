@@ -213,18 +213,18 @@ final class LibraryCoordinator {
         }
     }
 
-    func assignDroppedLabelToDocument(_ labelID: UUID, document: DocumentRecord) -> Bool {
+    func assignDroppedLabelToDocuments(_ labelID: UUID, documents: [DocumentRecord]) -> Bool {
         guard let modelContext else { return false }
-        guard document.trashedAt == nil else {
-            return false
-        }
+
+        let activeDocuments = documents.filter { $0.trashedAt == nil }
+        guard !activeDocuments.isEmpty else { return false }
 
         guard let label = allLabels.first(where: { $0.id == labelID }) else {
             return false
         }
 
         do {
-            try ManageLabelsUseCase.assign(label, to: document, using: modelContext)
+            try ManageLabelsUseCase.assign(label, to: activeDocuments, using: modelContext)
             return true
         } catch {
             importSummaryMessage = error.localizedDescription
