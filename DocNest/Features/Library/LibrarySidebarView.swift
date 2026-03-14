@@ -12,6 +12,11 @@ enum LibrarySection: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+private enum ReorderInsertionEdge {
+    case above(PersistentIdentifier)
+    case below(PersistentIdentifier)
+}
+
 struct LibrarySidebarView: View {
     private static let performanceLogger = Logger(subsystem: "com.kaps.docnest", category: "performance")
 
@@ -26,6 +31,8 @@ struct LibrarySidebarView: View {
     @State private var errorMessage: String?
     @State private var pendingLabelDeletion: PendingLabelDeletion?
     @State private var hoveredLabelDropTargetID: PersistentIdentifier?
+    @State private var draggingLabelID: UUID?
+    @State private var reorderInsertionEdge: ReorderInsertionEdge?
 
     private var sortedLabels: [LabelTag] {
         coordinator.allLabels.sorted {
@@ -164,6 +171,16 @@ struct LibrarySidebarView: View {
                                     }
                                     .sidebarRow()
                             } else {
+                                let isDocumentDrop = hoveredLabelDropTargetID == label.persistentModelID && draggingLabelID == nil
+                                let showAboveLine = reorderInsertionEdge.flatMap { edge in
+                                    if case .above(let id) = edge, id == label.persistentModelID { return true }
+                                    return nil
+                                } ?? false
+                                let showBelowLine = reorderInsertionEdge.flatMap { edge in
+                                    if case .below(let id) = edge, id == label.persistentModelID { return true }
+                                    return nil
+                                } ?? false
+
                                 LibraryLabelRowView(
                                     name: label.name,
                                     color: label.labelColor.color,
@@ -173,20 +190,40 @@ struct LibrarySidebarView: View {
                                 .sidebarRow()
                                 .background(
                                     RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color.accentColor.opacity(hoveredLabelDropTargetID == label.persistentModelID ? 0.16 : 0))
+                                        .fill(Color.accentColor.opacity(isDocumentDrop ? 0.16 : 0))
                                 )
+                                .overlay(alignment: .top) {
+                                    if showAboveLine {
+                                        ReorderInsertionLine()
+                                            .offset(y: -1.5)
+                                    }
+                                }
+                                .overlay(alignment: .bottom) {
+                                    if showBelowLine {
+                                        ReorderInsertionLine()
+                                            .offset(y: 1.5)
+                                    }
+                                }
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     toggleLabelSelection(label)
                                 }
-                                .draggable(DocumentLabelDragPayload.payload(for: label.id))
+                                .draggable(DocumentLabelDragPayload.payload(for: label.id)) {
+                                    // Set dragging state when drag begins
+                                    LabelDragPreview(name: label.name, color: label.labelColor.color)
+                                        .onAppear { draggingLabelID = label.id }
+                                }
                                 .dropDestination(for: String.self) { items, _ in
-                                    handleDroppedStrings(items, onto: label)
+                                    draggingLabelID = nil
+                                    reorderInsertionEdge = nil
+                                    return handleDroppedStrings(items, onto: label)
                                 } isTargeted: { isTargeted in
                                     if isTargeted {
                                         hoveredLabelDropTargetID = label.persistentModelID
+                                        updateReorderInsertionEdge(for: label)
                                     } else if hoveredLabelDropTargetID == label.persistentModelID {
                                         hoveredLabelDropTargetID = nil
+                                        reorderInsertionEdge = nil
                                     }
                                 }
                                 .contextMenu {
@@ -368,6 +405,28 @@ struct LibrarySidebarView: View {
         try ManageLabelsUseCase.delete(label, using: modelContext)
     }
 
+    private func updateReorderInsertionEdge(for targetLabel: LabelTag) {
+        guard let draggingLabelID else {
+            reorderInsertionEdge = nil
+            return
+        }
+
+        let labels = sortedLabels
+        guard let sourceIndex = labels.firstIndex(where: { $0.id == draggingLabelID }),
+              let targetIndex = labels.firstIndex(where: { $0.persistentModelID == targetLabel.persistentModelID }),
+              sourceIndex != targetIndex else {
+            reorderInsertionEdge = nil
+            return
+        }
+
+        let targetID = targetLabel.persistentModelID
+        if sourceIndex < targetIndex {
+            reorderInsertionEdge = .below(targetID)
+        } else {
+            reorderInsertionEdge = .above(targetID)
+        }
+    }
+
     private func handleDroppedStrings(_ items: [String], onto label: LabelTag) -> Bool {
         guard !items.isEmpty else { return false }
 
@@ -529,6 +588,39 @@ struct LibrarySidebarCounts {
 
     func count(for label: LabelTag) -> Int {
         labelCounts[label.persistentModelID, default: 0]
+    }
+}
+
+private struct ReorderInsertionLine: View {
+    var body: some View {
+        HStack(spacing: 0) {
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: 6, height: 6)
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(height: 2)
+        }
+        .padding(.horizontal, 12)
+        .allowsHitTesting(false)
+    }
+}
+
+private struct LabelDragPreview: View {
+    let name: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text(name)
+                .font(.callout)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
     }
 }
 
