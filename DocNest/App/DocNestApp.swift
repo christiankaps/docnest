@@ -199,6 +199,7 @@ private struct AppRootView: View {
             )
             .frame(width: AppSplitViewLayout.inspectorWidth)
         }
+        .padding(AppSplitViewLayout.windowContentInset)
     }
 
     // MARK: - Helpers

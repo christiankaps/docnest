@@ -33,6 +33,7 @@ struct RootView: View {
             )
             .frame(width: AppSplitViewLayout.inspectorWidth)
         }
+        .padding(AppSplitViewLayout.windowContentInset)
         .environment(coordinator)
         .environment(thumbnailCache)
         .toolbar { toolbarContent }
