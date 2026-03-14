@@ -140,8 +140,8 @@ enum ImportPDFDocumentsUseCase {
                     importedAt: importedAt,
                     into: libraryURL
                 )
-                record.labels = autoAssignLabels
                 modelContext.insert(record)
+                record.labels = autoAssignLabels
                 importedRecords.append(record)
                 if let storedFilePath = record.storedFilePath {
                     importedStoredPaths.append(storedFilePath)
