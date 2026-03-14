@@ -41,189 +41,188 @@ struct LibrarySidebarView: View {
         let labels = sortedLabels
         @Bindable var coordinator = coordinator
 
-        List {
-            Section("Library") {
-                ForEach(LibrarySection.allCases) { section in
-                    Button {
-                        coordinator.selectedSection = section
-                        if section == .needsLabels {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                sidebarSection("Library") {
+                    ForEach(LibrarySection.allCases) { section in
+                        Button {
+                            coordinator.selectedSection = section
+                            if section == .needsLabels {
+                                coordinator.labelFilterSelection.replaceVisualSelection(with: [])
+                            }
+                        } label: {
+                            LibrarySectionRowView(
+                                title: section.rawValue,
+                                systemImage: iconName(for: section),
+                                count: coordinator.sidebarCounts.count(for: section),
+                                isSelected: coordinator.selectedSection == section
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .sidebarRow()
+                        .dropDestination(for: String.self) { items, _ in
+                            guard section == .bin else {
+                                return false
+                            }
+
+                            return coordinator.handleDroppedDocumentIDs(items)
+                        }
+                    }
+
+                    if coordinator.selectedSection == .bin {
+                        HStack(spacing: 8) {
+                            Button("Restore All") {
+                                coordinator.restoreAllFromBin()
+                            }
+                            .disabled(coordinator.trashedDocuments.isEmpty)
+
+                            Button("Remove All", role: .destructive) {
+                                coordinator.isConfirmingBinRemoval = true
+                            }
+                            .disabled(coordinator.trashedDocuments.isEmpty)
+                        }
+                        .font(AppTypography.caption)
+                        .sidebarRow()
+                    }
+                }
+
+                sidebarSection("Label Filters") {
+                    HStack {
+                        Button("Clear Label Filters") {
                             coordinator.labelFilterSelection.replaceVisualSelection(with: [])
                         }
-                    } label: {
-                        LibrarySectionRowView(
-                            title: section.rawValue,
-                            systemImage: iconName(for: section),
-                            count: coordinator.sidebarCounts.count(for: section),
-                            isSelected: coordinator.selectedSection == section
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .dropDestination(for: String.self) { items, _ in
-                        guard section == .bin else {
-                            return false
+                        .disabled(coordinator.labelFilterSelection.visualSelection.isEmpty)
+
+                        Spacer()
+
+                        Button {
+                            isAddingLabel = true
+                        } label: {
+                            Image(systemName: "plus")
                         }
-
-                        return coordinator.handleDroppedDocumentIDs(items)
+                        .buttonStyle(.plain)
+                        .help("Add Label")
                     }
-                }
+                    .sidebarRow()
 
-                if coordinator.selectedSection == .bin {
-                    HStack(spacing: 8) {
-                        Button("Restore All") {
-                            coordinator.restoreAllFromBin()
-                        }
-                        .disabled(coordinator.trashedDocuments.isEmpty)
+                    if isAddingLabel {
+                        VStack(spacing: 8) {
+                            HStack(spacing: 8) {
+                                TextField("New label", text: $newLabelName)
+                                    .textFieldStyle(.roundedBorder)
+                                    .onSubmit(addLabel)
 
-                        Button("Remove All", role: .destructive) {
-                            coordinator.isConfirmingBinRemoval = true
-                        }
-                        .disabled(coordinator.trashedDocuments.isEmpty)
-                    }
-                    .font(AppTypography.caption)
-                }
-            }
-
-            Section("Label Filters") {
-                HStack {
-                    Button("Clear Label Filters") {
-                        coordinator.labelFilterSelection.replaceVisualSelection(with: [])
-                    }
-                    .disabled(coordinator.labelFilterSelection.visualSelection.isEmpty)
-
-                    Spacer()
-
-                    Button {
-                        isAddingLabel = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.plain)
-                    .help("Add Label")
-                }
-
-                if isAddingLabel {
-                    VStack(spacing: 8) {
-                        HStack(spacing: 8) {
-                            TextField("New label", text: $newLabelName)
-                                .textFieldStyle(.roundedBorder)
-                                .onSubmit(addLabel)
-
-                            Menu {
-                                ForEach(LabelColor.allCases) { color in
-                                    Button {
-                                        newLabelColor = color
-                                    } label: {
-                                        HStack(spacing: 8) {
-                                            Circle()
-                                                .fill(color.color)
-                                                .frame(width: 16, height: 16)
-                                                .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                                            Text(color.displayName)
-                                            if newLabelColor == color {
-                                                Image(systemName: "checkmark")
+                                Menu {
+                                    ForEach(LabelColor.allCases) { color in
+                                        Button {
+                                            newLabelColor = color
+                                        } label: {
+                                            HStack(spacing: 8) {
+                                                Circle()
+                                                    .fill(color.color)
+                                                    .frame(width: 16, height: 16)
+                                                    .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                                                Text(color.displayName)
+                                                if newLabelColor == color {
+                                                    Image(systemName: "checkmark")
+                                                }
                                             }
                                         }
                                     }
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Circle()
+                                            .fill(newLabelColor.color)
+                                            .frame(width: 16, height: 16)
+                                            .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                                        Text(newLabelColor.displayName)
+                                            .font(AppTypography.caption)
+                                    }
+                                    .foregroundStyle(.primary)
                                 }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Circle()
-                                        .fill(newLabelColor.color)
-                                        .frame(width: 16, height: 16)
-                                        .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                                    Text(newLabelColor.displayName)
-                                        .font(AppTypography.caption)
-                                }
-                                .foregroundStyle(.primary)
-                            }
-                            .help("Choose label color")
+                                .help("Choose label color")
 
-                            Button("Add", action: addLabel)
-                                .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                Button("Add", action: addLabel)
+                                    .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
                         }
+                        .sidebarRow()
                     }
-                }
 
-                if coordinator.allLabels.isEmpty {
-                    Text("No labels yet")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(labels) { label in
-                        if editingLabelID == label.persistentModelID {
-                            TextField("Label name", text: $editedLabelName)
-                                .textFieldStyle(.roundedBorder)
-                                .onSubmit {
-                                    renameLabel(label)
-                                }
-                        } else {
-                            LibraryLabelRowView(
-                                name: label.name,
-                                color: label.labelColor.color,
-                                count: coordinator.sidebarCounts.count(for: label),
-                                isSelected: coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID)
-                            )
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.accentColor.opacity(hoveredLabelDropTargetID == label.persistentModelID ? 0.16 : 0))
-                            )
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                toggleLabelSelection(label)
-                            }
-                            .onDrag {
-                                NSItemProvider(
-                                    item: DocumentLabelDragPayload.payload(for: label.id) as NSString,
-                                    typeIdentifier: UTType.plainText.identifier
+                    if coordinator.allLabels.isEmpty {
+                        Text("No labels yet")
+                            .font(AppTypography.caption)
+                            .foregroundStyle(.secondary)
+                            .sidebarRow()
+                    } else {
+                        ForEach(labels) { label in
+                            if editingLabelID == label.persistentModelID {
+                                TextField("Label name", text: $editedLabelName)
+                                    .textFieldStyle(.roundedBorder)
+                                    .onSubmit {
+                                        renameLabel(label)
+                                    }
+                                    .sidebarRow()
+                            } else {
+                                LibraryLabelRowView(
+                                    name: label.name,
+                                    color: label.labelColor.color,
+                                    count: coordinator.sidebarCounts.count(for: label),
+                                    isSelected: coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID)
                                 )
-                            }
-                            .onDrop(of: [UTType.plainText], isTargeted: Binding(
-                                get: { hoveredLabelDropTargetID == label.persistentModelID },
-                                set: { isTargeted in
+                                .sidebarRow()
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(Color.accentColor.opacity(hoveredLabelDropTargetID == label.persistentModelID ? 0.16 : 0))
+                                )
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    toggleLabelSelection(label)
+                                }
+                                .draggable(DocumentLabelDragPayload.payload(for: label.id))
+                                .dropDestination(for: String.self) { items, _ in
+                                    handleDroppedStrings(items, onto: label)
+                                } isTargeted: { isTargeted in
                                     if isTargeted {
                                         hoveredLabelDropTargetID = label.persistentModelID
                                     } else if hoveredLabelDropTargetID == label.persistentModelID {
                                         hoveredLabelDropTargetID = nil
                                     }
                                 }
-                            )) { providers in
-                                return handleDroppedProviders(providers, onto: label)
-                            }
-                            .contextMenu {
-                                Button("Rename") {
-                                    beginEditing(label)
-                                }
+                                .contextMenu {
+                                    Button("Rename") {
+                                        beginEditing(label)
+                                    }
 
-                                Menu("Color") {
-                                    ForEach(LabelColor.allCases) { color in
-                                        Button {
-                                            changeColor(of: label, to: color)
-                                        } label: {
-                                            HStack {
-                                                Text(color.displayName)
-                                                if label.labelColor == color {
-                                                    Image(systemName: "checkmark")
+                                    Menu("Color") {
+                                        ForEach(LabelColor.allCases) { color in
+                                            Button {
+                                                changeColor(of: label, to: color)
+                                            } label: {
+                                                HStack {
+                                                    Text(color.displayName)
+                                                    if label.labelColor == color {
+                                                        Image(systemName: "checkmark")
+                                                    }
                                                 }
                                             }
                                         }
                                     }
-                                }
 
-                                Button("Delete", role: .destructive) {
-                                    deleteLabel(label)
+                                    Button("Delete", role: .destructive) {
+                                        deleteLabel(label)
+                                    }
                                 }
-                            }
-                            .onTapGesture(count: 2) {
-                                beginEditing(label)
+                                .onTapGesture(count: 2) {
+                                    beginEditing(label)
+                                }
                             }
                         }
                     }
-                    // .onMove removed: List's built-in drag machinery would intercept
-                    // drop events on label rows. Reordering is handled via .onDrop.
                 }
             }
+            .padding(.vertical, 4)
         }
-        .listStyle(.sidebar)
         .navigationTitle("Library")
         .confirmationDialog(
             pendingLabelDeletion?.title ?? "Delete Label",
@@ -251,6 +250,20 @@ struct LibrarySidebarView: View {
             debugLogSidebarRenderTiming(startTime: renderStartTime, coordinator: coordinator)
         }
 
+    }
+
+    private func sidebarSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+
+            content()
+        }
     }
 
     private func debugLogSidebarRenderTiming(startTime: TimeInterval, coordinator: LibraryCoordinator) {
@@ -355,54 +368,17 @@ struct LibrarySidebarView: View {
         try ManageLabelsUseCase.delete(label, using: modelContext)
     }
 
-    private func handleDroppedProviders(_ providers: [NSItemProvider], onto label: LabelTag) -> Bool {
-        let plainTextIdentifier = UTType.plainText.identifier
-        let supportedProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(plainTextIdentifier) }
+    private func handleDroppedStrings(_ items: [String], onto label: LabelTag) -> Bool {
+        guard !items.isEmpty else { return false }
 
-        guard !supportedProviders.isEmpty else { return false }
-
-        var payloads: [String] = []
-        let payloadLock = NSLock()
-        let group = DispatchGroup()
-
-        for provider in supportedProviders {
-            group.enter()
-            provider.loadItem(forTypeIdentifier: plainTextIdentifier, options: nil) { item, _ in
-                defer { group.leave() }
-
-                if let value = item as? String {
-                    payloadLock.lock()
-                    payloads.append(value)
-                    payloadLock.unlock()
-                    return
-                }
-
-                if let value = item as? NSString {
-                    payloadLock.lock()
-                    payloads.append(value as String)
-                    payloadLock.unlock()
-                    return
-                }
-
-                if let value = item as? Data, let decoded = String(data: value, encoding: .utf8) {
-                    payloadLock.lock()
-                    payloads.append(decoded)
-                    payloadLock.unlock()
-                }
-            }
+        // A label-label drag is a reorder operation; document drags are assignments.
+        if let payload = items.first,
+           let sourceLabelID = DocumentLabelDragPayload.labelID(from: payload) {
+            reorderLabel(sourceID: sourceLabelID, onto: label)
+            return true
         }
 
-        group.notify(queue: .main) {
-            // A label-label drag is a reorder operation; document drags are assignments.
-            if let payload = payloads.first,
-               let sourceLabelID = DocumentLabelDragPayload.labelID(from: payload) {
-                reorderLabel(sourceID: sourceLabelID, onto: label)
-            } else {
-                _ = coordinator.handleDroppedDocumentsOnLabel(payloads, label: label)
-            }
-        }
-
-        return true
+        return coordinator.handleDroppedDocumentsOnLabel(items, label: label)
     }
 
     private func reorderLabel(sourceID: UUID, onto targetLabel: LabelTag) {
@@ -434,6 +410,15 @@ struct LibrarySidebarView: View {
         }
     }
 
+}
+
+private extension View {
+    func sidebarRow() -> some View {
+        self
+            .padding(.horizontal, 16)
+            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 
 private struct LibrarySectionRowView: View {

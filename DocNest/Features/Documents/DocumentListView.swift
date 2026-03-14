@@ -269,7 +269,7 @@ struct DocumentListView: View {
                             handleRowTap(document: document)
                         }
                         .contextMenu { documentContextMenu(for: document) }
-                        .onDrag { dragProvider(for: document) }
+                        .draggable(dragPayload(for: document))
                         .dropDestination(for: String.self) { items, _ in
                             guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
                                 return false
@@ -336,7 +336,7 @@ struct DocumentListView: View {
                         }
                     }
                     .contextMenu { documentContextMenu(for: document) }
-                    .onDrag { dragProvider(for: document) }
+                    .draggable(dragPayload(for: document))
                 }
             }
             .padding(16)
@@ -471,7 +471,7 @@ struct DocumentListView: View {
         return DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
     }
 
-    private func dragProvider(for document: DocumentRecord) -> NSItemProvider {
+    private func dragPayload(for document: DocumentRecord) -> String {
         let documentIDsToDrag: [UUID]
 
         if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
@@ -482,10 +482,7 @@ struct DocumentListView: View {
             documentIDsToDrag = [document.id]
         }
 
-        return NSItemProvider(
-            item: DocumentFileDragPayload.payload(for: documentIDsToDrag) as NSString,
-            typeIdentifier: UTType.plainText.identifier
-        )
+        return DocumentFileDragPayload.payload(for: documentIDsToDrag)
     }
 
     private func sortButton(_ title: String, column: SortColumn) -> some View {

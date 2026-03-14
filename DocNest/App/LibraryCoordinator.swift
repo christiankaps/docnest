@@ -269,13 +269,11 @@ final class LibraryCoordinator {
             let alreadyAssigned = document.labels.contains { $0.persistentModelID == label.persistentModelID }
 
             if alreadyAssigned {
-                importSummaryMessage = "\"\(label.name)\" is already assigned to this document."
                 return true
             }
 
             do {
                 try ManageLabelsUseCase.assign(label, to: document, using: modelContext)
-                importSummaryMessage = "Assigned \"\(label.name)\" to 1 document."
                 return true
             } catch {
                 importSummaryMessage = error.localizedDescription
@@ -317,18 +315,11 @@ final class LibraryCoordinator {
 
         guard !missingAssignments.isEmpty else {
             pendingDroppedLabelAssignment = nil
-            importSummaryMessage = "\"\(label.name)\" is already assigned to all selected documents."
             return
         }
 
         do {
             try ManageLabelsUseCase.assign(label, to: missingAssignments, using: modelContext)
-            let skippedCount = documentsToAssign.count - missingAssignments.count
-            if skippedCount > 0 {
-                importSummaryMessage = "Assigned \"\(label.name)\" to \(missingAssignments.count) documents (\(skippedCount) already had it)."
-            } else {
-                importSummaryMessage = "Assigned \"\(label.name)\" to \(missingAssignments.count) documents."
-            }
             pendingDroppedLabelAssignment = nil
         } catch {
             pendingDroppedLabelAssignment = nil
