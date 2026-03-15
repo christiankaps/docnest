@@ -29,8 +29,8 @@ struct LibrarySidebarView: View {
     @State private var newLabelIcon = ""
     @State private var editingLabelID: PersistentIdentifier?
     @State private var editedLabelName = ""
-    @State private var editingIconLabelID: PersistentIdentifier?
-    @State private var editedIcon = ""
+    @State private var editedLabelColor: LabelColor = .blue
+    @State private var editedLabelIcon = ""
     @State private var errorMessage: String?
     @State private var pendingLabelDeletion: PendingLabelDeletion?
     @State private var hoveredLabelDropTargetID: PersistentIdentifier?
@@ -171,12 +171,48 @@ struct LibrarySidebarView: View {
                     } else {
                         ForEach(labels) { label in
                             if editingLabelID == label.persistentModelID {
-                                TextField("Label name", text: $editedLabelName)
-                                    .textFieldStyle(.roundedBorder)
-                                    .onSubmit {
-                                        renameLabel(label)
+                                HStack(spacing: 8) {
+                                    EmojiPickerButton(selection: $editedLabelIcon)
+                                        .frame(width: 28, height: 22)
+                                        .help("Choose emoji icon (optional)")
+
+                                    TextField("Label name", text: $editedLabelName)
+                                        .textFieldStyle(.roundedBorder)
+                                        .onSubmit { commitEdit(label) }
+
+                                    Menu {
+                                        ForEach(LabelColor.allCases) { color in
+                                            Button {
+                                                editedLabelColor = color
+                                            } label: {
+                                                HStack(spacing: 8) {
+                                                    Circle()
+                                                        .fill(color.color)
+                                                        .frame(width: 16, height: 16)
+                                                        .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                                                    Text(color.displayName)
+                                                    if editedLabelColor == color {
+                                                        Image(systemName: "checkmark")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Circle()
+                                                .fill(editedLabelColor.color)
+                                                .frame(width: 16, height: 16)
+                                                .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                                            Text(editedLabelColor.displayName)
+                                                .font(AppTypography.caption)
+                                        }
+                                        .foregroundStyle(.primary)
                                     }
-                                    .sidebarRow()
+
+                                    Button("Save") { commitEdit(label) }
+                                        .disabled(editedLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                }
+                                .sidebarRow()
                             } else {
                                 let isDocumentDrop = hoveredLabelDropTargetID == label.persistentModelID && draggingLabelID == nil
                                 let showAboveLine = reorderInsertionEdge.flatMap { edge in
@@ -235,37 +271,8 @@ struct LibrarySidebarView: View {
                                     }
                                 }
                                 .contextMenu {
-                                    Button("Rename") {
+                                    Button("Edit") {
                                         beginEditing(label)
-                                    }
-
-                                    Menu("Color") {
-                                        ForEach(LabelColor.allCases) { color in
-                                            Button {
-                                                changeColor(of: label, to: color)
-                                            } label: {
-                                                HStack {
-                                                    Text(color.displayName)
-                                                    if label.labelColor == color {
-                                                        Image(systemName: "checkmark")
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Button(label.icon != nil ? "Change Icon" : "Set Icon") {
-                                        editedIcon = label.icon ?? ""
-                                        editingIconLabelID = label.persistentModelID
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                            NSApp.orderFrontCharacterPalette(nil)
-                                        }
-                                    }
-
-                                    if label.icon != nil {
-                                        Button("Remove Icon") {
-                                            changeIcon(of: label, to: nil)
-                                        }
                                     }
 
                                     Button("Delete", role: .destructive) {
@@ -305,17 +312,7 @@ struct LibrarySidebarView: View {
         } message: {
             Text(errorMessage ?? "Unknown label error.")
         }
-        .alert("Set Icon", isPresented: editingIconBinding) {
-            TextField("Emoji", text: $editedIcon)
-            Button("Save") {
-                commitIconEdit()
-            }
-            Button("Cancel", role: .cancel) {
-                editingIconLabelID = nil
-            }
-        } message: {
-            Text("Enter an emoji to use as the label icon.")
-        }
+
         .onAppear {
             debugLogSidebarRenderTiming(startTime: renderStartTime, coordinator: coordinator)
         }
@@ -387,56 +384,21 @@ struct LibrarySidebarView: View {
     private func beginEditing(_ label: LabelTag) {
         editingLabelID = label.persistentModelID
         editedLabelName = label.name
+        editedLabelColor = label.labelColor
+        editedLabelIcon = label.icon ?? ""
     }
 
-    private func renameLabel(_ label: LabelTag) {
+    private func commitEdit(_ label: LabelTag) {
         do {
             _ = try ManageLabelsUseCase.rename(label, to: editedLabelName, using: modelContext)
+            try ManageLabelsUseCase.changeColor(of: label, to: editedLabelColor, using: modelContext)
+            let iconTrimmed = editedLabelIcon.trimmingCharacters(in: .whitespacesAndNewlines)
+            try ManageLabelsUseCase.changeIcon(of: label, to: iconTrimmed.isEmpty ? nil : String(iconTrimmed.prefix(1)), using: modelContext)
             editingLabelID = nil
             editedLabelName = ""
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    private var editingIconBinding: Binding<Bool> {
-        Binding(
-            get: { editingIconLabelID != nil },
-            set: { newValue in
-                if !newValue {
-                    editingIconLabelID = nil
-                }
-            }
-        )
-    }
-
-    private func changeColor(of label: LabelTag, to color: LabelColor) {
-        do {
-            try ManageLabelsUseCase.changeColor(of: label, to: color, using: modelContext)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func changeIcon(of label: LabelTag, to icon: String?) {
-        do {
-            try ManageLabelsUseCase.changeIcon(of: label, to: icon, using: modelContext)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func commitIconEdit() {
-        guard let editingIconLabelID,
-              let label = coordinator.allLabels.first(where: { $0.persistentModelID == editingIconLabelID }) else {
-            editingIconLabelID = nil
-            return
-        }
-
-        let trimmed = editedIcon.trimmingCharacters(in: .whitespacesAndNewlines)
-        let icon: String? = trimmed.isEmpty ? nil : String(trimmed.prefix(1))
-        changeIcon(of: label, to: icon)
-        self.editingIconLabelID = nil
     }
 
     private func deleteLabel(_ label: LabelTag) {

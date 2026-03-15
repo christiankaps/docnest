@@ -174,6 +174,7 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 
 #### Should
 - Colored labels.
+- Optional emoji icon per label. When set, the emoji replaces the colored circle in sidebar rows, drag previews, and label chips. Users choose an emoji via the system Character Palette (emoji keyboard).
 - Label suggestions based on recently used labels.
 
 #### May Follow Later
@@ -310,6 +311,7 @@ My Documents.docnestlibrary/
 - id
 - name
 - color
+- icon (optional emoji)
 - createdAt
 
 ### 9.3 Relation
@@ -353,7 +355,7 @@ My Documents.docnestlibrary/
 
 ### 10.6 Sidebar-Integrated Label Management
 - Labels are managed directly in left sidebar, not in separate modal dialog.
-- Inline sidebar actions: create label (via + with color selectable during creation), rename (double-click or context menu), delete (context menu), change color (context menu or inline picker).
+- Inline sidebar actions: create label (via + with emoji icon, name, and color editable during creation), edit label (double-click or context menu opens same inline form with all fields — emoji, name, color — editable at once), delete (context menu).
 - Label order is reorderable via drag-and-drop in sidebar (drag label onto another label). Custom order is persisted.
 - Label drop targets show a visual hover highlight (accent color tint) during document drags.
 - Technical constraint: label rows must not use SwiftUI List `.onMove`, as this activates the List drop engine which intercepts all row-level drop events. Reordering is implemented via the row `.onDrop` handler by detecting label-type payloads.
@@ -433,6 +435,10 @@ Current state:
 - Detail view separates PDF preview and metadata with vertical splitter so users can adjust preview height directly.
 - Startup view without library is integrated into regular three-panel layout and no longer shown as separate popup dialog.
 - Typography is unified into a consistent modern rounded system style.
+- Documents can be renamed inline in both list and thumbnail views via context menu "Rename".
+- Pressing Space or double-clicking a document opens a native Quick Look preview via QLPreviewPanel, similar to Finder behavior.
+- Arrow keys navigate the document list; when Quick Look is open, navigation automatically updates the preview.
+- The document list focus ring is suppressed for a cleaner appearance.
 
 ### Phase 4: Labels as Primary Organization
 Goal: user can organize documents effectively.
@@ -445,12 +451,15 @@ Goal: user can organize documents effectively.
 Current state:
 - Labels can be created, renamed, merged, and deleted globally.
 - Each label has user-selectable color from fixed palette (10 options). Color is rendered consistently in sidebar, list, and inspector as colored chip.
+- Each label supports an optional emoji icon. When set, the emoji replaces the colored circle in sidebar rows, drag previews, and label chips throughout the app.
+- Label creation form includes emoji picker button (opens system Character Palette), name field, and color menu.
+- Editing a label (double-click or context menu "Edit") shows the same inline form as creation with all fields — emoji, name, color — editable at once.
 - Document detail view supports direct assignment/removal of existing labels plus create-and-assign of new labels via keyboard or direct action.
 - Sidebar supports multi-label filtering. With multiple active labels, list shows only documents containing all selected labels.
 - Deleting a label removes only associations. Documents and original files remain unchanged.
 - Document list supports multi-selection. Inspector can add/remove labels for entire selection.
 - For mixed label states, inspector separates shared labels from partially assigned labels and offers actions such as add to remaining documents.
-- Label management is integrated in left sidebar (create, rename, recolor, delete).
+- Label management is integrated in left sidebar (create, edit, delete).
 - Labels are reorderable in sidebar, persisted via sortOrder field.
 
 ### Phase 5: Search and Retrieval
@@ -463,10 +472,10 @@ Goal: users find documents quickly.
 
 Current state:
 - Main view provides built-in search field for open library.
-- Search filters live across title, original filename, and label names.
-- Multi-word search is token-based; document remains visible only if all terms are found across searchable metadata.
+- Search filters live across title, original filename, label names, and extracted PDF full text.
+- Multi-word search is token-based; document remains visible only if all terms are found across searchable metadata and full text.
 - Search text and label filters can be combined and operate on the same document list.
-- PDF full-text search or separate search index is not part of this step yet.
+- PDF text is extracted via PDFKit during import and stored in the document model. Existing documents without extracted text are backfilled on app launch.
 
 ### Phase 6: Data Integrity and Operational Stability
 Goal: app is production-usable and fault-tolerant.
@@ -641,6 +650,7 @@ Gespeicherte Such- oder Filterdefinition, z. B. "Rechnungen 2026" oder "Ungelese
 
 #### Sollte
 - Farbige Labels.
+- Optionales Emoji-Icon pro Label. Wenn gesetzt, ersetzt das Emoji den farbigen Kreis in Seitenleisten-Zeilen, Drag-Vorschauen und Label-Chips. Nutzer waehlen ein Emoji ueber die System-Zeichenpalette (Emoji-Tastatur).
 - Label-Vorschlaege auf Basis zuletzt genutzter Labels.
 
 #### Kann spaeter folgen
@@ -775,6 +785,7 @@ Meine Dokumente.docnestlibrary/
 - `id`
 - `name`
 - `color`
+- `icon` (optionales Emoji)
 - `createdAt`
 
 ### 9.3 Relation
@@ -818,7 +829,7 @@ Meine Dokumente.docnestlibrary/
 
 ### 10.6 Seitenleisten-integrierte Label-Verwaltung
 - Labels werden direkt in der linken Seitenleiste verwaltet, nicht ueber einen separaten modalen Dialog.
-- Inline-Aktionen in der Seitenleiste: Label anlegen (ueber ein "+"-Element mit Farbe waehrend der Erstellung wahlbar), umbenennen (Doppelklick oder Kontextmenue), loeschen (Kontextmenue), Farbe aendern (Kontextmenue oder Inline-Picker).
+- Inline-Aktionen in der Seitenleiste: Label anlegen (ueber ein "+"-Element mit Emoji-Icon, Name und Farbe waehrend der Erstellung einstellbar), Label bearbeiten (Doppelklick oder Kontextmenue oeffnet dasselbe Inline-Formular mit allen Feldern — Emoji, Name, Farbe — gleichzeitig editierbar), loeschen (Kontextmenue).
 - Die Reihenfolge der Labels ist per Drag-and-drop in der Seitenleiste aenderbar. Die benutzerdefinierte Sortierung wird persistiert.
 - Label-Filter wirken per AND-Logik bei Mehrfachauswahl.
 
@@ -896,6 +907,10 @@ Aktueller Stand:
 - Ein Sidebar-Toggle-Button in der Toolbar bleibt immer sichtbar und erlaubt das Ein- und Ausblenden der Seitenleiste unabhaengig vom aktuellen Layout-Zustand.
 - Die Startup-Ansicht ohne Library ist in das regulaere Drei-Panel-Layout integriert und zeigt keinen separaten Popup-Dialog mehr.
 - Die Typografie wurde auf ein konsistentes, modernes Schriftkonzept mit gerundeter Systemschrift vereinheitlicht.
+- Dokumente koennen in der Listen- und Miniaturansicht ueber das Kontextmenue "Rename" inline umbenannt werden.
+- Leertaste oder Doppelklick auf ein Dokument oeffnet eine native Quick-Look-Vorschau ueber QLPreviewPanel, aehnlich dem Finder-Verhalten.
+- Pfeiltasten navigieren durch die Dokumentliste; bei geoeffneter Quick-Look-Vorschau wird die Vorschau automatisch aktualisiert.
+- Der Focus-Ring der Dokumentliste ist fuer ein saubereres Erscheinungsbild unterdrueckt.
 
 ### Phase 4: Labels als primaeres Ordnungssystem
 Ziel: Nutzer kann Dokumente sinnvoll organisieren.
@@ -908,12 +923,15 @@ Ziel: Nutzer kann Dokumente sinnvoll organisieren.
 Aktueller Stand:
 - Labels koennen global angelegt, umbenannt, zusammengefuehrt und geloescht werden.
 - Jedes Label hat eine vom Nutzer waehlbare Farbe aus einem festen Farbkatalog (10 Optionen). Die Farbe wird in Seitenleiste, Dokumentliste und Inspector konsistent als farbiger Chip dargestellt.
+- Jedes Label unterstuetzt ein optionales Emoji-Icon. Wenn gesetzt, ersetzt das Emoji den farbigen Kreis in Seitenleisten-Zeilen, Drag-Vorschauen und Label-Chips in der gesamten App.
+- Das Anlegen eines Labels bietet ein Formular mit Emoji-Picker-Button (oeffnet die System-Zeichenpalette), Namensfeld und Farbmenue.
+- Das Bearbeiten eines Labels (Doppelklick oder Kontextmenue "Edit") zeigt dasselbe Inline-Formular wie beim Anlegen, mit allen Feldern — Emoji, Name, Farbe — gleichzeitig editierbar.
 - Die Dokument-Detailansicht erlaubt direkte Zuweisung und Entfernung bestehender Labels sowie das Anlegen und sofortige Zuweisen neuer Labels per Tastatur oder Direktaktion.
 - Die Seitenleiste bietet Mehrfachfilter ueber Labels. Wenn mehrere Labels aktiv sind, zeigt die Liste nur Dokumente, die alle ausgewaehlten Labels enthalten.
 - Das Loeschen eines Labels entfernt nur die Zuordnung. Dokumente und Originaldateien bleiben unveraendert in der Library.
-- Die Dokumentliste unterstuetzt Mehrfachselektion. Der Inspector kann Labels fuer die gesamte Auswahl hinzufügen oder von der gesamten Auswahl entfernen.
+- Die Dokumentliste unterstuetzt Mehrfachselektion. Der Inspector kann Labels fuer die gesamte Auswahl hinzufuegen oder von der gesamten Auswahl entfernen.
 - Bei gemischten Label-Zustaenden zeigt der Inspector gemeinsame Labels getrennt von partiell vergebenen Labels an und bietet Aktionen wie "zu verbleibenden Dokumenten hinzufuegen" an.
-- Die Label-Verwaltung ist in die linke Seitenleiste integriert (anlegen, umbenennen, Farbe aendern, loeschen).
+- Die Label-Verwaltung ist in die linke Seitenleiste integriert (anlegen, bearbeiten, loeschen).
 - Labels lassen sich in der Seitenleiste neu anordnen; die Reihenfolge wird ueber ein persistiertes `sortOrder`-Feld gespeichert.
 
 ### Phase 5: Suche und Wiederfinden
@@ -926,10 +944,10 @@ Ziel: Dokumente lassen sich schnell wiederfinden.
 
 Aktueller Stand:
 - Die Hauptansicht bietet ein eingebautes Suchfeld fuer die geoeffnete Library.
-- Die Suche filtert live ueber Titel, Originaldateiname und Labelnamen.
-- Mehrwort-Suchen arbeiten token-basiert; ein Dokument bleibt nur sichtbar, wenn alle Suchterme ueber die durchsuchbaren Metadaten hinweg gefunden werden.
+- Die Suche filtert live ueber Titel, Originaldateiname, Labelnamen und extrahierten PDF-Volltext.
+- Mehrwort-Suchen arbeiten token-basiert; ein Dokument bleibt nur sichtbar, wenn alle Suchterme ueber die durchsuchbaren Metadaten und den Volltext hinweg gefunden werden.
 - Suchtext und Label-Filter lassen sich kombinieren und wirken gemeinsam auf dieselbe Dokumentliste.
-- PDF-Volltextsuche oder ein separater Suchindex sind noch nicht Teil des aktuellen Schritts.
+- PDF-Text wird beim Import via PDFKit extrahiert und im Dokumentmodell gespeichert. Bestehende Dokumente ohne extrahierten Text werden beim App-Start nachtraeglich befuellt.
 
 ### Phase 6: Datenintegritaet und Betriebsfaehigkeit
 Ziel: Die App ist alltagstauglich und fehlertolerant.
