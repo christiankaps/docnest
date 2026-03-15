@@ -439,6 +439,8 @@ Current state:
 - Pressing Space or double-clicking a document opens a native Quick Look preview via QLPreviewPanel, similar to Finder behavior.
 - Arrow keys navigate the document list; when Quick Look is open, navigation automatically updates the preview.
 - The document list focus ring is suppressed for a cleaner appearance.
+- The toolbar Library menu includes "Show in Finder" when a library is open, revealing the library package in Finder.
+- The window title shows the open library's name (without file extension) or "DocNest" when no library is open.
 
 ### Phase 4: Labels as Primary Organization
 Goal: user can organize documents effectively.
@@ -911,6 +913,8 @@ Aktueller Stand:
 - Leertaste oder Doppelklick auf ein Dokument oeffnet eine native Quick-Look-Vorschau ueber QLPreviewPanel, aehnlich dem Finder-Verhalten.
 - Pfeiltasten navigieren durch die Dokumentliste; bei geoeffneter Quick-Look-Vorschau wird die Vorschau automatisch aktualisiert.
 - Der Focus-Ring der Dokumentliste ist fuer ein saubereres Erscheinungsbild unterdrueckt.
+- Das Toolbar-Library-Menue enthaelt bei geoeffneter Library einen Eintrag "Show in Finder", der das Library-Package im Finder anzeigt.
+- Der Fenstertitel zeigt den Namen der geoeffneten Library (ohne Dateiendung) oder "DocNest", wenn keine Library geoeffnet ist.
 
 ### Phase 4: Labels als primaeres Ordnungssystem
 Ziel: Nutzer kann Dokumente sinnvoll organisieren.

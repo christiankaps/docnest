@@ -289,7 +289,7 @@ struct LibrarySidebarView: View {
             }
             .padding(.vertical, 4)
         }
-        .navigationTitle("Library")
+        .navigationTitle(coordinator.libraryURL?.deletingPathExtension().lastPathComponent ?? "DocNest")
         .confirmationDialog(
             pendingLabelDeletion?.title ?? "Delete Label",
             isPresented: pendingLabelDeletionBinding,

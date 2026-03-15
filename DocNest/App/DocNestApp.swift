@@ -97,7 +97,12 @@ private struct AppRootView: View {
                 Menu("Library") {
                     Button("Create Library", action: librarySession.createLibrary)
                     Button("Open Library", action: librarySession.openLibrary)
-                    if librarySession.selectedLibraryURL != nil {
+                    if let libraryURL = librarySession.selectedLibraryURL {
+                        Divider()
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([libraryURL])
+                        }
+                        Divider()
                         Button("Close Library", role: .destructive, action: librarySession.closeLibrary)
                     }
                 }
