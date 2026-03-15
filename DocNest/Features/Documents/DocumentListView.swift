@@ -66,6 +66,7 @@ struct DocumentListView: View {
     private let listHorizontalPadding = 24.0
 
     @Environment(LibraryCoordinator.self) private var coordinator
+    @Environment(QuickLookCoordinator.self) private var quickLook
     @Environment(\.modelContext) private var modelContext
     @State private var selectionAnchor: PersistentIdentifier?
     @State private var renamingDocumentID: PersistentIdentifier?
@@ -161,6 +162,15 @@ struct DocumentListView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .focusable()
+        .focusEffectDisabled()
+        .onKeyPress(.space) {
+            quickLook.togglePreview()
+            return .handled
+        }
+        .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow]) { keyPress in
+            handleArrowKey(keyPress, in: documents)
         }
         .background {
             GeometryReader { proxy in
@@ -269,6 +279,9 @@ struct DocumentListView: View {
                         .padding(.horizontal, 12)
                         .background(rowBackground(index: index, isSelected: isSelected))
                         .contentShape(Rectangle())
+                        .onTapGesture(count: 2) {
+                            openQuickLook(for: document)
+                        }
                         .onTapGesture {
                             handleRowTap(document: document, in: sortedDocs)
                         }
@@ -349,6 +362,9 @@ struct DocumentListView: View {
                         onCommitRename: { commitRename(for: document) },
                         onCancelRename: { cancelRename() }
                     )
+                    .onTapGesture(count: 2) {
+                        openQuickLook(for: document)
+                    }
                     .onTapGesture {
                         handleRowTap(document: document, in: sortedDocs)
                     }
@@ -523,6 +539,56 @@ struct DocumentListView: View {
         }
 
         return DocumentFileDragPayload.payload(for: documentIDsToDrag)
+    }
+
+    private func handleArrowKey(_ keyPress: KeyPress, in sortedDocs: [DocumentRecord]) -> KeyPress.Result {
+        guard !sortedDocs.isEmpty else { return .ignored }
+
+        let ids = sortedDocs.map(\.persistentModelID)
+
+        // Find the current index based on the last selected document.
+        let currentIndex: Int? = if let last = coordinator.selectedDocumentIDs.first(where: { id in ids.contains(id) }) {
+            ids.firstIndex(of: last)
+        } else {
+            nil
+        }
+
+        let delta: Int
+        switch keyPress.key {
+        case .upArrow, .leftArrow:
+            delta = -1
+        case .downArrow, .rightArrow:
+            delta = 1
+        default:
+            return .ignored
+        }
+
+        let nextIndex: Int
+        if let currentIndex {
+            nextIndex = min(max(currentIndex + delta, 0), ids.count - 1)
+        } else {
+            nextIndex = delta > 0 ? 0 : ids.count - 1
+        }
+
+        let nextID = ids[nextIndex]
+        coordinator.selectedDocumentIDs = [nextID]
+        selectionAnchor = nextID
+
+        let nextDocument = sortedDocs[nextIndex]
+        if let url = originalFileURL(for: nextDocument) {
+            quickLook.previewURLs = [url]
+        }
+        quickLook.reloadIfVisible()
+
+        return .handled
+    }
+
+    private func openQuickLook(for document: DocumentRecord) {
+        coordinator.selectedDocumentIDs = [document.persistentModelID]
+        if let url = originalFileURL(for: document) {
+            quickLook.previewURLs = [url]
+        }
+        quickLook.togglePreview()
     }
 
     private func beginRename(for document: DocumentRecord) {

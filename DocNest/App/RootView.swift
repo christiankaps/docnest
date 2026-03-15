@@ -6,6 +6,7 @@ struct RootView: View {
 
     @State private var coordinator = LibraryCoordinator()
     @State private var thumbnailCache = ThumbnailCache()
+    @State private var quickLook = QuickLookCoordinator()
 
     @Environment(\.modelContext) private var modelContext
 
@@ -36,6 +37,7 @@ struct RootView: View {
         .padding(AppSplitViewLayout.windowContentInset)
         .environment(coordinator)
         .environment(thumbnailCache)
+        .environment(quickLook)
         .toolbar { toolbarContent }
         .modifier(RootViewImportModifier(coordinator: coordinator, allDocuments: allDocuments))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
@@ -64,10 +66,15 @@ struct RootView: View {
                 .padding(20)
             }
         }
+        .background { QuickLookPanelResponder(coordinator: quickLook) }
         .dropDestination(for: URL.self) { urls, _ in
             handleDroppedURLs(urls)
         } isTargeted: { isTargeted in
             coordinator.isDropTargeted = isTargeted
+        }
+        .onChange(of: coordinator.cachedShareURLs) {
+            quickLook.previewURLs = coordinator.cachedShareURLs
+            quickLook.reloadIfVisible()
         }
     }
 
