@@ -293,7 +293,7 @@ struct DocumentInspectorView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(document.labels) { label in
                         HStack {
-                            LabelChip(name: label.name, color: label.labelColor)
+                            LabelChip(name: label.name, color: label.labelColor, icon: label.icon)
                             Spacer()
                             Button {
                                 removeLabel(label, from: document)
@@ -369,7 +369,7 @@ struct DocumentInspectorView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(selectionSummary.labelsOnAllSelectedDocuments) { label in
                             HStack {
-                                LabelChip(name: label.name, color: label.labelColor)
+                                LabelChip(name: label.name, color: label.labelColor, icon: label.icon)
                                 Spacer()
                                 Button("Remove from Selection") {
                                     removeLabel(label, from: documents)

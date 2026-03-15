@@ -26,8 +26,11 @@ struct LibrarySidebarView: View {
     @State private var isAddingLabel = false
     @State private var newLabelName = ""
     @State private var newLabelColor: LabelColor = .blue
+    @State private var newLabelIcon = ""
     @State private var editingLabelID: PersistentIdentifier?
     @State private var editedLabelName = ""
+    @State private var editingIconLabelID: PersistentIdentifier?
+    @State private var editedIcon = ""
     @State private var errorMessage: String?
     @State private var pendingLabelDeletion: PendingLabelDeletion?
     @State private var hoveredLabelDropTargetID: PersistentIdentifier?
@@ -115,6 +118,10 @@ struct LibrarySidebarView: View {
                     if isAddingLabel {
                         VStack(spacing: 8) {
                             HStack(spacing: 8) {
+                                EmojiPickerButton(selection: $newLabelIcon)
+                                    .frame(width: 28, height: 22)
+                                    .help("Choose emoji icon (optional)")
+
                                 TextField("New label", text: $newLabelName)
                                     .textFieldStyle(.roundedBorder)
                                     .onSubmit(addLabel)
@@ -184,6 +191,7 @@ struct LibrarySidebarView: View {
                                 LibraryLabelRowView(
                                     name: label.name,
                                     color: label.labelColor.color,
+                                    icon: label.icon,
                                     count: coordinator.sidebarCounts.count(for: label),
                                     isSelected: coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID)
                                 )
@@ -210,7 +218,7 @@ struct LibrarySidebarView: View {
                                 }
                                 .draggable(DocumentLabelDragPayload.payload(for: label.id)) {
                                     // Set dragging state when drag begins
-                                    LabelDragPreview(name: label.name, color: label.labelColor.color)
+                                    LabelDragPreview(name: label.name, color: label.labelColor.color, icon: label.icon)
                                         .onAppear { draggingLabelID = label.id }
                                 }
                                 .dropDestination(for: String.self) { items, _ in
@@ -243,6 +251,20 @@ struct LibrarySidebarView: View {
                                                     }
                                                 }
                                             }
+                                        }
+                                    }
+
+                                    Button(label.icon != nil ? "Change Icon" : "Set Icon") {
+                                        editedIcon = label.icon ?? ""
+                                        editingIconLabelID = label.persistentModelID
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                            NSApp.orderFrontCharacterPalette(nil)
+                                        }
+                                    }
+
+                                    if label.icon != nil {
+                                        Button("Remove Icon") {
+                                            changeIcon(of: label, to: nil)
                                         }
                                     }
 
@@ -282,6 +304,17 @@ struct LibrarySidebarView: View {
             }
         } message: {
             Text(errorMessage ?? "Unknown label error.")
+        }
+        .alert("Set Icon", isPresented: editingIconBinding) {
+            TextField("Emoji", text: $editedIcon)
+            Button("Save") {
+                commitIconEdit()
+            }
+            Button("Cancel", role: .cancel) {
+                editingIconLabelID = nil
+            }
+        } message: {
+            Text("Enter an emoji to use as the label icon.")
         }
         .onAppear {
             debugLogSidebarRenderTiming(startTime: renderStartTime, coordinator: coordinator)
@@ -339,10 +372,12 @@ struct LibrarySidebarView: View {
     }
 
     private func addLabel() {
+        let icon = newLabelIcon.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            _ = try ManageLabelsUseCase.createLabel(named: newLabelName, color: newLabelColor, using: modelContext)
+            _ = try ManageLabelsUseCase.createLabel(named: newLabelName, color: newLabelColor, icon: icon.isEmpty ? nil : String(icon.prefix(1)), using: modelContext)
             newLabelName = ""
             newLabelColor = .blue
+            newLabelIcon = ""
             isAddingLabel = false
         } catch {
             errorMessage = error.localizedDescription
@@ -364,12 +399,44 @@ struct LibrarySidebarView: View {
         }
     }
 
+    private var editingIconBinding: Binding<Bool> {
+        Binding(
+            get: { editingIconLabelID != nil },
+            set: { newValue in
+                if !newValue {
+                    editingIconLabelID = nil
+                }
+            }
+        )
+    }
+
     private func changeColor(of label: LabelTag, to color: LabelColor) {
         do {
             try ManageLabelsUseCase.changeColor(of: label, to: color, using: modelContext)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func changeIcon(of label: LabelTag, to icon: String?) {
+        do {
+            try ManageLabelsUseCase.changeIcon(of: label, to: icon, using: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func commitIconEdit() {
+        guard let editingIconLabelID,
+              let label = coordinator.allLabels.first(where: { $0.persistentModelID == editingIconLabelID }) else {
+            editingIconLabelID = nil
+            return
+        }
+
+        let trimmed = editedIcon.trimmingCharacters(in: .whitespacesAndNewlines)
+        let icon: String? = trimmed.isEmpty ? nil : String(trimmed.prefix(1))
+        changeIcon(of: label, to: icon)
+        self.editingIconLabelID = nil
     }
 
     private func deleteLabel(_ label: LabelTag) {
@@ -506,14 +573,20 @@ private struct LibrarySectionRowView: View {
 private struct LibraryLabelRowView: View {
     let name: String
     let color: Color
+    var icon: String? = nil
     let count: Int
     let isSelected: Bool
 
     var body: some View {
         HStack {
-            Circle()
-                .fill(color)
-                .frame(width: 10, height: 10)
+            if let icon, !icon.isEmpty {
+                Text(icon)
+                    .font(.system(size: 12))
+            } else {
+                Circle()
+                    .fill(color)
+                    .frame(width: 10, height: 10)
+            }
             Text(name)
             Spacer()
             Text("\(count)")
@@ -609,12 +682,18 @@ private struct ReorderInsertionLine: View {
 private struct LabelDragPreview: View {
     let name: String
     let color: Color
+    var icon: String? = nil
 
     var body: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
+            if let icon, !icon.isEmpty {
+                Text(icon)
+                    .font(.callout)
+            } else {
+                Circle()
+                    .fill(color)
+                    .frame(width: 8, height: 8)
+            }
             Text(name)
                 .font(.callout)
         }
@@ -622,6 +701,100 @@ private struct LabelDragPreview: View {
         .padding(.vertical, 5)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
     }
+}
+
+private struct EmojiPickerButton: NSViewRepresentable {
+    @Binding var selection: String
+
+    func makeNSView(context: Context) -> EmojiInputView {
+        let view = EmojiInputView()
+        view.emoji = selection
+        view.onEmojiChanged = { emoji in
+            context.coordinator.selection = emoji
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: EmojiInputView, context: Context) {
+        nsView.emoji = selection
+        nsView.needsDisplay = true
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selection: $selection)
+    }
+
+    final class Coordinator {
+        @Binding var selection: String
+
+        init(selection: Binding<String>) {
+            _selection = selection
+        }
+    }
+}
+
+private final class EmojiInputView: NSView, NSTextInputClient {
+    var emoji = ""
+    var onEmojiChanged: ((String) -> Void)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        NSApp.orderFrontCharacterPalette(nil)
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: 28, height: 22)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let str: NSAttributedString
+        if emoji.isEmpty {
+            if let img = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: nil) {
+                let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+                let configured = img.withSymbolConfiguration(config) ?? img
+                configured.draw(in: CGRect(
+                    x: (bounds.width - 16) / 2,
+                    y: (bounds.height - 16) / 2,
+                    width: 16,
+                    height: 16
+                ))
+            }
+            return
+        } else {
+            str = NSAttributedString(string: emoji, attributes: [
+                .font: NSFont.systemFont(ofSize: 14),
+            ])
+        }
+        let size = str.size()
+        let point = NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2)
+        str.draw(at: point)
+    }
+
+    // MARK: - NSTextInputClient
+
+    func insertText(_ string: Any, replacementRange: NSRange) {
+        let text = (string as? String) ?? String(describing: string)
+        guard !text.isEmpty else { return }
+        let first = String(text.prefix(1))
+        emoji = first
+        onEmojiChanged?(first)
+        needsDisplay = true
+    }
+
+    func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {}
+    func unmarkText() {}
+    func selectedRange() -> NSRange { NSRange(location: 0, length: 0) }
+    func markedRange() -> NSRange { NSRange(location: NSNotFound, length: 0) }
+    func hasMarkedText() -> Bool { false }
+    func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? { nil }
+    func validAttributesForMarkedText() -> [NSAttributedString.Key] { [] }
+    func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
+        window?.convertToScreen(convert(bounds, to: nil)) ?? .zero
+    }
+    func characterIndex(for point: NSPoint) -> Int { 0 }
 }
 
 #Preview {

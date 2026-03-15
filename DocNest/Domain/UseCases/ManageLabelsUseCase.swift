@@ -3,8 +3,8 @@ import SwiftData
 
 enum ManageLabelsUseCase {
     @discardableResult
-    static func createLabel(named name: String, color: LabelColor, using modelContext: ModelContext) throws -> LabelTag {
-        let result = try createOrFetchLabel(named: name, color: color, using: modelContext)
+    static func createLabel(named name: String, color: LabelColor, icon: String? = nil, using modelContext: ModelContext) throws -> LabelTag {
+        let result = try createOrFetchLabel(named: name, color: color, icon: icon, using: modelContext)
 
         if result.didCreateLabel {
             try modelContext.save()
@@ -88,6 +88,11 @@ enum ManageLabelsUseCase {
         try modelContext.save()
     }
 
+    static func changeIcon(of label: LabelTag, to icon: String?, using modelContext: ModelContext) throws {
+        label.icon = icon
+        try modelContext.save()
+    }
+
     static func reorderLabels(from source: IndexSet, to destination: Int, labels: [LabelTag], using modelContext: ModelContext) throws {
         var reorderedLabels = labels
         reorderedLabels.move(fromOffsets: source, toOffset: destination)
@@ -99,7 +104,7 @@ enum ManageLabelsUseCase {
         try modelContext.save()
     }
 
-    private static func createOrFetchLabel(named name: String, color: LabelColor = .blue, using modelContext: ModelContext) throws -> LabelMutationResult {
+    private static func createOrFetchLabel(named name: String, color: LabelColor = .blue, icon: String? = nil, using modelContext: ModelContext) throws -> LabelMutationResult {
         let normalizedName = try normalizedLabelName(from: name)
 
         let descriptor = FetchDescriptor<LabelTag>(sortBy: [SortDescriptor(\.sortOrder, order: .forward)])
@@ -113,6 +118,7 @@ enum ManageLabelsUseCase {
 
         let nextSortOrder = (allLabels.map(\.sortOrder).max() ?? -1) + 1
         let label = LabelTag(name: normalizedName, colorName: color.rawValue, sortOrder: nextSortOrder)
+        label.icon = icon
         modelContext.insert(label)
         return LabelMutationResult(label: label, didCreateLabel: true)
     }

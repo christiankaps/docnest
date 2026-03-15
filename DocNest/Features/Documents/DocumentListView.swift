@@ -806,7 +806,7 @@ private struct RemovableLabelChip: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            LabelChip(name: label.name, color: label.labelColor, size: .compact)
+            LabelChip(name: label.name, color: label.labelColor, icon: label.icon, size: .compact)
 
             if isHovering, onRemove != nil {
                 Button {

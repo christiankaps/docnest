@@ -3,6 +3,7 @@ import SwiftUI
 struct LabelChip: View {
     let name: String
     let color: LabelColor
+    var icon: String? = nil
     var size: Size = .regular
 
     enum Size {
@@ -11,12 +12,18 @@ struct LabelChip: View {
     }
 
     var body: some View {
-        Text(name)
-            .font(chipFont)
-            .foregroundStyle(color.color)
-            .padding(.horizontal, horizontalPadding)
-            .padding(.vertical, verticalPadding)
-            .background(Capsule().fill(color.color.opacity(0.16)))
+        HStack(spacing: 3) {
+            if let icon, !icon.isEmpty {
+                Text(icon)
+                    .font(chipFont)
+            }
+            Text(name)
+                .font(chipFont)
+                .foregroundStyle(color.color)
+        }
+        .padding(.horizontal, horizontalPadding)
+        .padding(.vertical, verticalPadding)
+        .background(Capsule().fill(color.color.opacity(0.16)))
     }
 
     private var chipFont: Font {

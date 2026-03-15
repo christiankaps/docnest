@@ -31,6 +31,7 @@ final class LabelTag {
     var id: UUID
     var name: String
     var colorName: String
+    var icon: String?
     var sortOrder: Int
     var documents: [DocumentRecord] = []
 
