@@ -66,7 +66,10 @@ struct DocumentListView: View {
     private let listHorizontalPadding = 24.0
 
     @Environment(LibraryCoordinator.self) private var coordinator
+    @Environment(\.modelContext) private var modelContext
     @State private var selectionAnchor: PersistentIdentifier?
+    @State private var renamingDocumentID: PersistentIdentifier?
+    @State private var renamingTitle = ""
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
     @State private var availableListWidth = AppSplitViewLayout.documentListIdealWidth
@@ -340,7 +343,11 @@ struct DocumentListView: View {
                         document: document,
                         libraryURL: coordinator.libraryURL,
                         size: thumbnailSize,
-                        isSelected: coordinator.selectedDocumentIDs.contains(document.persistentModelID)
+                        isSelected: coordinator.selectedDocumentIDs.contains(document.persistentModelID),
+                        isRenaming: renamingDocumentID == document.persistentModelID,
+                        renamingTitle: $renamingTitle,
+                        onCommitRename: { commitRename(for: document) },
+                        onCancelRename: { cancelRename() }
                     )
                     .onTapGesture {
                         handleRowTap(document: document, in: sortedDocs)
@@ -367,9 +374,17 @@ struct DocumentListView: View {
                     }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(document.title)
-                        .font(AppTypography.listTitle)
-                        .lineLimit(1)
+                    if renamingDocumentID == document.persistentModelID {
+                        TextField("Title", text: $renamingTitle)
+                            .font(AppTypography.listTitle)
+                            .textFieldStyle(.plain)
+                            .onSubmit { commitRename(for: document) }
+                            .onExitCommand { cancelRename() }
+                    } else {
+                        Text(document.title)
+                            .font(AppTypography.listTitle)
+                            .lineLimit(1)
+                    }
                 }
             }
             .frame(minWidth: documentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
@@ -453,6 +468,12 @@ struct DocumentListView: View {
                 }
             }
 
+            if targets.count == 1 {
+                Button("Rename") {
+                    beginRename(for: document)
+                }
+            }
+
             Divider()
 
             if let fileURL = originalFileURL(for: document) {
@@ -502,6 +523,26 @@ struct DocumentListView: View {
         }
 
         return DocumentFileDragPayload.payload(for: documentIDsToDrag)
+    }
+
+    private func beginRename(for document: DocumentRecord) {
+        renamingTitle = document.title
+        renamingDocumentID = document.persistentModelID
+    }
+
+    private func commitRename(for document: DocumentRecord) {
+        let trimmed = renamingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            cancelRename()
+            return
+        }
+        document.title = trimmed
+        try? modelContext.save()
+        renamingDocumentID = nil
+    }
+
+    private func cancelRename() {
+        renamingDocumentID = nil
     }
 
     private func sortButton(_ title: String, column: SortColumn) -> some View {
@@ -726,6 +767,10 @@ private struct DocumentThumbnailCell: View {
     let libraryURL: URL?
     let size: Double
     let isSelected: Bool
+    let isRenaming: Bool
+    @Binding var renamingTitle: String
+    var onCommitRename: () -> Void
+    var onCancelRename: () -> Void
 
     @Environment(ThumbnailCache.self) private var thumbnailCache
 
@@ -739,11 +784,21 @@ private struct DocumentThumbnailCell: View {
                         .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
                 )
 
-            Text(document.title)
-                .font(AppTypography.labelChip)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .frame(width: size)
+            if isRenaming {
+                TextField("Title", text: $renamingTitle)
+                    .font(AppTypography.labelChip)
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.center)
+                    .frame(width: size)
+                    .onSubmit { onCommitRename() }
+                    .onExitCommand { onCancelRename() }
+            } else {
+                Text(document.title)
+                    .font(AppTypography.labelChip)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(width: size)
+            }
         }
         .padding(4)
         .background(
