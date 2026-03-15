@@ -2,8 +2,37 @@ import AppKit
 import SwiftUI
 import SwiftData
 
+// MARK: - Focused Value for Library Session
+
+private struct LibrarySessionKey: FocusedValueKey {
+    typealias Value = LibrarySessionController
+}
+
+private struct ExportDocumentsActionKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
+extension FocusedValues {
+    var librarySession: LibrarySessionController? {
+        get { self[LibrarySessionKey.self] }
+        set { self[LibrarySessionKey.self] = newValue }
+    }
+
+    var exportDocumentsAction: (() -> Void)? {
+        get { self[ExportDocumentsActionKey.self] }
+        set { self[ExportDocumentsActionKey.self] = newValue }
+    }
+}
+
 @main
 struct DocNestApp: App {
+    @FocusedValue(\.librarySession) private var librarySession
+    @FocusedValue(\.exportDocumentsAction) private var exportDocumentsAction
+
+    init() {
+        NSWindow.allowsAutomaticWindowTabbing = false
+    }
+
     var body: some Scene {
         WindowGroup {
             AppRootView()
@@ -18,16 +47,46 @@ struct DocNestApp: App {
         )
         .windowResizability(.contentMinSize)
         .commands {
-            CommandGroup(replacing: .newItem) { }
-            CommandGroup(after: .pasteboard) {
+            CommandGroup(replacing: .newItem) {
+                Button("Create Library") {
+                    librarySession?.createLibrary()
+                }
+                Button("Open Library") {
+                    librarySession?.openLibrary()
+                }
+                Divider()
+                Button("Show in Finder") {
+                    if let url = librarySession?.selectedLibraryURL {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    }
+                }
+                .disabled(librarySession?.selectedLibraryURL == nil)
+                Divider()
+                Button("Close Library") {
+                    librarySession?.closeLibrary()
+                }
+                .disabled(librarySession?.selectedLibraryURL == nil)
+            }
+            CommandGroup(replacing: .pasteboard) { }
+            CommandGroup(replacing: .undoRedo) { }
+            CommandGroup(replacing: .saveItem) { }
+            CommandGroup(replacing: .importExport) {
+                Button("Export\u{2026}") {
+                    exportDocumentsAction?()
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(exportDocumentsAction == nil)
+            }
+            CommandGroup(replacing: .printItem) { }
+            CommandGroup(replacing: .textEditing) { }
+            CommandGroup(replacing: .textFormatting) { }
+            CommandGroup(replacing: .help) { }
+            CommandMenu("Edit") {
                 Button("Find") {
                     NotificationCenter.default.post(name: .docNestFocusSearch, object: nil)
                 }
                 .keyboardShortcut("f", modifiers: [.command])
             }
-            CommandGroup(replacing: .saveItem) { }
-            CommandGroup(replacing: .importExport) { }
-            CommandGroup(replacing: .printItem) { }
         }
     }
 }
@@ -92,22 +151,8 @@ private struct AppRootView: View {
         .onChange(of: appearanceMode) { _, newMode in
             applyAppearance(newMode)
         }
+        .focusedSceneValue(\.librarySession, librarySession)
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Menu("Library") {
-                    Button("Create Library", action: librarySession.createLibrary)
-                    Button("Open Library", action: librarySession.openLibrary)
-                    if let libraryURL = librarySession.selectedLibraryURL {
-                        Divider()
-                        Button("Show in Finder") {
-                            NSWorkspace.shared.activateFileViewerSelecting([libraryURL])
-                        }
-                        Divider()
-                        Button("Close Library", role: .destructive, action: librarySession.closeLibrary)
-                    }
-                }
-            }
-
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     ForEach(AppearanceMode.allCases) { mode in
@@ -235,7 +280,7 @@ private struct AppRootView: View {
 }
 
 @MainActor
-private final class LibrarySessionController: ObservableObject {
+final class LibrarySessionController: ObservableObject {
     @Published private(set) var selectedLibraryURL: URL?
     @Published private(set) var modelContainer: ModelContainer?
     @Published var libraryErrorMessage: String?

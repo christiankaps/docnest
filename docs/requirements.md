@@ -144,6 +144,16 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 - Metadata detail view.
 - PDF preview for selected document.
 - Finder integration: open original file, show in Finder, export.
+- Export copies original stored PDFs as-is with descriptive filenames.
+- Export filename format: `Title - Label1, Label2.pdf`. Labels are sorted by user-defined sort order. When a document has no labels, the filename is just `Title.pdf`.
+- Single-document export uses NSSavePanel with suggested filename. User can change name and destination.
+- Multi-document export uses NSOpenPanel in folder-selection mode. All documents are exported into the chosen folder with suggested filenames.
+- Filenames are sanitized for filesystem safety: forward slash, colon, and backslash are replaced with underscore.
+- Bulk export handles name collisions by appending ` (2)`, ` (3)`, etc. Both in-batch duplicates and existing files in the target folder are considered.
+- Documents without stored files are silently skipped during bulk export. An export summary reports skipped and failed counts.
+- Export is accessible via document context menu (right-click) and via the File menu bar.
+- Keyboard shortcut for export: Shift+Command+E.
+- Dragging a document from the list to Finder or Desktop exports the file with the suggested filename. The drag provides both the PDF file (for external apps) and the internal payload (for in-app operations like label assignment and bin).
 
 - The document list supports two presentation modes: list and thumbnails. In thumbnail mode, documents appear as thumbnail tiles similar to Finder icon view. Thumbnail size is continuously adjustable via slider.
 - Switching between list and thumbnail mode uses a segmented control in the top toolbar.
@@ -441,6 +451,11 @@ Current state:
 - The document list focus ring is suppressed for a cleaner appearance.
 - The toolbar Library menu includes "Show in Finder" when a library is open, revealing the library package in Finder.
 - The window title shows the open library's name (without file extension) or "DocNest" when no library is open.
+- Export supports single-document (NSSavePanel) and multi-document (NSOpenPanel folder picker) workflows.
+- Export filenames combine document title and labels sorted by sortOrder, formatted as "Title - Label1, Label2.pdf".
+- Export is accessible via document context menu and File menu bar (Shift+Cmd+E).
+- Export copies original PDFs as-is with descriptive filenames. Name collisions in bulk export are resolved automatically.
+- Dragging a document to Finder or Desktop exports it with the suggested filename via Transferable file representation.
 
 ### Phase 4: Labels as Primary Organization
 Goal: user can organize documents effectively.

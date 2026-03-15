@@ -20,6 +20,26 @@ enum DocumentLabelDragPayload {
     }
 }
 
+struct DocumentDragItem: Transferable {
+    let internalPayload: String
+    let fileURL: URL?
+    let suggestedName: String?
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .pdf) { item in
+            guard let fileURL = item.fileURL else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            return SentTransferredFile(fileURL, allowAccessingOriginalFile: true)
+        }
+        .suggestedFileName { $0.suggestedName ?? "Document.pdf" }
+
+        ProxyRepresentation { item in
+            item.internalPayload
+        }
+    }
+}
+
 enum DocumentFileDragPayload {
     static let prefix = "docnest-documents:"
 
@@ -286,7 +306,7 @@ struct DocumentListView: View {
                             handleRowTap(document: document, in: sortedDocs)
                         }
                         .contextMenu { documentContextMenu(for: document) }
-                        .draggable(dragPayload(for: document))
+                        .draggable(dragItem(for: document))
                         .dropDestination(for: String.self) { items, _ in
                             guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
                                 return false
@@ -369,7 +389,7 @@ struct DocumentListView: View {
                         handleRowTap(document: document, in: sortedDocs)
                     }
                     .contextMenu { documentContextMenu(for: document) }
-                    .draggable(dragPayload(for: document))
+                    .draggable(dragItem(for: document))
                 }
             }
             .padding(16)
@@ -500,9 +520,15 @@ struct DocumentListView: View {
                 Button("Show in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                 }
-
-                Divider()
             }
+
+            if targets.contains(where: { $0.storedFilePath != nil }) {
+                Button(targets.count == 1 ? "Export\u{2026}" : "Export \(targets.count) Documents\u{2026}") {
+                    coordinator.exportDocuments(targets)
+                }
+            }
+
+            Divider()
 
             Button("Move to Bin") {
                 coordinator.moveToBin(targets)
@@ -527,7 +553,7 @@ struct DocumentListView: View {
         return [document]
     }
 
-    private func dragPayload(for document: DocumentRecord) -> String {
+    private func dragItem(for document: DocumentRecord) -> DocumentDragItem {
         let documentIDsToDrag: [UUID]
 
         if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
@@ -538,7 +564,15 @@ struct DocumentListView: View {
             documentIDsToDrag = [document.id]
         }
 
-        return DocumentFileDragPayload.payload(for: documentIDsToDrag)
+        let internalPayload = DocumentFileDragPayload.payload(for: documentIDsToDrag)
+        let fileURL = originalFileURL(for: document)
+        let suggestedName = ExportDocumentsUseCase.suggestedFileName(for: document)
+
+        return DocumentDragItem(
+            internalPayload: internalPayload,
+            fileURL: fileURL,
+            suggestedName: suggestedName
+        )
     }
 
     private func handleArrowKey(_ keyPress: KeyPress, in sortedDocs: [DocumentRecord]) -> KeyPress.Result {

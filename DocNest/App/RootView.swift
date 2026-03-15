@@ -42,6 +42,9 @@ struct RootView: View {
         .modifier(RootViewImportModifier(coordinator: coordinator, allDocuments: allDocuments))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
         .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels))
+        .focusedSceneValue(\.exportDocumentsAction) {
+            coordinator.exportDocuments(coordinator.selectedDocuments)
+        }
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
@@ -151,6 +154,13 @@ private struct RootViewImportModifier: ViewModifier {
                 }
             } message: {
                 Text(coordinator.importSummaryMessage ?? "")
+            }
+            .alert("Export Summary", isPresented: coordinator.exportSummaryBinding) {
+                Button("OK", role: .cancel) {
+                    coordinator.exportSummaryMessage = nil
+                }
+            } message: {
+                Text(coordinator.exportSummaryMessage ?? "")
             }
     }
 }

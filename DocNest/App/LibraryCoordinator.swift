@@ -26,6 +26,7 @@ final class LibraryCoordinator {
     var isDropTargeted = false
     var documentListViewMode: DocumentListViewMode = .list
     var importSummaryMessage: String?
+    var exportSummaryMessage: String?
     var isConfirmingBinRemoval = false
     var pendingDroppedLabelAssignment: PendingDroppedLabelAssignment?
     var labelFilterSelection = DeferredSelectionState<PersistentIdentifier>()
@@ -195,6 +196,14 @@ final class LibraryCoordinator {
             try DeleteDocumentsUseCase.moveToBin(documents, using: modelContext)
         } catch {
             importSummaryMessage = error.localizedDescription
+        }
+    }
+
+    func exportDocuments(_ documents: [DocumentRecord]) {
+        guard let libraryURL, !documents.isEmpty else { return }
+        let result = ExportDocumentsUseCase.exportDocuments(documents, libraryURL: libraryURL)
+        if let result, result.hasUserMessage {
+            exportSummaryMessage = result.summaryMessage
         }
     }
 
@@ -402,6 +411,17 @@ final class LibraryCoordinator {
             set: { newValue in
                 if !newValue {
                     self.importSummaryMessage = nil
+                }
+            }
+        )
+    }
+
+    var exportSummaryBinding: Binding<Bool> {
+        Binding(
+            get: { self.exportSummaryMessage != nil },
+            set: { newValue in
+                if !newValue {
+                    self.exportSummaryMessage = nil
                 }
             }
         )
