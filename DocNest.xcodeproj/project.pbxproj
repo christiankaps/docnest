@@ -14,6 +14,7 @@
 		3EB178A6D0FFD0F4CB64DA1D /* AppTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29A4179D6FD2BD0370A1E9A7 /* AppTypography.swift */; };
 		3F38EC862F63E3D500389314 /* ThumbnailCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F38EC852F63E3D500389314 /* ThumbnailCache.swift */; };
 		3F38EC882F63E42000389314 /* LibraryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F38EC872F63E42000389314 /* LibraryCoordinator.swift */; };
+		3F67E41A2F66E391006439C6 /* ExtractDocumentTextUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F67E4192F66E391006439C6 /* ExtractDocumentTextUseCase.swift */; };
 		4C1368A6F47101D34D33808A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBBA8006045ACAA798F6A49 /* RootView.swift */; };
 		6332EE665429D0D47E89D7F4 /* ResizeHandleCursorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA07191F675258A004D68388 /* ResizeHandleCursorState.swift */; };
 		6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */; };
@@ -63,6 +64,7 @@
 		3B0FFAF2C02193A2F504BDB3 /* DocumentLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentLibraryService.swift; sourceTree = "<group>"; };
 		3F38EC852F63E3D500389314 /* ThumbnailCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCache.swift; sourceTree = "<group>"; };
 		3F38EC872F63E42000389314 /* LibraryCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCoordinator.swift; sourceTree = "<group>"; };
+		3F67E4192F66E391006439C6 /* ExtractDocumentTextUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtractDocumentTextUseCase.swift; sourceTree = "<group>"; };
 		45B34DF5ACFF5069169049C6 /* DocNestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestApp.swift; sourceTree = "<group>"; };
 		4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInspectorView.swift; sourceTree = "<group>"; };
 		54801B6E1BCE4A70FCDB2E29 /* PDFViewRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewRepresentable.swift; sourceTree = "<group>"; };
@@ -103,6 +105,7 @@
 				CC772C7F97D15E871FCAB48C /* ImportPDFDocumentsUseCase.swift */,
 				FD49D19B314A1AF377BCD069 /* ManageLabelsUseCase.swift */,
 				6D9CF39DD2A6316E2DFD9361 /* SearchDocumentsUseCase.swift */,
+				3F67E4192F66E391006439C6 /* ExtractDocumentTextUseCase.swift */,
 			);
 			path = UseCases;
 			sourceTree = "<group>";
@@ -406,6 +409,7 @@
 				4C1368A6F47101D34D33808A /* RootView.swift in Sources */,
 				EFE086EED508E58D74F74FD9 /* SearchDocumentsUseCase.swift in Sources */,
 				D0E526C148C713C44FEE42EB /* SearchFocusCommand.swift in Sources */,
+				3F67E41A2F66E391006439C6 /* ExtractDocumentTextUseCase.swift in Sources */,
 				7A1E697690A2764E2A40E8BB /* SearchToolbarField.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

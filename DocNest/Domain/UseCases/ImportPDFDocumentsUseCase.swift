@@ -92,6 +92,7 @@ enum ImportPDFDocumentsUseCase {
         let fileSize: Int64
         let pageCount: Int
         let sourceCreatedAt: Date?
+        let fullText: String?
     }
 
     @MainActor
@@ -213,7 +214,7 @@ enum ImportPDFDocumentsUseCase {
             libraryURL: libraryURL
         )
 
-        return DocumentRecord(
+        let record = DocumentRecord(
             id: documentID,
             originalFileName: originalFileName,
             title: title,
@@ -224,6 +225,8 @@ enum ImportPDFDocumentsUseCase {
             contentHash: metadata.contentHash,
             storedFilePath: storedFilePath
         )
+        record.fullText = metadata.fullText
+        return record
     }
 
     private static func documentExists(withContentHash contentHash: String, using modelContext: ModelContext) -> Bool {
@@ -239,13 +242,16 @@ enum ImportPDFDocumentsUseCase {
         return try await Task.detached(priority: .userInitiated) {
             let resourceValues = try fileURL.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
             let contentHash = try hashFile(at: fileURL)
-            let pageCount = PDFDocument(url: fileURL)?.pageCount ?? 0
+            let pdfDocument = PDFDocument(url: fileURL)
+            let pageCount = pdfDocument?.pageCount ?? 0
+            let fullText = extractText(from: pdfDocument)
 
             return ImportMetadata(
                 contentHash: contentHash,
                 fileSize: Int64(resourceValues.fileSize ?? 0),
                 pageCount: pageCount,
-                sourceCreatedAt: resourceValues.creationDate
+                sourceCreatedAt: resourceValues.creationDate,
+                fullText: fullText
             )
         }.value
     }
@@ -279,6 +285,17 @@ enum ImportPDFDocumentsUseCase {
         }
 
         return pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
+    }
+
+    static func extractText(from pdfDocument: PDFDocument?) -> String? {
+        guard let pdfDocument, pdfDocument.pageCount > 0 else { return nil }
+        var pages: [String] = []
+        for index in 0..<pdfDocument.pageCount {
+            if let page = pdfDocument.page(at: index), let text = page.string, !text.isEmpty {
+                pages.append(text)
+            }
+        }
+        return pages.isEmpty ? nil : pages.joined(separator: "\n")
     }
 
     private static func normalizedTitle(for url: URL) -> String {

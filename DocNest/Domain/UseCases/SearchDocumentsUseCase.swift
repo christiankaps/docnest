@@ -48,10 +48,16 @@ enum SearchDocumentsUseCase {
             let labelMatches = document.labels.contains { label in
                 label.name.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
             }
-
-            if !labelMatches {
-                return false
+            if labelMatches {
+                continue
             }
+
+            if let fullText = document.fullText,
+               fullText.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil {
+                continue
+            }
+
+            return false
         }
 
         return true

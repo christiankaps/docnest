@@ -44,6 +44,11 @@ struct RootView: View {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
             coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels)
+            await ExtractDocumentTextUseCase.backfillAll(
+                documents: allDocuments,
+                libraryURL: libraryURL,
+                modelContext: modelContext
+            )
         }
     }
 
