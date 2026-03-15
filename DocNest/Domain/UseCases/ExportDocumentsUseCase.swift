@@ -92,8 +92,11 @@ enum ExportDocumentsUseCase {
         }
 
         let sourceURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
+        let suggestedName = suggestedFileName(for: document)
+        let nameWithoutExtension = (suggestedName as NSString).deletingPathExtension
+
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = suggestedFileName(for: document)
+        panel.nameFieldStringValue = nameWithoutExtension
         panel.allowedContentTypes = [.pdf]
         panel.canCreateDirectories = true
 
