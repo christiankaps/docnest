@@ -604,7 +604,11 @@ private struct LibraryLabelRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(color.opacity(isSelected ? 0.22 : (isHovered ? 0.08 : 0.10)))
+                .fill(color.opacity(isSelected ? 0.30 : (isHovered ? 0.08 : 0.10)))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(color.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
         )
         .contentShape(Rectangle())
         .onHover { hovering in
@@ -815,5 +819,6 @@ private final class EmojiInputView: NSView, NSTextInputClient {
         .environment(LibraryCoordinator())
         .modelContainer(for: DocumentRecord.self, inMemory: true)
 }
+
 
 
