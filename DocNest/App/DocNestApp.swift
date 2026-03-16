@@ -199,18 +199,26 @@ private struct AppRootView: View {
 
     private var closedLibraryContent: some View {
         HStack(spacing: 0) {
-            List {
-                Section("Library") {
-                    Text("No library open")
-                        .foregroundStyle(.secondary)
-                }
-                Section("Label Filters") {
-                    Text("No labels")
-                        .foregroundStyle(.secondary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    closedSidebarSection("Library") {
+                        Text("No library open")
+                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                    }
+                    closedSidebarSection("Labels") {
+                        Text("No labels")
+                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                    }
                 }
             }
-            .listStyle(.sidebar)
             .frame(width: AppSplitViewLayout.sidebarWidth)
+            .fixedSize(horizontal: true, vertical: false)
 
             Divider()
 
@@ -234,6 +242,7 @@ private struct AppRootView: View {
                     .padding(20)
                 }
             }
+            .frame(maxWidth: .infinity)
             .dropDestination(for: URL.self) { urls, _ in
                 handleDroppedURLsWithoutLibrary(urls)
             } isTargeted: { isTargeted in
@@ -249,7 +258,21 @@ private struct AppRootView: View {
             )
             .frame(width: AppSplitViewLayout.inspectorWidth)
         }
-        .padding(AppSplitViewLayout.windowContentInset)
+        .padding([.top, .bottom, .trailing], AppSplitViewLayout.windowContentInset)
+    }
+
+    private func closedSidebarSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+
+            content()
+        }
     }
 
     // MARK: - Helpers

@@ -34,7 +34,7 @@ struct RootView: View {
             )
             .frame(width: AppSplitViewLayout.inspectorWidth)
         }
-        .padding(AppSplitViewLayout.windowContentInset)
+        .padding([.top, .bottom, .trailing], AppSplitViewLayout.windowContentInset)
         .environment(coordinator)
         .environment(thumbnailCache)
         .environment(quickLook)
