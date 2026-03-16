@@ -183,6 +183,15 @@ struct DocumentListView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            Divider()
+
+            DocumentListStatusBar(
+                filteredCount: documents.count,
+                totalCount: coordinator.selectedSection == .bin
+                    ? coordinator.trashedDocuments.count
+                    : coordinator.activeDocuments.count
+            )
         }
         .focusable()
         .focusEffectDisabled()
@@ -942,6 +951,47 @@ private struct DocumentThumbnailCell: View {
                         .font(.system(size: size * 0.25))
                         .foregroundStyle(.secondary)
                 }
+        }
+    }
+}
+
+private struct DocumentListStatusBar: View {
+    let filteredCount: Int
+    let totalCount: Int
+
+    private var ratio: Double {
+        guard totalCount > 0 else { return 0 }
+        return Double(filteredCount) / Double(totalCount)
+    }
+
+    private var isFiltered: Bool {
+        filteredCount != totalCount
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(summaryText)
+                .font(AppTypography.caption)
+                .foregroundStyle(.secondary)
+
+            if isFiltered {
+                ProgressView(value: ratio)
+                    .progressViewStyle(.linear)
+                    .frame(width: 80)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var summaryText: String {
+        if totalCount == 0 {
+            return "No documents"
+        } else if isFiltered {
+            return "\(filteredCount) of \(totalCount) documents"
+        } else {
+            return "\(totalCount) documents"
         }
     }
 }
