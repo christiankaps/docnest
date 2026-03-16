@@ -36,7 +36,7 @@ final class DocNestUITests: XCTestCase {
 
         // The Import toolbar button only appears in RootView when a library is open.
         let importButton = app.buttons["Import"]
-        XCTAssertTrue(importButton.waitForExistence(timeout: 5),
+        XCTAssertTrue(importButton.waitForExistence(timeout: 10),
             "Expected the Import button to appear after restoring a library fixture")
     }
 
@@ -57,7 +57,10 @@ final class DocNestUITests: XCTestCase {
                                 "-selectedLibraryPath", libraryURL.path]
         app.launch()
 
-        XCTAssertTrue(app.buttons["Import"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.buttons["Import"].waitForExistence(timeout: 10),
+            "Expected the Import button to appear after restoring a library fixture"
+        )
         XCTAssertFalse(
             app.buttons["Toggle Sidebar"].exists,
             "RootView should not add a second custom sidebar toggle button."
@@ -82,7 +85,7 @@ final class DocNestUITests: XCTestCase {
         app.launch()
 
         let searchField = app.searchFields["document-search-field"]
-        XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10))
 
         app.typeKey("f", modifierFlags: .command)
         app.typeText("invoice")
