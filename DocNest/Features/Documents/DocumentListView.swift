@@ -88,6 +88,7 @@ struct DocumentListView: View {
     @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(QuickLookCoordinator.self) private var quickLook
     @Environment(\.modelContext) private var modelContext
+    @State private var scrollProxy: ScrollViewProxy?
     @State private var selectionAnchor: PersistentIdentifier?
     @State private var renamingDocumentID: PersistentIdentifier?
     @State private var renamingTitle = ""
@@ -289,36 +290,40 @@ struct DocumentListView: View {
     }
 
     private func listContent(_ sortedDocs: [DocumentRecord]) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                Section {
-                ForEach(Array(sortedDocs.enumerated()), id: \.element.persistentModelID) { index, document in
-                    let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    Section {
+                    ForEach(Array(sortedDocs.enumerated()), id: \.element.persistentModelID) { index, document in
+                        let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
 
-                    documentRow(for: document)
-                        .padding(.horizontal, 12)
-                        .background(rowBackground(index: index, isSelected: isSelected))
-                        .contentShape(Rectangle())
-                        .onTapGesture(count: 2) {
-                            openQuickLook(for: document)
-                        }
-                        .onTapGesture {
-                            handleRowTap(document: document, in: sortedDocs)
-                        }
-                        .contextMenu { documentContextMenu(for: document) }
-                        .draggable(dragItem(for: document))
-                        .dropDestination(for: String.self) { items, _ in
-                            guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
-                                return false
+                        documentRow(for: document)
+                            .padding(.horizontal, 12)
+                            .background(rowBackground(index: index, isSelected: isSelected))
+                            .contentShape(Rectangle())
+                            .id(document.persistentModelID)
+                            .onTapGesture(count: 2) {
+                                openQuickLook(for: document)
                             }
-                            let targets = dropTargetDocuments(for: document)
-                            return coordinator.assignDroppedLabelToDocuments(labelID, documents: targets)
-                        }
-                }
-                } header: {
-                    listHeader
+                            .onTapGesture {
+                                handleRowTap(document: document, in: sortedDocs)
+                            }
+                            .contextMenu { documentContextMenu(for: document) }
+                            .draggable(dragItem(for: document))
+                            .dropDestination(for: String.self) { items, _ in
+                                guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
+                                    return false
+                                }
+                                let targets = dropTargetDocuments(for: document)
+                                return coordinator.assignDroppedLabelToDocuments(labelID, documents: targets)
+                            }
+                    }
+                    } header: {
+                        listHeader
+                    }
                 }
             }
+            .onAppear { scrollProxy = proxy }
         }
         .contextMenu {
             Text("Visible Attributes")
@@ -369,31 +374,35 @@ struct DocumentListView: View {
     private func thumbnailContent(_ sortedDocs: [DocumentRecord]) -> some View {
         @Bindable var coordinator = coordinator
 
-        return ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbnailSize), spacing: 16)], spacing: 16) {
-                ForEach(sortedDocs, id: \.persistentModelID) { document in
-                    DocumentThumbnailCell(
-                        document: document,
-                        libraryURL: coordinator.libraryURL,
-                        size: thumbnailSize,
-                        isSelected: coordinator.selectedDocumentIDs.contains(document.persistentModelID),
-                        isRenaming: renamingDocumentID == document.persistentModelID,
-                        renamingTitle: $renamingTitle,
-                        onCommitRename: { commitRename(for: document) },
-                        onCancelRename: { cancelRename() }
-                    )
-                    .onTapGesture(count: 2) {
-                        openQuickLook(for: document)
+        return ScrollViewReader { proxy in
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbnailSize), spacing: 16)], spacing: 16) {
+                    ForEach(sortedDocs, id: \.persistentModelID) { document in
+                        DocumentThumbnailCell(
+                            document: document,
+                            libraryURL: coordinator.libraryURL,
+                            size: thumbnailSize,
+                            isSelected: coordinator.selectedDocumentIDs.contains(document.persistentModelID),
+                            isRenaming: renamingDocumentID == document.persistentModelID,
+                            renamingTitle: $renamingTitle,
+                            onCommitRename: { commitRename(for: document) },
+                            onCancelRename: { cancelRename() }
+                        )
+                        .id(document.persistentModelID)
+                        .onTapGesture(count: 2) {
+                            openQuickLook(for: document)
+                        }
+                        .onTapGesture {
+                            handleRowTap(document: document, in: sortedDocs)
+                        }
+                        .contextMenu { documentContextMenu(for: document) }
+                        .draggable(dragItem(for: document))
+                        .accessibilityLabel("\(document.title), PDF document")
                     }
-                    .onTapGesture {
-                        handleRowTap(document: document, in: sortedDocs)
-                    }
-                    .contextMenu { documentContextMenu(for: document) }
-                    .draggable(dragItem(for: document))
-                    .accessibilityLabel("\(document.title), PDF document")
                 }
+                .padding(16)
             }
-            .padding(16)
+            .onAppear { scrollProxy = proxy }
         }
     }
 
@@ -608,6 +617,7 @@ struct DocumentListView: View {
         let nextID = ids[nextIndex]
         coordinator.selectedDocumentIDs = [nextID]
         selectionAnchor = nextID
+        scrollProxy?.scrollTo(nextID, anchor: nil)
 
         let nextDocument = sortedDocs[nextIndex]
         if let url = originalFileURL(for: nextDocument) {
