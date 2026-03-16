@@ -33,6 +33,13 @@ final class ThumbnailCache {
         return nil
     }
 
+    func cancelAllInFlightTasks() {
+        for task in inFlightTasks.values {
+            task.cancel()
+        }
+        inFlightTasks.removeAll()
+    }
+
     private func pruneStaleEntries() {
         guard loadedThumbnails.count > countLimit else { return }
         let keysToRemove = loadedThumbnails.keys.filter { key in

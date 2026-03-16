@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import UniformTypeIdentifiers
 import OSLog
 
 enum LibrarySection: String, CaseIterable, Identifiable {
@@ -47,7 +46,9 @@ struct LibrarySidebarView: View {
     }
 
     var body: some View {
+        #if DEBUG
         let renderStartTime = Date().timeIntervalSinceReferenceDate
+        #endif
         let labels = sortedLabels
         @Bindable var coordinator = coordinator
 
@@ -270,6 +271,7 @@ struct LibrarySidebarView: View {
                                         reorderInsertionEdge = nil
                                     }
                                 }
+                                .accessibilityHint("Drop documents here to assign the \(label.name) label")
                                 .contextMenu {
                                     Button("Edit") {
                                         beginEditing(label)
@@ -313,9 +315,11 @@ struct LibrarySidebarView: View {
             Text(errorMessage ?? "Unknown label error.")
         }
 
+        #if DEBUG
         .onAppear {
             debugLogSidebarRenderTiming(startTime: renderStartTime, coordinator: coordinator)
         }
+        #endif
 
     }
 

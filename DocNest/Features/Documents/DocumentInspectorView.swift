@@ -260,22 +260,6 @@ struct DocumentInspectorView: View {
         return DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
     }
 
-    private func openOriginalFile(for document: DocumentRecord) {
-        guard let fileURL = originalFileURL(for: document) else {
-            return
-        }
-
-        NSWorkspace.shared.open(fileURL)
-    }
-
-    private func showOriginalFileInFinder(for document: DocumentRecord) {
-        guard let fileURL = originalFileURL(for: document) else {
-            return
-        }
-
-        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-    }
-
     @ViewBuilder
     private func labelSection(for document: DocumentRecord) -> some View {
         let availableLabels = coordinator.allLabels

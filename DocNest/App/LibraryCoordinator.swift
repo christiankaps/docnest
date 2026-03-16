@@ -75,7 +75,9 @@ final class LibraryCoordinator {
     // MARK: - Recomputation
 
     func recomputeFilteredDocuments() {
+        #if DEBUG
         let startTime = Date().timeIntervalSinceReferenceDate
+        #endif
 
         let sectionDocuments: [DocumentRecord] = switch selectedSection {
         case .allDocuments:
@@ -94,6 +96,7 @@ final class LibraryCoordinator {
             selectedLabelIDs: labelFilterSelection.appliedSelection
         )
 
+        #if DEBUG
         debugLogFilterTiming(
             startTime: startTime,
             sourceCount: sectionDocuments.count,
@@ -101,6 +104,7 @@ final class LibraryCoordinator {
             queryLength: searchText.count,
             activeLabelFilters: labelFilterSelection.appliedSelection.count
         )
+        #endif
     }
 
     func recomputeSelectedDocuments() {
@@ -406,33 +410,27 @@ final class LibraryCoordinator {
     }
 
     var importSummaryBinding: Binding<Bool> {
-        Binding(
-            get: { self.importSummaryMessage != nil },
-            set: { newValue in
-                if !newValue {
-                    self.importSummaryMessage = nil
-                }
-            }
-        )
+        optionalPresenceBinding(for: \.importSummaryMessage)
     }
 
     var exportSummaryBinding: Binding<Bool> {
-        Binding(
-            get: { self.exportSummaryMessage != nil },
-            set: { newValue in
-                if !newValue {
-                    self.exportSummaryMessage = nil
-                }
-            }
-        )
+        optionalPresenceBinding(for: \.exportSummaryMessage)
     }
 
     var pendingDroppedLabelAssignmentBinding: Binding<Bool> {
+        optionalPresenceBinding(for: \.pendingDroppedLabelAssignment)
+    }
+
+    /// Returns a `Binding<Bool>` that is `true` when the optional property is non-nil,
+    /// and sets it to `nil` when the binding is set to `false`.
+    private func optionalPresenceBinding<T>(
+        for keyPath: ReferenceWritableKeyPath<LibraryCoordinator, T?>
+    ) -> Binding<Bool> {
         Binding(
-            get: { self.pendingDroppedLabelAssignment != nil },
+            get: { self[keyPath: keyPath] != nil },
             set: { newValue in
                 if !newValue {
-                    self.pendingDroppedLabelAssignment = nil
+                    self[keyPath: keyPath] = nil
                 }
             }
         )

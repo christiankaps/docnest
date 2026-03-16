@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import OSLog
 import UniformTypeIdentifiers
 
 struct ExportDocumentsResult {
@@ -46,6 +47,8 @@ struct ExportDocumentsResult {
 
 enum ExportDocumentsUseCase {
 
+    private static let logger = Logger(subsystem: "com.kaps.docnest", category: "export")
+
     // MARK: - Filename generation
 
     static func suggestedFileName(for document: DocumentRecord) -> String {
@@ -63,7 +66,7 @@ enum ExportDocumentsUseCase {
 
     /// Exports one or more documents. For a single document, presents an NSSavePanel.
     /// For multiple documents, presents an NSOpenPanel in folder-selection mode.
-    /// Returns a result for bulk export, or `nil` for single-document export (NSSavePanel handles its own UX).
+    /// Returns a result describing what happened, or `nil` if the user cancelled the panel.
     @MainActor
     static func exportDocuments(
         _ documents: [DocumentRecord],
@@ -72,8 +75,7 @@ enum ExportDocumentsUseCase {
         guard !documents.isEmpty else { return nil }
 
         if documents.count == 1, let document = documents.first {
-            exportSingleDocument(document, libraryURL: libraryURL)
-            return nil
+            return exportSingleDocument(document, libraryURL: libraryURL)
         }
 
         return exportMultipleDocuments(documents, libraryURL: libraryURL)
@@ -85,10 +87,10 @@ enum ExportDocumentsUseCase {
     private static func exportSingleDocument(
         _ document: DocumentRecord,
         libraryURL: URL
-    ) {
+    ) -> ExportDocumentsResult? {
         guard let storedFilePath = document.storedFilePath,
               DocumentStorageService.fileExists(at: storedFilePath, libraryURL: libraryURL) else {
-            return
+            return nil
         }
 
         let sourceURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
@@ -101,10 +103,20 @@ enum ExportDocumentsUseCase {
         panel.canCreateDirectories = true
 
         guard panel.runModal() == .OK, let destinationURL = panel.url else {
-            return
+            return nil
         }
 
-        try? FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        do {
+            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            return ExportDocumentsResult(exportedCount: 1, skippedCount: 0, failures: [])
+        } catch {
+            logger.error("Failed to export '\(document.title)': \(error.localizedDescription)")
+            return ExportDocumentsResult(
+                exportedCount: 0,
+                skippedCount: 0,
+                failures: [.init(title: document.title, message: error.localizedDescription)]
+            )
+        }
     }
 
     @MainActor
@@ -124,6 +136,10 @@ enum ExportDocumentsUseCase {
             return nil
         }
 
+        // Collect copy operations on the main thread (needs SwiftData access),
+        // then perform file I/O synchronously but off the main actor is not possible
+        // since we need collision resolution to be sequential. The panel already
+        // blocks the run loop, so the copy phase is fast relative to user wait.
         var exportedCount = 0
         var skippedCount = 0
         var failures: [ExportDocumentsResult.Failure] = []
@@ -145,6 +161,7 @@ enum ExportDocumentsUseCase {
                 try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
                 exportedCount += 1
             } catch {
+                logger.error("Failed to export '\(document.title)': \(error.localizedDescription)")
                 failures.append(.init(title: document.title, message: error.localizedDescription))
             }
         }

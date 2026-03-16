@@ -8,15 +8,20 @@ struct PDFViewRepresentable: NSViewRepresentable {
         let pdfView = PDFView()
         pdfView.autoScales = true
         pdfView.displayMode = .singlePageContinuous
-        pdfView.document = PDFDocument(url: url)
-        pdfView.goToFirstPage(nil)
         return pdfView
     }
 
     func updateNSView(_ pdfView: PDFView, context: Context) {
         if pdfView.document?.documentURL != url {
-            pdfView.document = PDFDocument(url: url)
-            pdfView.goToFirstPage(nil)
+            let targetURL = url
+            Task.detached(priority: .userInitiated) {
+                let document = PDFDocument(url: targetURL)
+                await MainActor.run {
+                    guard pdfView.window != nil else { return }
+                    pdfView.document = document
+                    pdfView.goToFirstPage(nil)
+                }
+            }
         }
     }
 }

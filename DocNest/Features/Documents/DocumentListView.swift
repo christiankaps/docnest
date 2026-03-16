@@ -390,6 +390,7 @@ struct DocumentListView: View {
                     }
                     .contextMenu { documentContextMenu(for: document) }
                     .draggable(dragItem(for: document))
+                    .accessibilityLabel("\(document.title), PDF document")
                 }
             }
             .padding(16)

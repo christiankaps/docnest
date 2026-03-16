@@ -39,7 +39,7 @@ struct RootView: View {
         .environment(thumbnailCache)
         .environment(quickLook)
         .toolbar { toolbarContent }
-        .modifier(RootViewImportModifier(coordinator: coordinator, allDocuments: allDocuments))
+        .modifier(RootViewImportModifier(coordinator: coordinator))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
         .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels))
         .focusedSceneValue(\.exportDocumentsAction) {
@@ -102,8 +102,10 @@ struct RootView: View {
         ToolbarItem(placement: .primaryAction) {
             Picker("View", selection: Bindable(coordinator).documentListViewMode) {
                 Image(systemName: "list.bullet")
+                    .accessibilityLabel("List view")
                     .tag(DocumentListViewMode.list)
                 Image(systemName: "square.grid.2x2")
+                    .accessibilityLabel("Thumbnail view")
                     .tag(DocumentListViewMode.thumbnails)
             }
             .pickerStyle(.segmented)
@@ -132,7 +134,6 @@ struct RootView: View {
 
 private struct RootViewImportModifier: ViewModifier {
     let coordinator: LibraryCoordinator
-    let allDocuments: [DocumentRecord]
 
     func body(content: Content) -> some View {
         content
