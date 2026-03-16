@@ -97,25 +97,7 @@ struct LibrarySidebarView: View {
                     }
                 }
 
-                sidebarSection("Label Filters") {
-                    HStack {
-                        Button("Clear Label Filters") {
-                            coordinator.labelFilterSelection.replaceVisualSelection(with: [])
-                        }
-                        .disabled(coordinator.labelFilterSelection.visualSelection.isEmpty)
-
-                        Spacer()
-
-                        Button {
-                            isAddingLabel = true
-                        } label: {
-                            Image(systemName: "plus")
-                        }
-                        .buttonStyle(.plain)
-                        .help("Add Label")
-                    }
-                    .sidebarRow()
-
+                labelSection {
                     if isAddingLabel {
                         VStack(spacing: 8) {
                             HStack(spacing: 8) {
@@ -337,6 +319,48 @@ struct LibrarySidebarView: View {
         }
     }
 
+    private func labelSection<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "tag")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Labels")
+                    .font(.system(size: 11, weight: .semibold))
+                    .textCase(.uppercase)
+
+                Spacer()
+
+                if !coordinator.labelFilterSelection.visualSelection.isEmpty {
+                    Button {
+                        coordinator.labelFilterSelection.replaceVisualSelection(with: [])
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Clear label filters")
+                }
+
+                Button {
+                    isAddingLabel = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Add Label")
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+
+            content()
+        }
+    }
+
     private func debugLogSidebarRenderTiming(startTime: TimeInterval, coordinator: LibraryCoordinator) {
         #if DEBUG
         let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
@@ -519,6 +543,8 @@ private struct LibrarySectionRowView: View {
     let count: Int
     let isSelected: Bool
 
+    @State private var isHovered = false
+
     var body: some View {
         HStack {
             Label(title, systemImage: systemImage)
@@ -531,8 +557,19 @@ private struct LibrarySectionRowView: View {
                 .opacity(isSelected ? 1 : 0)
                 .frame(width: 14, alignment: .trailing)
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.primary.opacity(isHovered ? 0.06 : 0))
+        )
         .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
     }
 }
 
@@ -543,28 +580,38 @@ private struct LibraryLabelRowView: View {
     let count: Int
     let isSelected: Bool
 
+    @State private var isHovered = false
+
     var body: some View {
-        HStack {
+        HStack(spacing: 6) {
             if let icon, !icon.isEmpty {
                 Text(icon)
                     .font(.system(size: 12))
             } else {
-                Circle()
-                    .fill(color)
-                    .frame(width: 10, height: 10)
+                Image(systemName: "tag.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(color)
             }
             Text(name)
+                .fontWeight(isSelected ? .semibold : .regular)
             Spacer()
             Text("\(count)")
                 .font(AppTypography.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.tint)
-                .opacity(isSelected ? 1 : 0)
-                .frame(width: 14, alignment: .trailing)
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(color.opacity(isSelected ? 0.22 : (isHovered ? 0.08 : 0.10)))
+        )
         .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
     }
 }
 
@@ -768,3 +815,5 @@ private final class EmojiInputView: NSView, NSTextInputClient {
         .environment(LibraryCoordinator())
         .modelContainer(for: DocumentRecord.self, inMemory: true)
 }
+
+
