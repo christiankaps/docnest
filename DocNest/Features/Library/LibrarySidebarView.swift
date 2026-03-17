@@ -548,21 +548,22 @@ private struct LibrarySectionRowView: View {
     var body: some View {
         HStack {
             Label(title, systemImage: systemImage)
+                .fontWeight(isSelected ? .semibold : .regular)
             Spacer()
             Text("\(count)")
                 .font(AppTypography.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
-            Image(systemName: "checkmark")
-                .foregroundStyle(.tint)
-                .opacity(isSelected ? 1 : 0)
-                .frame(width: 14, alignment: .trailing)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(Color.primary.opacity(isHovered ? 0.06 : 0))
+                .fill(Color.accentColor.opacity(isSelected ? 0.30 : (isHovered ? 0.06 : 0)))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(Color.accentColor.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
         )
         .contentShape(Rectangle())
         .onHover { hovering in
