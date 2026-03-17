@@ -23,6 +23,7 @@
 		6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */; };
 		77424B1901611FDF26B6EBA6 /* AppSplitViewLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC92D622E6EF259A9AF5A669 /* AppSplitViewLayout.swift */; };
 		78C8D82942577262672EDDF2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0A020E71E4139D5C6236FCD /* Assets.xcassets */; };
+		A3AC8E47D67541A0AC71B5F7 /* DocNestLibrary.icns in Resources */ = {isa = PBXBuildFile; fileRef = B3FECCFCBCC940BDB2146E4C /* DocNestLibrary.icns */; };
 		7A1E697690A2764E2A40E8BB /* SearchToolbarField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384308B1EF0740E0C4F3A350 /* SearchToolbarField.swift */; };
 		8D1FC626EFC093CBE2FF7636 /* PDFViewRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54801B6E1BCE4A70FCDB2E29 /* PDFViewRepresentable.swift */; };
 		9B1EA4B0472E2FA374348A7F /* DocNestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD39DB5ED19340D342B038E6 /* DocNestTests.swift */; };
@@ -82,6 +83,7 @@
 		A5E121E80E607DB634883795 /* LabelChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelChip.swift; sourceTree = "<group>"; };
 		A7258C57A6B80E1813F14EF9 /* DeleteDocumentsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteDocumentsUseCase.swift; sourceTree = "<group>"; };
 		B0A020E71E4139D5C6236FCD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B3FECCFCBCC940BDB2146E4C /* DocNestLibrary.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = DocNestLibrary.icns; sourceTree = "<group>"; };
 		C0AAAEB26F93E46DA446829E /* LibrarySidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySidebarView.swift; sourceTree = "<group>"; };
 		CC772C7F97D15E871FCAB48C /* ImportPDFDocumentsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportPDFDocumentsUseCase.swift; sourceTree = "<group>"; };
 		DD39DB5ED19340D342B038E6 /* DocNestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestTests.swift; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 			isa = PBXGroup;
 			children = (
 				B0A020E71E4139D5C6236FCD /* Assets.xcassets */,
+				B3FECCFCBCC940BDB2146E4C /* DocNestLibrary.icns */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -378,6 +381,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				78C8D82942577262672EDDF2 /* Assets.xcassets in Resources */,
+				A3AC8E47D67541A0AC71B5F7 /* DocNestLibrary.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
