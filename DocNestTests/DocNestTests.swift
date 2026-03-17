@@ -257,7 +257,7 @@ final class DocNestTests: XCTestCase {
             DocumentRecord(originalFileName: "contract.pdf", title: "Contract", importedAt: .now, pageCount: 1)
         ]
 
-        let counts = LibrarySidebarCounts(activeDocuments: documents, trashedCount: 0, labels: [finance, tax, archive], recentLimit: 10)
+        let counts = LibrarySidebarCounts(activeDocuments: documents, trashedCount: 0, labels: [finance, tax, archive], recentLimit: 10, labelSourceDocuments: documents, activeLabelFilterIDs: [])
 
         XCTAssertEqual(counts.count(for: .allDocuments), 3)
         XCTAssertEqual(counts.count(for: .recent), 3)
@@ -277,7 +277,7 @@ final class DocNestTests: XCTestCase {
             )
         }
 
-        let counts = LibrarySidebarCounts(activeDocuments: documents, trashedCount: 0, labels: [], recentLimit: 10)
+        let counts = LibrarySidebarCounts(activeDocuments: documents, trashedCount: 0, labels: [], recentLimit: 10, labelSourceDocuments: documents, activeLabelFilterIDs: [])
 
         XCTAssertEqual(counts.count(for: .allDocuments), 12)
         XCTAssertEqual(counts.count(for: .recent), 10)
@@ -291,7 +291,7 @@ final class DocNestTests: XCTestCase {
             DocumentRecord(originalFileName: "active-b.pdf", title: "B", importedAt: .now, pageCount: 1)
         ]
 
-        let counts = LibrarySidebarCounts(activeDocuments: activeDocuments, trashedCount: 1, labels: [label], recentLimit: 10)
+        let counts = LibrarySidebarCounts(activeDocuments: activeDocuments, trashedCount: 1, labels: [label], recentLimit: 10, labelSourceDocuments: activeDocuments, activeLabelFilterIDs: [])
 
         XCTAssertEqual(counts.count(for: .allDocuments), 2)
         XCTAssertEqual(counts.count(for: .needsLabels), 1)

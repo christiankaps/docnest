@@ -95,6 +95,7 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 - Library is treated as a macOS package (UTExportedTypeDeclarations with com.apple.package conformance), appearing as a single file in Finder and app file dialogs.
 - The .docnestlibrary package uses a dedicated file icon in Finder and in macOS open/save panels.
 - App provides a "Show in Finder" action for libraries and individual documents.
+- The library manifest includes a format version number. When opening a library created by an older app version, the app detects the version mismatch and runs any necessary migration steps before loading the library. After migration, the manifest is updated to the current version.
 
 ### 6.2 Document Import
 
@@ -173,7 +174,7 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 - A document can have multiple labels.
 - Labels can be assigned quickly via keyboard or direct actions.
 - Filtering by one or more labels is supported.
-- Left sidebar shows document count for each label.
+- Left sidebar shows document count for each label, scoped to the currently selected library section and active label filters.
 - Dragging a label from sidebar onto a document assigns that label to the document.
 - Dragging one or more documents onto a label in the sidebar assigns the label to those documents. Single-file drops are assigned immediately without confirmation. Multi-file drops show a native confirmation dialog with the count of documents that will be newly assigned and the count already having the label; already-assigned documents are always skipped.
 - If multiple labels are selected as filters, logic is AND: only documents with all selected labels are shown.
@@ -277,6 +278,7 @@ For the first version, a filesystem-friendly structure is preferred that is tech
 ### 8.1 Recommended Form
 - One library as package, for example My Documents.docnestlibrary.
 - Inside the package: clear directories instead of binary monoliths.
+- The library manifest (library.json) carries a `formatVersion` integer. New libraries are stamped with the current version. On open, the app compares the manifest version against its own current version and applies sequential migrations when needed.
 
 ### 8.2 Example Structure
 
@@ -395,6 +397,10 @@ Goal: app can create and open libraries cleanly.
 - Define library package format.
 - Create persistence model for documents and labels.
 - Build base for file operations and consistency checks.
+
+Current state:
+- Library manifest includes a `formatVersion` field. New libraries are created with the current format version.
+- On open, the app validates the library structure and decodes the manifest. If the manifest version is older than the app's current version, sequential migration steps are applied and the manifest is rewritten.
 
 ### Phase 2: Import Pipeline
 Goal: PDFs are imported robustly into library.

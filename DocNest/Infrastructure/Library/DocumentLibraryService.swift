@@ -14,6 +14,7 @@ struct DocumentLibraryManifest: Codable {
 
 enum DocumentLibraryService {
     static let packageExtension = "docnestlibrary"
+    static let currentFormatVersion = 1
 
     private static let persistedLibraryPathKey = "selectedLibraryPath"
     private static let launchArgumentSelectedLibraryPath = "-selectedLibraryPath"
@@ -88,14 +89,28 @@ enum DocumentLibraryService {
             )
         }
 
-        let manifest = DocumentLibraryManifest(formatVersion: 1, createdAt: .now)
+        let manifest = DocumentLibraryManifest(formatVersion: currentFormatVersion, createdAt: .now)
         let manifestData = try JSONEncoder.prettyPrinted.encode(manifest)
         try manifestData.write(to: manifestURL(for: libraryURL), options: .atomic)
 
         return libraryURL
     }
 
-    static func validateLibrary(at url: URL) throws -> URL {
+    static func migrateLibraryIfNeeded(at libraryURL: URL, manifest: DocumentLibraryManifest) throws {
+        guard manifest.formatVersion < currentFormatVersion else { return }
+
+        // Future migrations go here, applied in order:
+        // if manifest.formatVersion < 2 { ... }
+
+        let updatedManifest = DocumentLibraryManifest(
+            formatVersion: currentFormatVersion,
+            createdAt: manifest.createdAt
+        )
+        let data = try JSONEncoder.prettyPrinted.encode(updatedManifest)
+        try data.write(to: manifestURL(for: libraryURL), options: .atomic)
+    }
+
+    static func validateLibrary(at url: URL) throws -> (URL, DocumentLibraryManifest) {
         let libraryURL = url.standardizedFileURL
         var isDirectory: ObjCBool = false
 
@@ -111,9 +126,9 @@ enum DocumentLibraryService {
         }
 
         let manifestData = try Data(contentsOf: manifestURL(for: libraryURL))
-        _ = try JSONDecoder.libraryManifest.decode(DocumentLibraryManifest.self, from: manifestData)
+        let manifest = try JSONDecoder.libraryManifest.decode(DocumentLibraryManifest.self, from: manifestData)
 
-        return libraryURL
+        return (libraryURL, manifest)
     }
 
     static func originalsDirectory(for libraryURL: URL) -> URL {

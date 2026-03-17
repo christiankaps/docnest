@@ -62,12 +62,7 @@ final class LibraryCoordinator {
         activeDocuments = active
         trashedDocuments = trashed
 
-        sidebarCounts = LibrarySidebarCounts(
-            activeDocuments: active,
-            trashedCount: trashed.count,
-            labels: allLabels,
-            recentLimit: recentDocumentLimit
-        )
+        recomputeSidebarCounts()
         recomputeFilteredDocuments()
         recomputeSelectedDocuments()
     }
@@ -79,22 +74,15 @@ final class LibraryCoordinator {
         let startTime = Date().timeIntervalSinceReferenceDate
         #endif
 
-        let sectionDocuments: [DocumentRecord] = switch selectedSection {
-        case .allDocuments:
-            activeDocuments
-        case .recent:
-            Array(activeDocuments.prefix(recentDocumentLimit))
-        case .needsLabels:
-            activeDocuments.filter { $0.labels.isEmpty }
-        case .bin:
-            trashedDocuments
-        }
+        let sectionDocuments = sectionScopedDocuments
 
         filteredDocuments = SearchDocumentsUseCase.filter(
             sectionDocuments,
             query: searchText,
             selectedLabelIDs: labelFilterSelection.appliedSelection
         )
+
+        recomputeSidebarCounts()
 
         #if DEBUG
         debugLogFilterTiming(
@@ -105,6 +93,30 @@ final class LibraryCoordinator {
             activeLabelFilters: labelFilterSelection.appliedSelection.count
         )
         #endif
+    }
+
+    private var sectionScopedDocuments: [DocumentRecord] {
+        switch selectedSection {
+        case .allDocuments:
+            activeDocuments
+        case .recent:
+            Array(activeDocuments.prefix(recentDocumentLimit))
+        case .needsLabels:
+            activeDocuments.filter { $0.labels.isEmpty }
+        case .bin:
+            trashedDocuments
+        }
+    }
+
+    private func recomputeSidebarCounts() {
+        sidebarCounts = LibrarySidebarCounts(
+            activeDocuments: activeDocuments,
+            trashedCount: trashedDocuments.count,
+            labels: allLabels,
+            recentLimit: recentDocumentLimit,
+            labelSourceDocuments: sectionScopedDocuments,
+            activeLabelFilterIDs: labelFilterSelection.appliedSelection
+        )
     }
 
     func recomputeSelectedDocuments() {
@@ -497,5 +509,5 @@ final class LibraryCoordinator {
 }
 
 extension LibrarySidebarCounts {
-    static let empty = LibrarySidebarCounts(activeDocuments: [], trashedCount: 0, labels: [], recentLimit: 10)
+    static let empty = LibrarySidebarCounts(activeDocuments: [], trashedCount: 0, labels: [], recentLimit: 10, labelSourceDocuments: [], activeLabelFilterIDs: [])
 }

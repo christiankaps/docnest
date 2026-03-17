@@ -345,7 +345,8 @@ final class LibrarySessionController: ObservableObject {
 
     private func openValidatedLibrary(at url: URL) {
         do {
-            let validatedURL = try DocumentLibraryService.validateLibrary(at: url)
+            let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: url)
+            try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
             try openLibrary(at: validatedURL)
         } catch {
             closeLibrary()

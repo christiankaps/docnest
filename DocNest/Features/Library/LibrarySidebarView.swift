@@ -650,17 +650,19 @@ struct LibrarySidebarCounts {
     private let sectionCounts: [LibrarySection: Int]
     private let labelCounts: [PersistentIdentifier: Int]
 
-    init(activeDocuments: [DocumentRecord], trashedCount: Int, labels: [LabelTag], recentLimit: Int) {
+    init(
+        activeDocuments: [DocumentRecord],
+        trashedCount: Int,
+        labels: [LabelTag],
+        recentLimit: Int,
+        labelSourceDocuments: [DocumentRecord],
+        activeLabelFilterIDs: Set<PersistentIdentifier>
+    ) {
         var needsLabelsCount = 0
-        var computedLabelCounts = Dictionary(uniqueKeysWithValues: labels.map { ($0.persistentModelID, 0) })
 
         for document in activeDocuments {
             if document.labels.isEmpty {
                 needsLabelsCount += 1
-            }
-
-            for labelID in Set(document.labels.map(\.persistentModelID)) {
-                computedLabelCounts[labelID, default: 0] += 1
             }
         }
 
@@ -670,6 +672,19 @@ struct LibrarySidebarCounts {
             .needsLabels: needsLabelsCount,
             .bin: trashedCount
         ]
+
+        var computedLabelCounts = Dictionary(uniqueKeysWithValues: labels.map { ($0.persistentModelID, 0) })
+        for document in labelSourceDocuments {
+            let documentLabelIDs = Set(document.labels.map(\.persistentModelID))
+
+            // Only count if the document matches all other active label filters
+            let matchesOtherFilters = activeLabelFilterIDs.allSatisfy { documentLabelIDs.contains($0) }
+            guard matchesOtherFilters else { continue }
+
+            for labelID in documentLabelIDs {
+                computedLabelCounts[labelID, default: 0] += 1
+            }
+        }
         labelCounts = computedLabelCounts
     }
 
