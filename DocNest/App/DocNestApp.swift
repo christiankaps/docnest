@@ -47,6 +47,12 @@ struct DocNestApp: App {
         )
         .windowResizability(.contentMinSize)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About DocNest") {
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    AboutWindowController.shared.showWindow(nil)
+                }
+            }
             CommandGroup(replacing: .newItem) {
                 Button("Create Library") {
                     librarySession?.createLibrary()
@@ -78,10 +84,9 @@ struct DocNestApp: App {
                 .disabled(exportDocumentsAction == nil)
             }
             CommandGroup(replacing: .printItem) { }
-            CommandGroup(replacing: .textEditing) { }
             CommandGroup(replacing: .textFormatting) { }
             CommandGroup(replacing: .help) { }
-            CommandMenu("Edit") {
+            CommandGroup(replacing: .textEditing) {
                 Button("Find") {
                     NotificationCenter.default.post(name: .docNestFocusSearch, object: nil)
                 }
@@ -147,6 +152,7 @@ private struct AppRootView: View {
         }
         .onAppear {
             applyAppearance(appearanceMode)
+            AboutStatisticsProvider.shared.controller = librarySession
         }
         .onChange(of: appearanceMode) { _, newMode in
             applyAppearance(newMode)
@@ -175,6 +181,9 @@ private struct AppRootView: View {
         }
         .onOpenURL { url in
             librarySession.openLibraryFromFinder(url)
+        }
+        .onChange(of: librarySession.selectedLibraryURL) { _, _ in
+            AboutStatisticsProvider.shared.controller = librarySession
         }
         .task {
             librarySession.restorePersistedLibrary()
@@ -399,6 +408,55 @@ final class LibrarySessionController: ObservableObject {
     private func stopLockHeartbeat() {
         lockHeartbeatTimer?.invalidate()
         lockHeartbeatTimer = nil
+    }
+
+    // MARK: - Library Statistics
+
+    struct LibraryStatistics {
+        let path: String
+        let documentCount: Int
+        let totalFileSize: Int64
+        let libraryPackageSize: Int64
+
+        var formattedTotalFileSize: String {
+            ByteCountFormatter.string(fromByteCount: totalFileSize, countStyle: .file)
+        }
+
+        var formattedPackageSize: String {
+            ByteCountFormatter.string(fromByteCount: libraryPackageSize, countStyle: .file)
+        }
+    }
+
+    func libraryStatistics() -> LibraryStatistics? {
+        guard let url = selectedLibraryURL,
+              let container = modelContainer else {
+            return nil
+        }
+
+        let context = container.mainContext
+        let descriptor = FetchDescriptor<DocumentRecord>()
+        let documents = (try? context.fetch(descriptor)) ?? []
+
+        let totalFileSize = documents.reduce(Int64(0)) { $0 + $1.fileSize }
+
+        var packageSize: Int64 = 0
+        if let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) {
+            for case let fileURL as URL in enumerator {
+                let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                packageSize += Int64(size)
+            }
+        }
+
+        return LibraryStatistics(
+            path: url.path,
+            documentCount: documents.count,
+            totalFileSize: totalFileSize,
+            libraryPackageSize: packageSize
+        )
     }
 
     private func observeAppTermination(for libraryURL: URL) {
