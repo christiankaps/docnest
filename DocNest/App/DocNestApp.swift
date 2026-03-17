@@ -206,14 +206,14 @@ private struct AppRootView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     closedSidebarSection("Library") {
                         Text("No library open")
-                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 6)
                     }
                     closedSidebarSection("Labels") {
                         Text("No labels")
-                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .font(.system(size: 13, weight: .regular))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 6)
