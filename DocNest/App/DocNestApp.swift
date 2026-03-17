@@ -308,6 +308,11 @@ final class LibrarySessionController: ObservableObject {
     @Published private(set) var modelContainer: ModelContainer?
     @Published var libraryErrorMessage: String?
 
+    private var lockHeartbeatTimer: Timer?
+    private static let lockHeartbeatInterval: TimeInterval = 30
+
+    private var terminationObserver: Any?
+
     func restorePersistedLibrary() {
         guard selectedLibraryURL == nil,
               let persistedLibraryURL = DocumentLibraryService.restorePersistedLibraryURL() else {
@@ -339,6 +344,10 @@ final class LibrarySessionController: ObservableObject {
     }
 
     func closeLibrary() {
+        stopLockHeartbeat()
+        if let url = selectedLibraryURL {
+            DocumentLibraryService.releaseLock(for: url)
+        }
         selectedLibraryURL = nil
         modelContainer = nil
     }
@@ -347,6 +356,7 @@ final class LibrarySessionController: ObservableObject {
         do {
             let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: url)
             try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
+            try DocumentLibraryService.acquireLock(for: validatedURL)
             try openLibrary(at: validatedURL)
         } catch {
             closeLibrary()
@@ -360,5 +370,41 @@ final class LibrarySessionController: ObservableObject {
         selectedLibraryURL = libraryURL
         DocumentLibraryService.persistLibraryURL(libraryURL)
         libraryErrorMessage = nil
+        startLockHeartbeat(for: libraryURL)
+        observeAppTermination(for: libraryURL)
+    }
+
+    // MARK: - Lock Heartbeat
+
+    private func startLockHeartbeat(for libraryURL: URL) {
+        stopLockHeartbeat()
+        lockHeartbeatTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.lockHeartbeatInterval,
+            repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard self?.selectedLibraryURL == libraryURL else { return }
+                try? DocumentLibraryService.refreshLock(for: libraryURL)
+            }
+        }
+    }
+
+    private func stopLockHeartbeat() {
+        lockHeartbeatTimer?.invalidate()
+        lockHeartbeatTimer = nil
+    }
+
+    private func observeAppTermination(for libraryURL: URL) {
+        if let existing = terminationObserver {
+            NotificationCenter.default.removeObserver(existing)
+        }
+
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            DocumentLibraryService.releaseLock(for: libraryURL)
+        }
     }
 }

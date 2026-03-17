@@ -173,6 +173,128 @@ final class DocNestTests: XCTestCase {
         )
     }
 
+    func testAcquireLockCreatesLockFile() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("LockTest")
+        )
+
+        try DocumentLibraryService.acquireLock(for: libraryURL)
+
+        let lock = DocumentLibraryService.readLockFile(for: libraryURL)
+        XCTAssertNotNil(lock)
+        XCTAssertEqual(lock?.pid, ProcessInfo.processInfo.processIdentifier)
+        XCTAssertEqual(lock?.hostname, ProcessInfo.processInfo.hostName)
+
+        DocumentLibraryService.releaseLock(for: libraryURL)
+    }
+
+    func testReleaseLockRemovesLockFile() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("LockTest")
+        )
+
+        try DocumentLibraryService.acquireLock(for: libraryURL)
+        DocumentLibraryService.releaseLock(for: libraryURL)
+
+        XCTAssertNil(DocumentLibraryService.readLockFile(for: libraryURL))
+    }
+
+    func testAcquireLockRejectsActiveNonStaleLock() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("LockTest")
+        )
+
+        // Simulate a lock from a different process
+        let foreignLock = LibraryLockFile(
+            hostname: "other-machine.local",
+            pid: 99999,
+            updatedAt: .now
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(foreignLock)
+        let lockURL = libraryURL
+            .appendingPathComponent("Metadata", isDirectory: true)
+            .appendingPathComponent(".lock")
+        try data.write(to: lockURL, options: .atomic)
+
+        XCTAssertThrowsError(try DocumentLibraryService.acquireLock(for: libraryURL)) { error in
+            XCTAssertTrue(error is DocumentLibraryService.LockError)
+        }
+
+        try? FileManager.default.removeItem(at: lockURL)
+    }
+
+    func testAcquireLockSucceedsWhenExistingLockIsStale() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("LockTest")
+        )
+
+        // Simulate a stale lock (updated well beyond the threshold)
+        let staleLock = LibraryLockFile(
+            hostname: "other-machine.local",
+            pid: 99999,
+            updatedAt: Date(timeIntervalSinceNow: -(LibraryLockFile.staleThreshold + 10))
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(staleLock)
+        let lockURL = libraryURL
+            .appendingPathComponent("Metadata", isDirectory: true)
+            .appendingPathComponent(".lock")
+        try data.write(to: lockURL, options: .atomic)
+
+        XCTAssertNoThrow(try DocumentLibraryService.acquireLock(for: libraryURL))
+
+        DocumentLibraryService.releaseLock(for: libraryURL)
+    }
+
+    func testSameProcessCanReacquireOwnLock() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("LockTest")
+        )
+
+        try DocumentLibraryService.acquireLock(for: libraryURL)
+        XCTAssertNoThrow(try DocumentLibraryService.acquireLock(for: libraryURL))
+
+        DocumentLibraryService.releaseLock(for: libraryURL)
+    }
+
     func testOpenLibraryLayoutKeepsSidePanelsFixedAndDocumentListFlexible() {
         XCTAssertEqual(AppSplitViewLayout.sidebarWidth, 260)
         XCTAssertEqual(AppSplitViewLayout.inspectorWidth, 420)

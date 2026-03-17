@@ -12,6 +12,22 @@ struct DocumentLibraryManifest: Codable {
     let createdAt: Date
 }
 
+struct LibraryLockFile: Codable {
+    let hostname: String
+    let pid: Int32
+    let updatedAt: Date
+
+    static let staleThreshold: TimeInterval = 60
+
+    var isStale: Bool {
+        Date().timeIntervalSince(updatedAt) > Self.staleThreshold
+    }
+
+    var ownerDescription: String {
+        "\(hostname) (PID \(pid))"
+    }
+}
+
 enum DocumentLibraryService {
     static let packageExtension = "docnestlibrary"
     static let currentFormatVersion = 1
@@ -19,6 +35,7 @@ enum DocumentLibraryService {
     private static let persistedLibraryPathKey = "selectedLibraryPath"
     private static let launchArgumentSelectedLibraryPath = "-selectedLibraryPath"
     private static let manifestFileName = "library.json"
+    private static let lockFileName = ".lock"
     private static let requiredDirectories = [
         "Metadata",
         "Originals",
@@ -157,6 +174,63 @@ enum DocumentLibraryService {
             LabelTag.self,
             configurations: configuration
         )
+    }
+
+    // MARK: - Library Lock
+
+    static func readLockFile(for libraryURL: URL) -> LibraryLockFile? {
+        let url = lockFileURL(for: libraryURL)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder.libraryManifest.decode(LibraryLockFile.self, from: data)
+    }
+
+    static func acquireLock(for libraryURL: URL) throws {
+        if let existing = readLockFile(for: libraryURL), !existing.isStale {
+            let currentPID = ProcessInfo.processInfo.processIdentifier
+            let currentHost = ProcessInfo.processInfo.hostName
+            let isSameProcess = existing.pid == currentPID && existing.hostname == currentHost
+
+            if !isSameProcess {
+                throw LockError.lockedByAnotherInstance(existing)
+            }
+        }
+
+        try writeLockFile(for: libraryURL)
+    }
+
+    static func refreshLock(for libraryURL: URL) throws {
+        try writeLockFile(for: libraryURL)
+    }
+
+    static func releaseLock(for libraryURL: URL) {
+        let url = lockFileURL(for: libraryURL)
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    private static func writeLockFile(for libraryURL: URL) throws {
+        let lock = LibraryLockFile(
+            hostname: ProcessInfo.processInfo.hostName,
+            pid: ProcessInfo.processInfo.processIdentifier,
+            updatedAt: .now
+        )
+        let data = try JSONEncoder.prettyPrinted.encode(lock)
+        try data.write(to: lockFileURL(for: libraryURL), options: .atomic)
+    }
+
+    private static func lockFileURL(for libraryURL: URL) -> URL {
+        metadataDirectory(for: libraryURL)
+            .appendingPathComponent(lockFileName)
+    }
+
+    enum LockError: LocalizedError {
+        case lockedByAnotherInstance(LibraryLockFile)
+
+        var errorDescription: String? {
+            switch self {
+            case .lockedByAnotherInstance(let lock):
+                return "This library is currently open on \(lock.ownerDescription). Close it there first, or wait for the lock to expire."
+            }
+        }
     }
 
     static func selectedLibraryURL(from launchArguments: [String]) -> URL? {
