@@ -1,0 +1,77 @@
+name: Build and Attach Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Archive and package DMG
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
+      - name: Archive
+        run: |
+          xcodebuild \
+            -project DocNest.xcodeproj \
+            -scheme DocNest \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/DocNest.xcarchive" \
+            archive \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify archive
+        run: |
+          APP_PATH="$RUNNER_TEMP/DocNest.xcarchive/Products/Applications/DocNest.app"
+          [ -d "$APP_PATH" ] || { echo "Archive did not produce DocNest.app"; exit 1; }
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create DMG
+        run: |
+          APP_PATH="$RUNNER_TEMP/DocNest.xcarchive/Products/Applications/DocNest.app"
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_PATH/Contents/Info.plist" 2>/dev/null || echo "0.0.0")
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP_PATH/Contents/Info.plist" 2>/dev/null || echo "1")
+          DMG_NAME="DocNest_${VERSION}_${BUILD}.dmg"
+
+          STAGING="$RUNNER_TEMP/staging"
+          mkdir -p "$STAGING"
+          cp -R "$APP_PATH" "$STAGING/"
+
+          create-dmg \
+            --volname "DocNest" \
+            --window-pos 200 120 \
+            --window-size 660 400 \
+            --icon-size 128 \
+            --icon "DocNest.app" 180 170 \
+            --app-drop-link 480 170 \
+            --hide-extension "DocNest.app" \
+            --no-internet-enable \
+            "$RUNNER_TEMP/$DMG_NAME" \
+            "$STAGING" \
+            || true
+
+          [ -f "$RUNNER_TEMP/$DMG_NAME" ] || { echo "DMG was not created"; exit 1; }
+          echo "DMG_PATH=$RUNNER_TEMP/$DMG_NAME" >> "$GITHUB_ENV"
+          echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
+
+      - name: Upload DMG to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "$DMG_PATH#$DMG_NAME" \
+            --clobber
