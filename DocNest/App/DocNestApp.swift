@@ -173,6 +173,9 @@ private struct AppRootView: View {
                 .help("Switch appearance")
             }
         }
+        .onOpenURL { url in
+            librarySession.openLibraryFromFinder(url)
+        }
         .task {
             librarySession.restorePersistedLibrary()
         }
@@ -340,6 +343,10 @@ final class LibrarySessionController: ObservableObject {
             return
         }
 
+        openValidatedLibrary(at: url)
+    }
+
+    func openLibraryFromFinder(_ url: URL) {
         openValidatedLibrary(at: url)
     }
 
