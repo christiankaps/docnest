@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct RootView: View {
     let libraryURL: URL
@@ -63,18 +64,14 @@ struct RootView: View {
 
             if coordinator.isDropTargeted {
                 DocumentImportDropOverlay(
-                    title: "Drop PDFs to Import",
-                    message: "Files will be copied into the open library and processed with the same rules as the import dialog."
+                    title: "Drop PDFs or Folders to Import",
+                    message: "Files will be copied into the open library. Folders are scanned recursively for PDFs."
                 )
                 .padding(20)
             }
         }
         .background { QuickLookPanelResponder(coordinator: quickLook) }
-        .dropDestination(for: URL.self) { urls, _ in
-            handleDroppedURLs(urls)
-        } isTargeted: { isTargeted in
-            coordinator.isDropTargeted = isTargeted
-        }
+        .onDrop(of: [.fileURL], delegate: FileImportDropDelegate(coordinator: coordinator))
         .onChange(of: coordinator.cachedShareURLs) {
             quickLook.previewURLs = coordinator.cachedShareURLs
             quickLook.reloadIfVisible()
@@ -84,11 +81,20 @@ struct RootView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .principal) {
-            SearchToolbarField(
-                text: Bindable(coordinator).searchText,
-                focusRequestToken: coordinator.searchFocusRequestToken
-            )
-            .frame(width: 280)
+            HStack(spacing: 6) {
+                SearchToolbarField(
+                    text: Bindable(coordinator).searchText,
+                    focusRequestToken: coordinator.searchFocusRequestToken
+                )
+                .frame(width: 280)
+
+                if let progress = coordinator.importProgress {
+                    ImportProgressIndicator(progress: progress) {
+                        coordinator.cancelImport()
+                    }
+                    .transition(.opacity)
+                }
+            }
         }
 
         ToolbarItem(placement: .primaryAction) {
@@ -122,14 +128,6 @@ struct RootView: View {
         }
     }
 
-    private func handleDroppedURLs(_ urls: [URL]) -> Bool {
-        guard !urls.isEmpty else {
-            return false
-        }
-
-        coordinator.importDocuments(from: urls)
-        return true
-    }
 }
 
 private struct RootViewImportModifier: ViewModifier {
@@ -294,6 +292,79 @@ struct DocumentImportDropOverlay: View {
                 .padding(28)
             }
             .allowsHitTesting(false)
+    }
+}
+
+private struct FileImportDropDelegate: DropDelegate {
+    let coordinator: LibraryCoordinator
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.fileURL])
+    }
+
+    func dropEntered(info: DropInfo) {
+        coordinator.isDropTargeted = true
+    }
+
+    func dropExited(info: DropInfo) {
+        coordinator.isDropTargeted = false
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        coordinator.isDropTargeted = false
+        let providers = info.itemProviders(for: [.fileURL])
+        guard !providers.isEmpty else { return false }
+
+        Task { @MainActor in
+            var urls: [URL] = []
+            for provider in providers {
+                if let url = await loadFileURL(from: provider) {
+                    urls.append(url)
+                }
+            }
+            guard !urls.isEmpty else { return }
+            coordinator.importDocuments(from: urls)
+        }
+        return true
+    }
+
+    private func loadFileURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
+                if let data = data as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                    continuation.resume(returning: url)
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+}
+
+private struct ImportProgressIndicator: View {
+    let progress: ImportProgress
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ProgressView()
+                .controlSize(.small)
+
+            if progress.total > 1 {
+                Text("\(progress.completed)/\(progress.total)")
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            Button(action: onCancel) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Stop importing")
+        }
+        .help("Importing documents\u{2026}")
     }
 }
 

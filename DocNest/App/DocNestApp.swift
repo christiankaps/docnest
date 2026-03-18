@@ -249,7 +249,7 @@ private struct AppRootView: View {
                 if isClosedLibraryDropTargeted {
                     DocumentImportDropOverlay(
                         title: "Open a Library First",
-                        message: "Create or open a DocNest library before dropping PDFs into the app."
+                        message: "Create or open a DocNest library before dropping PDFs or folders into the app."
                     )
                     .padding(20)
                 }
@@ -306,7 +306,7 @@ private struct AppRootView: View {
         }
 
         if ImportPDFDocumentsUseCase.containsImportableDocuments(in: urls) {
-            librarySession.libraryErrorMessage = "Create or open a DocNest library before importing PDFs via drag and drop."
+            librarySession.libraryErrorMessage = "Create or open a DocNest library before importing files via drag and drop."
             return true
         }
 

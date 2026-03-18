@@ -100,8 +100,12 @@ enum ImportPDFDocumentsUseCase {
         urls: [URL],
         into libraryURL: URL,
         autoAssignLabels: [LabelTag] = [],
-        using modelContext: ModelContext
+        using modelContext: ModelContext,
+        onProgress: (@MainActor (_ completed: Int, _ total: Int) -> Void)? = nil
     ) async -> ImportPDFDocumentsResult {
+        let resolvedURLs = resolveFileURLs(urls)
+        onProgress?(0, resolvedURLs.count)
+
         let autoAssignedLabelNames = autoAssignLabels
             .map(\.name)
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
@@ -113,7 +117,11 @@ enum ImportPDFDocumentsUseCase {
         var failures: [ImportPDFDocumentsResult.Failure] = []
         var batchHashes: Set<String> = []
 
-        for url in urls {
+        for (index, url) in resolvedURLs.enumerated() {
+            defer { onProgress?(index + 1, resolvedURLs.count) }
+
+            if Task.isCancelled { break }
+
             guard isSupportedDocumentURL(url) else {
                 unsupportedFiles.append(.init(fileName: url.lastPathComponent))
                 continue
@@ -195,7 +203,9 @@ enum ImportPDFDocumentsUseCase {
     }
 
     static func containsImportableDocuments(in urls: [URL]) -> Bool {
-        urls.contains(where: isSupportedDocumentURL)
+        urls.contains { url in
+            isSupportedDocumentURL(url) || isDirectory(url)
+        }
     }
 
     private static func importDocument(
@@ -268,6 +278,45 @@ enum ImportPDFDocumentsUseCase {
         }
 
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Expands any directory URLs into their contained PDF files recursively,
+    /// passing through individual file URLs unchanged.
+    private static func resolveFileURLs(_ urls: [URL]) -> [URL] {
+        var resolved: [URL] = []
+        let fileManager = FileManager.default
+
+        for url in urls {
+            if isDirectory(url) {
+                let accessedSecurityScope = url.startAccessingSecurityScopedResource()
+                defer {
+                    if accessedSecurityScope {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                }
+
+                guard let enumerator = fileManager.enumerator(
+                    at: url,
+                    includingPropertiesForKeys: [.isRegularFileKey],
+                    options: [.skipsHiddenFiles, .skipsPackageDescendants]
+                ) else { continue }
+
+                for case let fileURL as URL in enumerator {
+                    if isSupportedDocumentURL(fileURL) {
+                        resolved.append(fileURL)
+                    }
+                }
+            } else {
+                resolved.append(url)
+            }
+        }
+
+        return resolved
+    }
+
+    private static func isDirectory(_ url: URL) -> Bool {
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
     }
 
     private static func isSupportedDocumentURL(_ url: URL) -> Bool {

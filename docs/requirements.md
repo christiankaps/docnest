@@ -101,12 +101,15 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 
 #### Must
 - PDFs can be imported via file dialog and drag-and-drop.
+- Folders can be dropped onto the document list; all PDFs inside (including nested subfolders) are imported recursively.
 - Import captures file hash, filename, creation date, import timestamp, and page count.
 - Documents receive a stable internal ID.
 - Duplicate detection is required, at least hash-based.
 - User sees which files are new and which are duplicates.
 - User receives clear feedback when individual files fail in batch import.
 - Labels currently active as filters are automatically assigned to newly imported documents so they appear immediately in the filtered view.
+- Import runs in the background with a progress indicator (spinner and file counter) shown next to the search bar.
+- User can cancel an in-progress import; already-imported files are kept.
 
 #### Should
 - Batch import of multiple files.
@@ -117,9 +120,9 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 
 #### Drag-and-Drop Requirements for v1
 - Drag-and-drop uses the same import pipeline as the file dialog; validation, duplicate handling, file copy, and feedback are identical.
-- While a library is open, PDFs can be dropped onto the main window from Finder or other apps via file URLs.
+- While a library is open, PDFs and folders can be dropped onto the main window from Finder or other apps via file URLs.
 - Main content shows a clear visual drop zone during valid drag operations; invalid content is not shown as acceptable.
-- Multiple PDFs can be imported in one drop.
+- Multiple PDFs and folders can be imported in one drop. Folders are scanned recursively for PDFs.
 - Non-PDF files in a drop are not imported in v1 and are reported as skipped or failed.
 - A drop without an open library must not trigger a silent import attempt; the app must explain library state instead.
 - Drop behavior applies to the document list and the empty-library state; users must not need to hit a tiny target.
@@ -418,6 +421,9 @@ Current state:
 - File-dialog import and drag-and-drop use same import path and same feedback model.
 - Document list acts as generous drop zone; with closed library, app explains missing import context instead of silently failing.
 - Active label filters are automatically assigned to newly imported documents.
+- Dropped folders are recursively scanned for PDFs; all found PDFs are imported through the standard pipeline.
+- Import runs in the background with a progress indicator (spinner + counter) next to the search bar. User can cancel mid-import.
+- Drag-and-drop uses a DropDelegate with explicit UTType.fileURL matching to avoid conflicts with label drag-and-drop on document rows.
 
 Implementation plan for drag-and-drop:
 1. Add generous drop area in main content, not only on a single child element.

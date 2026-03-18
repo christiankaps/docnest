@@ -2,6 +2,11 @@ import OSLog
 import SwiftUI
 import SwiftData
 
+struct ImportProgress {
+    let total: Int
+    let completed: Int
+}
+
 struct PendingDroppedLabelAssignment {
     let labelID: PersistentIdentifier
     let documentIDs: Set<PersistentIdentifier>
@@ -24,6 +29,7 @@ final class LibraryCoordinator {
     var searchFocusRequestToken = 0
     var isImporting = false
     var isDropTargeted = false
+    private(set) var importProgress: ImportProgress?
     var documentListViewMode: DocumentListViewMode = .list
     var importSummaryMessage: String?
     var exportSummaryMessage: String?
@@ -41,6 +47,7 @@ final class LibraryCoordinator {
     private(set) var sidebarCounts = LibrarySidebarCounts.empty
 
     // MARK: - Internal
+    private var activeImportTask: Task<Void, Never>?
     private var pendingLabelFilterApplyTask: Task<Void, Never>?
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
     let recentDocumentLimit = 10
@@ -385,18 +392,31 @@ final class LibraryCoordinator {
             labelFilterSelection.visualSelection.contains(label.persistentModelID)
         }
 
-        Task { @MainActor in
+        importProgress = ImportProgress(total: 0, completed: 0)
+
+        activeImportTask = Task { @MainActor in
             let importResult = await ImportPDFDocumentsUseCase.execute(
                 urls: urls,
                 into: libraryURL,
                 autoAssignLabels: activeFilterLabels,
                 using: modelContext
-            )
+            ) { completed, total in
+                self.importProgress = ImportProgress(total: total, completed: completed)
+            }
+
+            importProgress = nil
+            activeImportTask = nil
 
             if importResult.hasUserMessage {
                 importSummaryMessage = importResult.summaryMessage
             }
         }
+    }
+
+    func cancelImport() {
+        activeImportTask?.cancel()
+        activeImportTask = nil
+        importProgress = nil
     }
 
     func shareableFileURLs(from documents: [DocumentRecord]) -> [URL] {
