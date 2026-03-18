@@ -134,12 +134,11 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 - List view with sortable columns.
 - When left sidebar and right inspector are visible, both panels must remain fully visible; the app must not partially clip visible panel content.
 - When the window narrows, the center document list shrinks first; side panels retain fully usable widths while visible.
-- User can resize all file-list columns (including the Document column) directly via drag gesture in the header.
+- User can resize visible file-list columns directly via drag gesture.
 - User can toggle file-list attributes (Imported, Created, Pages, File Size, Labels). The Document column remains always visible.
-- The Document column uses a persisted width (default 260pt) with a minimum of 200pt.
+- The Document column uses a fixed minimum width that is large enough for approximately 30 characters.
 - Column headers are always single-line and stay aligned with row content.
-- The document list supports horizontal scrolling so columns are never auto-hidden. Users toggle column visibility explicitly via context menu.
-- The label column shows all assigned labels for each document, not a truncated subset.
+- Optional file-list columns auto-hide in tight layouts (in a deterministic order) before violating panel or Document-column constraints.
 - Left and right side panels use fixed, non-overlay layout behavior in open-library mode.
 - The left sidebar is not toggleable in open-library mode.
 - File list uses clear row separation with alternating row colors (even/odd) for readability at scale.
@@ -441,18 +440,17 @@ Current state:
 - Document list offers sortable columns for title, import date, page count, and file size.
 - Document list shows title in one Document column; original filename is visible in inspector and is not duplicated.
 - Document list uses denser typography for large libraries and visual label chips instead of plain text.
-- All file-list columns (including Document) support drag-resizable widths in the header, with widths persisted via AppStorage.
+- Document list supports drag-resizable column widths in header.
 - File attributes (except Document) can be shown/hidden via context menu.
-- Document list supports horizontal scrolling; columns are never auto-hidden.
-- The label column shows all assigned labels per document without truncation.
 - Document list uses alternating row backgrounds for better visual separation.
 - Inspector provides Finder actions for original file and library.
 - Three-panel layout enforces strict fixed side panels in open-library mode: sidebar width 260, inspector width 420; center list is elastic.
 - In open-library mode, the left sidebar is always visible and not toggleable.
-- Document column has a persisted width (default 260pt, minimum 200pt) and is resizable like all other columns.
+- Document column has a fixed minimum width for approximately 30 characters.
+- Optional columns auto-hide in tight layouts before panel clipping or Document-column violation can occur.
 - Detail view separates PDF preview and metadata with vertical splitter so users can adjust preview height directly.
 - Startup view without library is integrated into regular three-panel layout and no longer shown as separate popup dialog.
-- Typography is unified into a consistent SF Pro system style.
+- Typography is unified into a consistent modern rounded system style.
 - Documents can be renamed inline in both list and thumbnail views via context menu "Rename".
 - Pressing Space or double-clicking a document opens a native Quick Look preview via QLPreviewPanel, similar to Finder behavior.
 - Arrow keys navigate the document list; when Quick Look is open, navigation automatically updates the preview.

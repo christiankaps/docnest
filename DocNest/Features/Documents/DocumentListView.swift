@@ -81,7 +81,7 @@ struct DocumentListView: View {
         }
     }
 
-    private let documentColumnMinWidth = 200.0
+    private let documentColumnMinWidth = 260.0
     private let listColumnSpacing = 10.0
     private let listHorizontalPadding = 24.0
 
@@ -94,13 +94,13 @@ struct DocumentListView: View {
     @State private var renamingTitle = ""
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
+    @State private var availableListWidth = AppSplitViewLayout.documentListIdealWidth
     @AppStorage("docListThumbnailSize") private var thumbnailSize = 160.0
     @AppStorage("docListColumnWidthImported") private var importedColumnWidth = 120.0
     @AppStorage("docListColumnWidthCreated") private var createdColumnWidth = 120.0
     @AppStorage("docListColumnWidthPages") private var pagesColumnWidth = 72.0
     @AppStorage("docListColumnWidthSize") private var sizeColumnWidth = 96.0
     @AppStorage("docListColumnWidthLabels") private var labelsColumnWidth = 240.0
-    @AppStorage("docListColumnWidthDocument") private var documentColumnWidth = 260.0
     @AppStorage("docListShowImported") private var showsImportedColumn = true
     @AppStorage("docListShowCreated") private var showsCreatedColumn = true
     @AppStorage("docListShowPages") private var showsPagesColumn = true
@@ -123,25 +123,47 @@ struct DocumentListView: View {
     }
 
     private var effectiveOptionalColumns: OptionalColumnVisibility {
-        OptionalColumnVisibility(
+        var visibility = OptionalColumnVisibility(
             imported: showsImportedColumn,
             created: showsCreatedColumn,
             pages: showsPagesColumn,
             size: showsSizeColumn,
             labels: showsLabelsColumn
         )
-    }
 
-    /// Total width needed to render all visible columns plus spacing.
-    private var totalColumnsWidth: Double {
-        var width = documentColumnWidth + listHorizontalPadding
-        let columns = effectiveOptionalColumns
-        if columns.imported { width += importedColumnWidth + listColumnSpacing }
-        if columns.created { width += createdColumnWidth + listColumnSpacing }
-        if columns.pages { width += pagesColumnWidth + listColumnSpacing }
-        if columns.size { width += sizeColumnWidth + listColumnSpacing }
-        if columns.labels { width += labelsColumnWidth + listColumnSpacing }
-        return width
+        let optionalColumnsAvailableWidth = max(
+            availableListWidth - listHorizontalPadding - documentColumnMinWidth,
+            0
+        )
+
+        func requiredOptionalColumnsWidth(for visibility: OptionalColumnVisibility) -> Double {
+            var width = 0.0
+
+            if visibility.imported { width += importedColumnWidth }
+            if visibility.created { width += createdColumnWidth }
+            if visibility.pages { width += pagesColumnWidth }
+            if visibility.size { width += sizeColumnWidth }
+            if visibility.labels { width += labelsColumnWidth }
+
+            width += Double(visibility.visibleCount) * listColumnSpacing
+            return width
+        }
+
+        let hideOrder: [WritableKeyPath<OptionalColumnVisibility, Bool>] = [
+            \.labels,
+            \.size,
+            \.pages,
+            \.created,
+            \.imported
+        ]
+
+        for keyPath in hideOrder where requiredOptionalColumnsWidth(for: visibility) > optionalColumnsAvailableWidth {
+            if visibility[keyPath: keyPath] {
+                visibility[keyPath: keyPath] = false
+            }
+        }
+
+        return visibility
     }
 
     var body: some View {
@@ -180,7 +202,17 @@ struct DocumentListView: View {
         .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow]) { keyPress in
             handleArrowKey(keyPress, in: documents)
         }
-        
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear {
+                        availableListWidth = proxy.size.width
+                    }
+                    .onChange(of: proxy.size.width) { _, newWidth in
+                        availableListWidth = newWidth
+                    }
+            }
+        }
     }
 
     private var emptyContent: some View {
@@ -207,9 +239,8 @@ struct DocumentListView: View {
         return Group {
             if coordinator.documentListViewMode == .list {
                 HStack(spacing: 10) {
-                    ResizableColumnHeader(width: $documentColumnWidth, minWidth: documentColumnMinWidth) {
-                        sortButton("Document", column: .title)
-                    }
+                    sortButton("Document", column: .title)
+                        .frame(minWidth: documentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
 
                     if effectiveOptionalColumns.imported {
                         ResizableColumnHeader(width: $importedColumnWidth, minWidth: 96) {
@@ -269,7 +300,7 @@ struct DocumentListView: View {
 
     private func listContent(_ sortedDocs: [DocumentRecord]) -> some View {
         ScrollViewReader { proxy in
-            ScrollView([.horizontal, .vertical]) {
+            ScrollView {
                 LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                     Section {
                     ForEach(Array(sortedDocs.enumerated()), id: \.element.persistentModelID) { index, document in
@@ -300,7 +331,6 @@ struct DocumentListView: View {
                         listHeader
                     }
                 }
-                .frame(minWidth: totalColumnsWidth)
             }
             .onAppear { scrollProxy = proxy }
         }
@@ -412,7 +442,7 @@ struct DocumentListView: View {
                     }
                 }
             }
-            .frame(width: documentColumnWidth, alignment: .leading)
+            .frame(minWidth: documentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
 
             if effectiveOptionalColumns.imported {
                 Text(document.importedAt, format: .dateTime.year().month().day())
@@ -789,7 +819,11 @@ private struct DocumentLabelStrip: View {
     }
 
     private var visibleLabels: [LabelTag] {
-        sortedLabels
+        Array(sortedLabels.prefix(2))
+    }
+
+    private var hiddenLabelCount: Int {
+        max(sortedLabels.count - visibleLabels.count, 0)
     }
 
     init(labels: [LabelTag], onRemove: ((LabelTag) -> Void)? = nil) {
@@ -806,6 +840,12 @@ private struct DocumentLabelStrip: View {
             HStack(spacing: 6) {
                 ForEach(visibleLabels) { label in
                     RemovableLabelChip(label: label, onRemove: onRemove)
+                }
+
+                if hiddenLabelCount > 0 {
+                    Text("+\(hiddenLabelCount)")
+                        .font(AppTypography.labelChip)
+                        .foregroundStyle(.secondary)
                 }
             }
             .lineLimit(1)
