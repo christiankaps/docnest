@@ -39,6 +39,9 @@ struct DocNestApp: App {
     @FocusedValue(\.exportDocumentsAction) private var exportDocumentsAction
     @FocusedValue(\.pasteDocumentsAction) private var pasteDocumentsAction
 
+    /// Kept alive for the lifetime of the app so macOS can invoke the service.
+    private let servicesProvider = ServicesProvider()
+
     init() {
         NSWindow.allowsAutomaticWindowTabbing = false
 
@@ -51,6 +54,11 @@ struct DocNestApp: App {
             DispatchQueue.main.async {
                 NSApplication.shared.terminate(nil)
             }
+        }
+
+        // Defer services registration until NSApp is fully initialized.
+        DispatchQueue.main.async { [servicesProvider] in
+            NSApp.servicesProvider = servicesProvider
         }
     }
 
@@ -211,6 +219,11 @@ private struct AppRootView: View {
                 librarySession.openLibraryFromFinder(url)
             } else {
                 librarySession.queueImportURLs([url])
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ServicesProvider.didReceiveFilesNotification)) { notification in
+            if let urls = notification.object as? [URL], !urls.isEmpty {
+                librarySession.queueImportURLs(urls)
             }
         }
         .onChange(of: librarySession.selectedLibraryURL) { _, _ in

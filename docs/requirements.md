@@ -91,6 +91,9 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 - App presents understandable error states if a library is damaged or incomplete.
 - The active metadata store is library-local and, for v1, stored at Metadata/library.sqlite.
 
+#### Must (App Lifecycle)
+- Only one instance of the app may run at a time. If a second instance is launched, it activates the existing instance and terminates itself.
+
 #### Should
 - Library is treated as a macOS package (UTExportedTypeDeclarations with com.apple.package conformance), appearing as a single file in Finder and app file dialogs.
 - The .docnestlibrary package uses a dedicated file icon in Finder and in macOS open/save panels.
@@ -111,6 +114,8 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 - Labels currently active as filters are automatically assigned to newly imported documents so they appear immediately in the filtered view.
 - Import runs in the background with a progress indicator (spinner and file counter) shown next to the search bar.
 - User can cancel an in-progress import; already-imported files are kept.
+- PDFs and folders can be imported by dropping them onto the app's dock icon. URLs received before a library is loaded are queued and processed once the library becomes available.
+- The app registers as a macOS Services provider ("Import into DocNest") for PDFs and folders, allowing import from Finder's Services and Share menus.
 
 #### Must (Storage Naming)
 - Stored files inside the library package use the document title as filename (sanitized for filesystem safety), not a random UUID.
@@ -433,6 +438,9 @@ Current state:
 - Paste (Command+V) reads file URLs from the system pasteboard and routes them through the same import pipeline. Folders pasted from Finder are recursively scanned for PDFs.
 - Pasting a web URL (http/https) downloads the PDF to a temporary location, imports it into the library, and deletes the temp file. No copy is left in the Downloads folder. Filename is derived from URL path or Content-Disposition header. Download failures are reported in the import summary.
 - Stored files use the document title as filename (sanitized), with a short content-hash suffix on collision. Renaming a document in the app renames the stored file to match.
+- PDFs and folders dropped onto the dock icon are routed through `onOpenURL` into the import pipeline. URLs arriving before a library is loaded are queued in `LibrarySessionController.pendingImportURLs` and drained once the library becomes available.
+- App registers as a macOS Services provider via `NSServices` in Info.plist. `ServicesProvider` handles the `importFiles` message by reading file URLs from the pasteboard and posting a notification that `AppRootView` observes to queue imports.
+- Single-instance enforcement: on init, the app checks `NSRunningApplication.runningApplications(withBundleIdentifier:)` and terminates if another instance is already running.
 
 Implementation plan for drag-and-drop:
 1. Add generous drop area in main content, not only on a single child element.

@@ -65,5 +65,24 @@
 			</dict>
 		</dict>
 	</array>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Import into DocNest</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>importFiles</string>
+			<key>NSPortName</key>
+			<string>DocNest</string>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.adobe.pdf</string>
+				<string>public.folder</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
