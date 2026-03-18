@@ -112,6 +112,11 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 - Import runs in the background with a progress indicator (spinner and file counter) shown next to the search bar.
 - User can cancel an in-progress import; already-imported files are kept.
 
+#### Must (Storage Naming)
+- Stored files inside the library package use the document title as filename (sanitized for filesystem safety), not a random UUID.
+- On naming collision within the same storage directory, a short content-hash suffix is appended (e.g. `Invoice March 2026 (a1b2c3d4).pdf`).
+- When a document is renamed in the app (inspector or inline rename), the stored file is renamed to match the new title. The stored-file path in the database is updated accordingly.
+
 #### Should
 - Batch import of multiple files.
 - Optional copy-into-library instead of external reference; for v1, copy into library is recommended.
@@ -427,6 +432,7 @@ Current state:
 - Drag-and-drop uses a DropDelegate with explicit UTType.fileURL matching to avoid conflicts with label drag-and-drop on document rows.
 - Paste (Command+V) reads file URLs from the system pasteboard and routes them through the same import pipeline. Folders pasted from Finder are recursively scanned for PDFs.
 - Pasting a web URL (http/https) downloads the PDF to a temporary location, imports it into the library, and deletes the temp file. No copy is left in the Downloads folder. Filename is derived from URL path or Content-Disposition header. Download failures are reported in the import summary.
+- Stored files use the document title as filename (sanitized), with a short content-hash suffix on collision. Renaming a document in the app renames the stored file to match.
 
 Implementation plan for drag-and-drop:
 1. Add generous drop area in main content, not only on a single child element.

@@ -657,6 +657,16 @@ struct DocumentListView: View {
             return
         }
         document.title = trimmed
+
+        if let storedFilePath = document.storedFilePath, let libraryURL = coordinator.libraryURL {
+            document.storedFilePath = DocumentStorageService.renameStoredFile(
+                at: storedFilePath,
+                newTitle: trimmed,
+                contentHash: document.contentHash,
+                libraryURL: libraryURL
+            )
+        }
+
         try? modelContext.save()
         renamingDocumentID = nil
     }

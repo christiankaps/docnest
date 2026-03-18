@@ -327,7 +327,8 @@ enum ImportPDFDocumentsUseCase {
         let title = normalizedTitle(for: url)
         let storedFilePath = try DocumentStorageService.copyToStorage(
             from: url,
-            documentID: documentID,
+            title: title,
+            contentHash: metadata.contentHash,
             importedAt: importedAt,
             libraryURL: libraryURL
         )

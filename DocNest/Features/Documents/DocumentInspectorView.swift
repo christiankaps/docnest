@@ -506,6 +506,16 @@ struct DocumentInspectorView: View {
         }
 
         document.title = trimmed
+
+        if let storedFilePath = document.storedFilePath, let libraryURL {
+            document.storedFilePath = DocumentStorageService.renameStoredFile(
+                at: storedFilePath,
+                newTitle: trimmed,
+                contentHash: document.contentHash,
+                libraryURL: libraryURL
+            )
+        }
+
         do {
             try modelContext.save()
         } catch {
