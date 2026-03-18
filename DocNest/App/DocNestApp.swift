@@ -12,6 +12,10 @@ private struct ExportDocumentsActionKey: FocusedValueKey {
     typealias Value = () -> Void
 }
 
+private struct PasteDocumentsActionKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
 extension FocusedValues {
     var librarySession: LibrarySessionController? {
         get { self[LibrarySessionKey.self] }
@@ -22,12 +26,18 @@ extension FocusedValues {
         get { self[ExportDocumentsActionKey.self] }
         set { self[ExportDocumentsActionKey.self] = newValue }
     }
+
+    var pasteDocumentsAction: (() -> Void)? {
+        get { self[PasteDocumentsActionKey.self] }
+        set { self[PasteDocumentsActionKey.self] = newValue }
+    }
 }
 
 @main
 struct DocNestApp: App {
     @FocusedValue(\.librarySession) private var librarySession
     @FocusedValue(\.exportDocumentsAction) private var exportDocumentsAction
+    @FocusedValue(\.pasteDocumentsAction) private var pasteDocumentsAction
 
     init() {
         NSWindow.allowsAutomaticWindowTabbing = false
@@ -73,7 +83,13 @@ struct DocNestApp: App {
                 }
                 .disabled(librarySession?.selectedLibraryURL == nil)
             }
-            CommandGroup(replacing: .pasteboard) { }
+            CommandGroup(replacing: .pasteboard) {
+                Button("Paste") {
+                    pasteDocumentsAction?()
+                }
+                .keyboardShortcut("v", modifiers: [.command])
+                .disabled(pasteDocumentsAction == nil)
+            }
             CommandGroup(replacing: .undoRedo) { }
             CommandGroup(replacing: .saveItem) { }
             CommandGroup(replacing: .importExport) {

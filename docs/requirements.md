@@ -100,8 +100,9 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 ### 6.2 Document Import
 
 #### Must
-- PDFs can be imported via file dialog and drag-and-drop.
-- Folders can be dropped onto the document list; all PDFs inside (including nested subfolders) are imported recursively.
+- PDFs can be imported via file dialog, drag-and-drop, and paste (Command+V).
+- Folders can be dropped or pasted onto the document list; all PDFs inside (including nested subfolders) are imported recursively.
+- Pasting a web URL (http/https) to a PDF downloads the file directly into the library without leaving a copy in the Downloads folder. The filename is derived from the URL path or Content-Disposition header.
 - Import captures file hash, filename, creation date, import timestamp, and page count.
 - Documents receive a stable internal ID.
 - Duplicate detection is required, at least hash-based.
@@ -424,6 +425,8 @@ Current state:
 - Dropped folders are recursively scanned for PDFs; all found PDFs are imported through the standard pipeline.
 - Import runs in the background with a progress indicator (spinner + counter) next to the search bar. User can cancel mid-import.
 - Drag-and-drop uses a DropDelegate with explicit UTType.fileURL matching to avoid conflicts with label drag-and-drop on document rows.
+- Paste (Command+V) reads file URLs from the system pasteboard and routes them through the same import pipeline. Folders pasted from Finder are recursively scanned for PDFs.
+- Pasting a web URL (http/https) downloads the PDF to a temporary location, imports it into the library, and deletes the temp file. No copy is left in the Downloads folder. Filename is derived from URL path or Content-Disposition header. Download failures are reported in the import summary.
 
 Implementation plan for drag-and-drop:
 1. Add generous drop area in main content, not only on a single child element.

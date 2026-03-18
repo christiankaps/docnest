@@ -13,6 +13,11 @@ struct ImportPDFDocumentsResult {
         let fileName: String
     }
 
+    struct DownloadFailure {
+        let url: URL
+        let message: String
+    }
+
     struct Failure {
         let fileName: String?
         let message: String
@@ -21,6 +26,7 @@ struct ImportPDFDocumentsResult {
     let importedCount: Int
     let duplicates: [Duplicate]
     let unsupportedFiles: [Unsupported]
+    let downloadFailures: [DownloadFailure]
     let failures: [Failure]
     let autoAssignedLabels: [String]
 
@@ -40,8 +46,12 @@ struct ImportPDFDocumentsResult {
         importedCount > 0 && !autoAssignedLabels.isEmpty
     }
 
+    var hasDownloadFailures: Bool {
+        !downloadFailures.isEmpty
+    }
+
     var hasUserMessage: Bool {
-        hasDuplicates || hasUnsupportedFiles || hasFailures || hasAutoAssignedLabels
+        hasDuplicates || hasUnsupportedFiles || hasDownloadFailures || hasFailures || hasAutoAssignedLabels
     }
 
     var summaryMessage: String {
@@ -63,6 +73,11 @@ struct ImportPDFDocumentsResult {
         if hasUnsupportedFiles {
             lines.append(unsupportedFiles.count == 1 ? "Skipped 1 unsupported file:" : "Skipped \(unsupportedFiles.count) unsupported files:")
             lines.append(contentsOf: unsupportedFiles.map { "- \($0.fileName)" })
+        }
+
+        if hasDownloadFailures {
+            lines.append(downloadFailures.count == 1 ? "Failed to download 1 URL:" : "Failed to download \(downloadFailures.count) URLs:")
+            lines.append(contentsOf: downloadFailures.map { "- \($0.url.absoluteString): \($0.message)" })
         }
 
         if hasAutoAssignedLabels {
@@ -103,7 +118,31 @@ enum ImportPDFDocumentsUseCase {
         using modelContext: ModelContext,
         onProgress: (@MainActor (_ completed: Int, _ total: Int) -> Void)? = nil
     ) async -> ImportPDFDocumentsResult {
-        let resolvedURLs = resolveFileURLs(urls)
+        // Partition into file URLs and web URLs
+        var fileURLs: [URL] = []
+        var webURLs: [URL] = []
+        for url in urls {
+            if url.isFileURL {
+                fileURLs.append(url)
+            } else if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+                webURLs.append(url)
+            }
+        }
+
+        // Download web URLs to temporary files
+        var downloadFailures: [ImportPDFDocumentsResult.DownloadFailure] = []
+        var downloadedTempFiles: [URL] = []
+        for webURL in webURLs {
+            if Task.isCancelled { break }
+            do {
+                let tempFile = try await downloadPDF(from: webURL)
+                downloadedTempFiles.append(tempFile)
+            } catch {
+                downloadFailures.append(.init(url: webURL, message: error.localizedDescription))
+            }
+        }
+
+        let resolvedURLs = resolveFileURLs(fileURLs) + downloadedTempFiles
         onProgress?(0, resolvedURLs.count)
 
         let autoAssignedLabelNames = autoAssignLabels
@@ -166,6 +205,11 @@ enum ImportPDFDocumentsUseCase {
             }
         }
 
+        // Clean up downloaded temp files — they have been copied into the library
+        for tempFile in downloadedTempFiles {
+            try? FileManager.default.removeItem(at: tempFile)
+        }
+
         do {
             try modelContext.save()
         } catch {
@@ -188,6 +232,7 @@ enum ImportPDFDocumentsUseCase {
                 importedCount: 0,
                 duplicates: duplicates,
                 unsupportedFiles: unsupportedFiles,
+                downloadFailures: downloadFailures,
                 failures: failures,
                 autoAssignedLabels: autoAssignedLabelNames
             )
@@ -197,6 +242,7 @@ enum ImportPDFDocumentsUseCase {
             importedCount: importedRecords.count,
             duplicates: duplicates,
             unsupportedFiles: unsupportedFiles,
+            downloadFailures: downloadFailures,
             failures: failures,
             autoAssignedLabels: autoAssignedLabelNames
         )
@@ -204,8 +250,70 @@ enum ImportPDFDocumentsUseCase {
 
     static func containsImportableDocuments(in urls: [URL]) -> Bool {
         urls.contains { url in
-            isSupportedDocumentURL(url) || isDirectory(url)
+            isSupportedDocumentURL(url) || isDirectory(url) || isWebURL(url)
         }
+    }
+
+    /// Returns true for http/https URLs that may point to a downloadable PDF.
+    private static func isWebURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
+    /// Downloads a PDF from a web URL to a temporary file.
+    /// The caller is responsible for deleting the temp file after import.
+    private static func downloadPDF(from url: URL) async throws -> URL {
+        let (tempURL, response) = try await URLSession.shared.download(for: URLRequest(url: url))
+
+        // Derive a meaningful filename from the URL or Content-Disposition header
+        let suggestedName = suggestedFileName(from: url, response: response)
+
+        let destinationURL = tempURL.deletingLastPathComponent().appendingPathComponent(suggestedName)
+        try? FileManager.default.removeItem(at: destinationURL)
+        try FileManager.default.moveItem(at: tempURL, to: destinationURL)
+        return destinationURL
+    }
+
+    private static func suggestedFileName(from url: URL, response: URLResponse) -> String {
+        // Try Content-Disposition header first
+        if let httpResponse = response as? HTTPURLResponse,
+           let disposition = httpResponse.value(forHTTPHeaderField: "Content-Disposition"),
+           let filename = parseFilenameFromContentDisposition(disposition) {
+            return filename
+        }
+
+        // Fall back to URL path component
+        let lastComponent = url.lastPathComponent
+        if !lastComponent.isEmpty, lastComponent != "/" {
+            let decoded = lastComponent.removingPercentEncoding ?? lastComponent
+            // Strip query parameters that may have leaked into the filename
+            if let questionMark = decoded.firstIndex(of: "?") {
+                let name = String(decoded[decoded.startIndex..<questionMark])
+                return name.hasSuffix(".pdf") ? name : name + ".pdf"
+            }
+            return decoded.hasSuffix(".pdf") ? decoded : decoded + ".pdf"
+        }
+
+        return "Downloaded.pdf"
+    }
+
+    private static func parseFilenameFromContentDisposition(_ header: String) -> String? {
+        // Match filename*=UTF-8''name or filename="name" or filename=name
+        let patterns: [String] = [
+            "filename\\*=(?:UTF-8|utf-8)''(.+?)(?:;|$)",
+            "filename=\"(.+?)\"",
+            "filename=([^;\\s]+)"
+        ]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern),
+               let match = regex.firstMatch(in: header, range: NSRange(header.startIndex..., in: header)),
+               match.numberOfRanges > 1,
+               let range = Range(match.range(at: 1), in: header) {
+                let filename = String(header[range]).removingPercentEncoding ?? String(header[range])
+                if !filename.isEmpty { return filename }
+            }
+        }
+        return nil
     }
 
     private static func importDocument(

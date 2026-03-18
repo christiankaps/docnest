@@ -46,6 +46,9 @@ struct RootView: View {
         .focusedSceneValue(\.exportDocumentsAction) {
             coordinator.exportDocuments(coordinator.selectedDocuments)
         }
+        .focusedSceneValue(\.pasteDocumentsAction) {
+            pasteDocumentsFromPasteboard()
+        }
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
@@ -126,6 +129,31 @@ struct RootView: View {
             .disabled(coordinator.cachedShareURLs.isEmpty)
             .help("Share selected documents")
         }
+    }
+
+    private func pasteDocumentsFromPasteboard() {
+        var urls: [URL] = []
+
+        // Read file URLs (from Finder copy)
+        if let fileURLs = NSPasteboard.general.readObjects(forClasses: [NSURL.self]) as? [URL] {
+            urls.append(contentsOf: fileURLs)
+        }
+
+        // Read plain-text strings that may be web URLs (from browser copy)
+        if let strings = NSPasteboard.general.readObjects(forClasses: [NSString.self]) as? [String] {
+            for string in strings {
+                let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let url = URL(string: trimmed),
+                   let scheme = url.scheme?.lowercased(),
+                   (scheme == "http" || scheme == "https"),
+                   !urls.contains(url) {
+                    urls.append(url)
+                }
+            }
+        }
+
+        guard !urls.isEmpty else { return }
+        coordinator.importDocuments(from: urls)
     }
 
 }
