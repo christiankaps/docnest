@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct RootView: View {
     let libraryURL: URL
+    @ObservedObject var librarySession: LibrarySessionController
 
     @State private var coordinator = LibraryCoordinator()
     @State private var thumbnailCache = ThumbnailCache()
@@ -58,6 +59,17 @@ struct RootView: View {
                 libraryURL: libraryURL,
                 modelContext: modelContext
             )
+            // Import any URLs that arrived before the library was ready
+            let pending = librarySession.drainPendingImportURLs()
+            if !pending.isEmpty {
+                coordinator.importDocuments(from: pending)
+            }
+        }
+        .onChange(of: librarySession.pendingImportURLs) {
+            let pending = librarySession.drainPendingImportURLs()
+            if !pending.isEmpty {
+                coordinator.importDocuments(from: pending)
+            }
         }
     }
 
@@ -397,6 +409,9 @@ private struct ImportProgressIndicator: View {
 }
 
 #Preview {
-    RootView(libraryURL: URL(fileURLWithPath: "/tmp/preview.docnestlibrary"))
-        .modelContainer(for: DocumentRecord.self, inMemory: true)
+    RootView(
+        libraryURL: URL(fileURLWithPath: "/tmp/preview.docnestlibrary"),
+        librarySession: LibrarySessionController()
+    )
+    .modelContainer(for: DocumentRecord.self, inMemory: true)
 }

@@ -41,6 +41,17 @@ struct DocNestApp: App {
 
     init() {
         NSWindow.allowsAutomaticWindowTabbing = false
+
+        // Enforce single instance: if another copy is already running, activate it and terminate this one.
+        let bundleID = Bundle.main.bundleIdentifier ?? ""
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        if running.count > 1, let existing = running.first(where: { $0 != .current }) {
+            existing.activate()
+            // Small delay so the activation request is dispatched before termination.
+            DispatchQueue.main.async {
+                NSApplication.shared.terminate(nil)
+            }
+        }
     }
 
     var body: some Scene {
@@ -158,7 +169,7 @@ private struct AppRootView: View {
         Group {
             if let libraryURL = librarySession.selectedLibraryURL,
                let modelContainer = librarySession.modelContainer {
-                RootView(libraryURL: libraryURL)
+                RootView(libraryURL: libraryURL, librarySession: librarySession)
                     .modelContainer(modelContainer)
                     .accessibilityIdentifier("library-open-root")
             } else {
@@ -196,7 +207,11 @@ private struct AppRootView: View {
             }
         }
         .onOpenURL { url in
-            librarySession.openLibraryFromFinder(url)
+            if url.pathExtension.caseInsensitiveCompare("docnestlibrary") == .orderedSame {
+                librarySession.openLibraryFromFinder(url)
+            } else {
+                librarySession.queueImportURLs([url])
+            }
         }
         .onChange(of: librarySession.selectedLibraryURL) { _, _ in
             AboutStatisticsProvider.shared.controller = librarySession
@@ -335,11 +350,22 @@ final class LibrarySessionController: ObservableObject {
     @Published private(set) var selectedLibraryURL: URL?
     @Published private(set) var modelContainer: ModelContainer?
     @Published var libraryErrorMessage: String?
+    @Published var pendingImportURLs: [URL] = []
 
     private var lockHeartbeatTimer: Timer?
     private static let lockHeartbeatInterval: TimeInterval = 30
 
     private var terminationObserver: Any?
+
+    func queueImportURLs(_ urls: [URL]) {
+        pendingImportURLs.append(contentsOf: urls)
+    }
+
+    func drainPendingImportURLs() -> [URL] {
+        let urls = pendingImportURLs
+        pendingImportURLs.removeAll()
+        return urls
+    }
 
     func restorePersistedLibrary() {
         guard selectedLibraryURL == nil,
