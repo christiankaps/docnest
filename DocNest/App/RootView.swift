@@ -177,7 +177,7 @@ private struct RootViewImportModifier: ViewModifier {
         content
             .fileImporter(
                 isPresented: Bindable(coordinator).isImporting,
-                allowedContentTypes: [.pdf],
+                allowedContentTypes: [.pdf, .zip],
                 allowsMultipleSelection: true
             ) { result in
                 switch result {

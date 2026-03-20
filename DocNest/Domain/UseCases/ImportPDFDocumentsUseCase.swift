@@ -142,7 +142,8 @@ enum ImportPDFDocumentsUseCase {
             }
         }
 
-        let resolvedURLs = resolveFileURLs(fileURLs) + downloadedTempFiles
+        var zipTempDirectories: [URL] = []
+        let resolvedURLs = resolveFileURLs(fileURLs, tempDirectories: &zipTempDirectories) + downloadedTempFiles
         onProgress?(0, resolvedURLs.count)
 
         let autoAssignedLabelNames = autoAssignLabels
@@ -205,9 +206,12 @@ enum ImportPDFDocumentsUseCase {
             }
         }
 
-        // Clean up downloaded temp files — they have been copied into the library
+        // Clean up temporary files and directories — originals have been copied into the library
         for tempFile in downloadedTempFiles {
             try? FileManager.default.removeItem(at: tempFile)
+        }
+        for tempDir in zipTempDirectories {
+            try? FileManager.default.removeItem(at: tempDir)
         }
 
         do {
@@ -250,7 +254,7 @@ enum ImportPDFDocumentsUseCase {
 
     static func containsImportableDocuments(in urls: [URL]) -> Bool {
         urls.contains { url in
-            isSupportedDocumentURL(url) || isDirectory(url) || isWebURL(url)
+            isSupportedDocumentURL(url) || isDirectory(url) || isZipFile(url) || isWebURL(url)
         }
     }
 
@@ -389,14 +393,16 @@ enum ImportPDFDocumentsUseCase {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    /// Expands any directory URLs into their contained PDF files recursively,
+    /// Expands any directory and zip URLs into their contained PDF files recursively,
     /// passing through individual file URLs unchanged.
-    private static func resolveFileURLs(_ urls: [URL]) -> [URL] {
+    /// Extracted zip contents are placed in temporary directories returned via `tempDirectories`.
+    private static func resolveFileURLs(_ urls: [URL], tempDirectories: inout [URL]) -> [URL] {
         var resolved: [URL] = []
-        let fileManager = FileManager.default
 
         for url in urls {
             if isDirectory(url) {
+                resolved.append(contentsOf: enumeratePDFs(in: url))
+            } else if isZipFile(url) {
                 let accessedSecurityScope = url.startAccessingSecurityScopedResource()
                 defer {
                     if accessedSecurityScope {
@@ -404,16 +410,9 @@ enum ImportPDFDocumentsUseCase {
                     }
                 }
 
-                guard let enumerator = fileManager.enumerator(
-                    at: url,
-                    includingPropertiesForKeys: [.isRegularFileKey],
-                    options: [.skipsHiddenFiles, .skipsPackageDescendants]
-                ) else { continue }
-
-                for case let fileURL as URL in enumerator {
-                    if isSupportedDocumentURL(fileURL) {
-                        resolved.append(fileURL)
-                    }
+                if let extractedDir = extractZipFile(at: url) {
+                    tempDirectories.append(extractedDir)
+                    resolved.append(contentsOf: enumeratePDFs(in: extractedDir))
                 }
             } else {
                 resolved.append(url)
@@ -421,6 +420,72 @@ enum ImportPDFDocumentsUseCase {
         }
 
         return resolved
+    }
+
+    /// Recursively enumerates PDF files inside a directory.
+    private static func enumeratePDFs(in directoryURL: URL) -> [URL] {
+        let accessedSecurityScope = directoryURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessedSecurityScope {
+                directoryURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return [] }
+
+        var results: [URL] = []
+        for case let fileURL as URL in enumerator {
+            if isSupportedDocumentURL(fileURL) {
+                results.append(fileURL)
+            }
+        }
+        return results
+    }
+
+    /// Extracts a zip archive to a temporary directory using the system `ditto` command.
+    /// Returns the URL of the temporary directory, or `nil` on failure.
+    private static func extractZipFile(at url: URL) -> URL? {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DocNestZipImport-\(UUID().uuidString)", isDirectory: true)
+
+        do {
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-xk", url.path, tempDir.path]
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            try? FileManager.default.removeItem(at: tempDir)
+            return nil
+        }
+
+        guard process.terminationStatus == 0 else {
+            try? FileManager.default.removeItem(at: tempDir)
+            return nil
+        }
+
+        return tempDir
+    }
+
+    private static func isZipFile(_ url: URL) -> Bool {
+        guard url.isFileURL else { return false }
+        let ext = url.pathExtension
+        guard !ext.isEmpty else { return false }
+        if let fileType = UTType(filenameExtension: ext) {
+            return fileType.conforms(to: .zip)
+        }
+        return ext.caseInsensitiveCompare("zip") == .orderedSame
     }
 
     private static func isDirectory(_ url: URL) -> Bool {
