@@ -74,8 +74,8 @@ An imported item with original file, stable internal ID, technical metadata, and
 ### 5.3 Label
 A freely defined category that can be assigned to one or more documents.
 
-### 5.4 Smart Filter
-A saved search or filter definition, for example "Invoices 2026" or "Unread + Tax".
+### 5.4 Smart Folder
+A saved label combination that appears as a virtual folder in the sidebar, for example "Invoices" or "Tax Documents". Smart folders store only label collections, not search queries.
 
 ## 6. Functional Requirements
 
@@ -221,7 +221,7 @@ A saved search or filter definition, for example "Invoices 2026" or "Unread + Ta
 - Needs Labels filter shows only documents without labels. When active, active label filters are automatically cleared to avoid logical conflict.
 
 #### Should
-- Saved smart filters.
+- Saved smart folders (label-only collections shown in sidebar).
 - Faceted filters by year, label, file type, duplicate status.
 
 #### v1 Assumption
@@ -343,8 +343,14 @@ My Documents.docnestlibrary/
 ### 9.3 Relation
 - Many-to-many between documents and labels.
 
-### 9.4 Optional Later Entities
-- SmartFilter
+### 9.4 Smart Folder Entity
+- id
+- name
+- icon (optional emoji)
+- labelIDs (array of label UUIDs)
+- sortOrder
+
+### 9.5 Optional Later Entities
 - CustomFieldDefinition
 - ImportJob
 - AuditEvent
@@ -352,7 +358,7 @@ My Documents.docnestlibrary/
 ## 10. UX Requirements
 
 ### 10.1 Information Architecture
-- Sidebar for library, labels, and smart filters.
+- Sidebar for library, smart folders, and labels.
 - Main area for document list.
 - Detail/preview area for selected document.
 - Layout must scale meaningfully in normal window mode and fullscreen.
@@ -440,7 +446,7 @@ Current state:
 - Stored files use the document title as filename (sanitized), with a short content-hash suffix on collision. Renaming a document in the app renames the stored file to match.
 - PDFs and folders dropped onto the dock icon are routed through `onOpenURL` into the import pipeline. URLs arriving before a library is loaded are queued in `LibrarySessionController.pendingImportURLs` and drained once the library becomes available.
 - App registers as a macOS Services provider via `NSServices` in Info.plist. `ServicesProvider` handles the `importFiles` message by reading file URLs from the pasteboard and posting a notification that `AppRootView` observes to queue imports.
-- Single-instance enforcement: on init, the app checks `NSRunningApplication.runningApplications(withBundleIdentifier:)` and terminates if another instance is already running.
+- Single-instance enforcement was removed; macOS prevents duplicate app launches natively via the standard app lifecycle.
 
 Implementation plan for drag-and-drop:
 1. Add generous drop area in main content, not only on a single child element.
@@ -514,7 +520,7 @@ Goal: users find documents quickly.
 - Search across title, filename, labels.
 - Optional text index for PDF contents.
 - Combinable filters.
-- Saved smart filters once Phase 4 is stable.
+- Saved smart folders once Phase 4 is stable.
 
 Current state:
 - Main view provides built-in search field for open library.
@@ -522,6 +528,15 @@ Current state:
 - Multi-word search is token-based; document remains visible only if all terms are found across searchable metadata and full text.
 - Search text and label filters can be combined and operate on the same document list.
 - PDF text is extracted via PDFKit during import and stored in the document model. Existing documents without extracted text are backfilled on app launch.
+- Smart folders are implemented as saved label collections persisted via SwiftData.
+- Smart folders appear in their own sidebar section between Library and Labels, with create (+), edit, delete, and drag-to-reorder.
+- Selecting a smart folder highlights the corresponding labels in the sidebar and shows only documents matching all of the folder's labels.
+- Clicking a selected smart folder deselects it, returning to All Documents with all filters cleared.
+- Label filter clicks while a smart folder is selected transition to interactive filtering: the filter is seeded with the folder's labels, then the clicked label is toggled. If the resulting combination matches another smart folder, that folder highlights automatically.
+- When interactive label filters exactly match a smart folder's labels, that folder is highlighted in the sidebar.
+- Creating a smart folder pre-fills from the currently active label filters.
+- Dragging documents onto a smart folder row assigns the folder's labels to those documents.
+- Importing files while a smart folder is selected auto-assigns the folder's labels to imported documents.
 
 ### Phase 6: Data Integrity and Operational Stability
 Goal: app is production-usable and fault-tolerant.

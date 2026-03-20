@@ -18,6 +18,9 @@ struct RootView: View {
     @Query(sort: [SortDescriptor(\LabelTag.sortOrder, order: .forward), SortDescriptor(\LabelTag.name, order: .forward)])
     private var allLabels: [LabelTag]
 
+    @Query(sort: \SmartFolder.sortOrder, order: .forward)
+    private var allSmartFolders: [SmartFolder]
+
     var body: some View {
         HStack(spacing: 0) {
             LibrarySidebarView()
@@ -43,7 +46,7 @@ struct RootView: View {
         .toolbar { toolbarContent }
         .modifier(RootViewImportModifier(coordinator: coordinator))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
-        .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels))
+        .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders))
         .focusedSceneValue(\.exportDocumentsAction) {
             coordinator.exportDocuments(coordinator.selectedDocuments)
         }
@@ -53,7 +56,7 @@ struct RootView: View {
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
-            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels)
+            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders)
             await ExtractDocumentTextUseCase.backfillAll(
                 documents: allDocuments,
                 libraryURL: libraryURL,
@@ -246,6 +249,7 @@ private struct RootViewChangeHandlers: ViewModifier {
     let coordinator: LibraryCoordinator
     let allDocuments: [DocumentRecord]
     let allLabels: [LabelTag]
+    let allSmartFolders: [SmartFolder]
 
     /// Lightweight fingerprint that changes when documents are added, removed,
     /// trashed/restored, or have their labels modified -- covering mutations
@@ -269,6 +273,17 @@ private struct RootViewChangeHandlers: ViewModifier {
         return hasher.finalize()
     }
 
+    private var smartFolderFingerprint: Int {
+        var hasher = Hasher()
+        for folder in allSmartFolders {
+            hasher.combine(folder.persistentModelID)
+            hasher.combine(folder.name)
+            hasher.combine(folder.labelIDs)
+            hasher.combine(folder.sortOrder)
+        }
+        return hasher.finalize()
+    }
+
     func body(content: Content) -> some View {
         content
             .onReceive(NotificationCenter.default.publisher(for: .docNestFocusSearch)) { _ in
@@ -280,7 +295,7 @@ private struct RootViewChangeHandlers: ViewModifier {
             .onChange(of: coordinator.labelFilterSelection.visualSelection) { _, newSelection in
                 coordinator.scheduleLabelFilterApply(immediately: newSelection.isEmpty)
             }
-            .onChange(of: coordinator.selectedSection) {
+            .onChange(of: coordinator.sidebarSelection) {
                 coordinator.recomputeFilteredDocuments()
                 coordinator.pruneSelectedDocumentIDs()
             }
@@ -296,11 +311,14 @@ private struct RootViewChangeHandlers: ViewModifier {
                 coordinator.pruneSelectedDocumentIDs()
             }
             .onChange(of: documentFingerprint) {
-                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels)
+                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders)
             }
             .onChange(of: labelFingerprint) {
                 coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
-                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels)
+                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders)
+            }
+            .onChange(of: smartFolderFingerprint) {
+                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders)
             }
     }
 }

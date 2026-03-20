@@ -188,7 +188,7 @@ struct DocumentListView: View {
 
             DocumentListStatusBar(
                 filteredCount: documents.count,
-                totalCount: coordinator.selectedSection == .bin
+                totalCount: coordinator.isBinSelected
                     ? coordinator.trashedDocuments.count
                     : coordinator.activeDocuments.count
             )
@@ -513,7 +513,7 @@ struct DocumentListView: View {
     private func documentContextMenu(for document: DocumentRecord) -> some View {
         let targets = contextMenuDocuments(for: document)
 
-        if coordinator.selectedSection == .bin {
+        if coordinator.isBinSelected {
             Button("Restore") {
                 coordinator.restoreDocumentFromBin(document)
             }

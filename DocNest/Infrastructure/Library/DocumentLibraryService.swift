@@ -172,6 +172,7 @@ enum DocumentLibraryService {
         return try ModelContainer(
             for: DocumentRecord.self,
             LabelTag.self,
+            SmartFolder.self,
             configurations: configuration
         )
     }

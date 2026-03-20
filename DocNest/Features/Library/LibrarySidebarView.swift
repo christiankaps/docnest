@@ -35,6 +35,9 @@ struct LibrarySidebarView: View {
     @State private var hoveredLabelDropTargetID: PersistentIdentifier?
     @State private var draggingLabelID: UUID?
     @State private var reorderInsertionEdge: ReorderInsertionEdge?
+    @State private var smartFolderEditorConfig: SmartFolderEditorConfig?
+    @State private var draggingSmartFolderID: UUID?
+    @State private var smartFolderReorderInsertionEdge: ReorderInsertionEdge?
 
     private var sortedLabels: [LabelTag] {
         coordinator.allLabels.sorted {
@@ -49,227 +52,14 @@ struct LibrarySidebarView: View {
         #if DEBUG
         let renderStartTime = Date().timeIntervalSinceReferenceDate
         #endif
-        let labels = sortedLabels
-        @Bindable var coordinator = coordinator
 
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                sidebarSection("Library") {
-                    ForEach(LibrarySection.allCases) { section in
-                        Button {
-                            coordinator.selectedSection = section
-                            if section == .needsLabels {
-                                coordinator.labelFilterSelection.replaceVisualSelection(with: [])
-                            }
-                        } label: {
-                            LibrarySectionRowView(
-                                title: section.rawValue,
-                                systemImage: iconName(for: section),
-                                count: coordinator.sidebarCounts.count(for: section),
-                                isSelected: coordinator.selectedSection == section
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .sidebarRow()
-                        .dropDestination(for: String.self) { items, _ in
-                            guard section == .bin else {
-                                return false
-                            }
+                librarySectionContent
 
-                            return coordinator.handleDroppedDocumentIDs(items)
-                        }
-                    }
+                smartFolderSection
 
-                    if coordinator.selectedSection == .bin {
-                        HStack(spacing: 8) {
-                            Button("Restore All") {
-                                coordinator.restoreAllFromBin()
-                            }
-                            .disabled(coordinator.trashedDocuments.isEmpty)
-
-                            Button("Remove All", role: .destructive) {
-                                coordinator.isConfirmingBinRemoval = true
-                            }
-                            .disabled(coordinator.trashedDocuments.isEmpty)
-                        }
-                        .font(AppTypography.caption)
-                        .sidebarRow()
-                    }
-                }
-
-                labelSection {
-                    if isAddingLabel {
-                        VStack(spacing: 8) {
-                            HStack(spacing: 8) {
-                                EmojiPickerButton(selection: $newLabelIcon)
-                                    .frame(width: 28, height: 22)
-                                    .help("Choose emoji icon (optional)")
-
-                                TextField("New label", text: $newLabelName)
-                                    .textFieldStyle(.roundedBorder)
-                                    .onSubmit(addLabel)
-
-                                Menu {
-                                    ForEach(LabelColor.allCases) { color in
-                                        Button {
-                                            newLabelColor = color
-                                        } label: {
-                                            HStack(spacing: 8) {
-                                                Circle()
-                                                    .fill(color.color)
-                                                    .frame(width: 16, height: 16)
-                                                    .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                                                Text(color.displayName)
-                                                if newLabelColor == color {
-                                                    Image(systemName: "checkmark")
-                                                }
-                                            }
-                                        }
-                                    }
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Circle()
-                                            .fill(newLabelColor.color)
-                                            .frame(width: 16, height: 16)
-                                            .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                                        Text(newLabelColor.displayName)
-                                            .font(AppTypography.caption)
-                                    }
-                                    .foregroundStyle(.primary)
-                                }
-                                .help("Choose label color")
-
-                                Button("Add", action: addLabel)
-                                    .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-                        }
-                        .sidebarRow()
-                    }
-
-                    if coordinator.allLabels.isEmpty {
-                        Text("No labels yet")
-                            .font(AppTypography.caption)
-                            .foregroundStyle(.secondary)
-                            .sidebarRow()
-                    } else {
-                        ForEach(labels) { label in
-                            if editingLabelID == label.persistentModelID {
-                                HStack(spacing: 8) {
-                                    EmojiPickerButton(selection: $editedLabelIcon)
-                                        .frame(width: 28, height: 22)
-                                        .help("Choose emoji icon (optional)")
-
-                                    TextField("Label name", text: $editedLabelName)
-                                        .textFieldStyle(.roundedBorder)
-                                        .onSubmit { commitEdit(label) }
-
-                                    Menu {
-                                        ForEach(LabelColor.allCases) { color in
-                                            Button {
-                                                editedLabelColor = color
-                                            } label: {
-                                                HStack(spacing: 8) {
-                                                    Circle()
-                                                        .fill(color.color)
-                                                        .frame(width: 16, height: 16)
-                                                        .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                                                    Text(color.displayName)
-                                                    if editedLabelColor == color {
-                                                        Image(systemName: "checkmark")
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    } label: {
-                                        HStack(spacing: 8) {
-                                            Circle()
-                                                .fill(editedLabelColor.color)
-                                                .frame(width: 16, height: 16)
-                                                .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                                            Text(editedLabelColor.displayName)
-                                                .font(AppTypography.caption)
-                                        }
-                                        .foregroundStyle(.primary)
-                                    }
-
-                                    Button("Save") { commitEdit(label) }
-                                        .disabled(editedLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                }
-                                .sidebarRow()
-                            } else {
-                                let isDocumentDrop = hoveredLabelDropTargetID == label.persistentModelID && draggingLabelID == nil
-                                let showAboveLine = reorderInsertionEdge.flatMap { edge in
-                                    if case .above(let id) = edge, id == label.persistentModelID { return true }
-                                    return nil
-                                } ?? false
-                                let showBelowLine = reorderInsertionEdge.flatMap { edge in
-                                    if case .below(let id) = edge, id == label.persistentModelID { return true }
-                                    return nil
-                                } ?? false
-
-                                LibraryLabelRowView(
-                                    name: label.name,
-                                    color: label.labelColor.color,
-                                    icon: label.icon,
-                                    count: coordinator.sidebarCounts.count(for: label),
-                                    isSelected: coordinator.labelFilterSelection.visualSelection.contains(label.persistentModelID)
-                                )
-                                .sidebarRow()
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color.accentColor.opacity(isDocumentDrop ? 0.16 : 0))
-                                )
-                                .overlay(alignment: .top) {
-                                    if showAboveLine {
-                                        ReorderInsertionLine()
-                                            .offset(y: -1.5)
-                                    }
-                                }
-                                .overlay(alignment: .bottom) {
-                                    if showBelowLine {
-                                        ReorderInsertionLine()
-                                            .offset(y: 1.5)
-                                    }
-                                }
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    toggleLabelSelection(label)
-                                }
-                                .draggable(DocumentLabelDragPayload.payload(for: label.id)) {
-                                    // Set dragging state when drag begins
-                                    LabelDragPreview(name: label.name, color: label.labelColor.color, icon: label.icon)
-                                        .onAppear { draggingLabelID = label.id }
-                                }
-                                .dropDestination(for: String.self) { items, _ in
-                                    draggingLabelID = nil
-                                    reorderInsertionEdge = nil
-                                    return handleDroppedStrings(items, onto: label)
-                                } isTargeted: { isTargeted in
-                                    if isTargeted {
-                                        hoveredLabelDropTargetID = label.persistentModelID
-                                        updateReorderInsertionEdge(for: label)
-                                    } else if hoveredLabelDropTargetID == label.persistentModelID {
-                                        hoveredLabelDropTargetID = nil
-                                        reorderInsertionEdge = nil
-                                    }
-                                }
-                                .accessibilityHint("Drop documents here to assign the \(label.name) label")
-                                .contextMenu {
-                                    Button("Edit") {
-                                        beginEditing(label)
-                                    }
-
-                                    Button("Delete", role: .destructive) {
-                                        deleteLabel(label)
-                                    }
-                                }
-                                .onTapGesture(count: 2) {
-                                    beginEditing(label)
-                                }
-                            }
-                        }
-                    }
-                }
+                labelSectionContent
             }
             .padding(.vertical, 4)
         }
@@ -296,6 +86,12 @@ struct LibrarySidebarView: View {
         } message: {
             Text(errorMessage ?? "Unknown label error.")
         }
+        .sheet(item: $smartFolderEditorConfig) { config in
+            SmartFolderEditorSheet(
+                config: config,
+                allLabels: coordinator.allLabels
+            )
+        }
 
         #if DEBUG
         .onAppear {
@@ -303,6 +99,52 @@ struct LibrarySidebarView: View {
         }
         #endif
 
+    }
+
+    @ViewBuilder
+    private var librarySectionContent: some View {
+        sidebarSection("Library") {
+            ForEach(LibrarySection.allCases) { section in
+                Button {
+                    coordinator.sidebarSelection = .section(section)
+                    if section == .needsLabels {
+                        coordinator.labelFilterSelection.replaceVisualSelection(with: [])
+                    }
+                } label: {
+                    LibrarySectionRowView(
+                        title: section.rawValue,
+                        systemImage: iconName(for: section),
+                        count: coordinator.sidebarCounts.count(for: section),
+                        isSelected: coordinator.sidebarSelection == .section(section)
+                    )
+                }
+                .buttonStyle(.plain)
+                .sidebarRow()
+                .dropDestination(for: String.self) { items, _ in
+                    guard section == .bin else {
+                        return false
+                    }
+
+                    return coordinator.handleDroppedDocumentIDs(items)
+                }
+            }
+
+            if coordinator.sidebarSelection == .section(.bin) {
+                HStack(spacing: 8) {
+                    Button("Restore All") {
+                        coordinator.restoreAllFromBin()
+                    }
+                    .disabled(coordinator.trashedDocuments.isEmpty)
+
+                    Button("Remove All", role: .destructive) {
+                        coordinator.isConfirmingBinRemoval = true
+                    }
+                    .disabled(coordinator.trashedDocuments.isEmpty)
+                }
+                .font(AppTypography.caption)
+                .sidebarRow()
+            }
+        }
     }
 
     private func sidebarSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -330,7 +172,7 @@ struct LibrarySidebarView: View {
 
                 Spacer()
 
-                if !coordinator.labelFilterSelection.visualSelection.isEmpty {
+                if !coordinator.labelFilterSelection.visualSelection.isEmpty && coordinator.selectedSmartFolderID == nil {
                     Button {
                         coordinator.labelFilterSelection.replaceVisualSelection(with: [])
                     } label: {
@@ -361,11 +203,374 @@ struct LibrarySidebarView: View {
         }
     }
 
+    @ViewBuilder
+    private var labelSectionContent: some View {
+        labelSection {
+            if isAddingLabel {
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        EmojiPickerButton(selection: $newLabelIcon)
+                            .frame(width: 28, height: 22)
+                            .help("Choose emoji icon (optional)")
+
+                        TextField("New label", text: $newLabelName)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit(addLabel)
+
+                        Menu {
+                            ForEach(LabelColor.allCases) { color in
+                                Button {
+                                    newLabelColor = color
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Circle()
+                                            .fill(color.color)
+                                            .frame(width: 16, height: 16)
+                                            .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                                        Text(color.displayName)
+                                        if newLabelColor == color {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(newLabelColor.color)
+                                    .frame(width: 16, height: 16)
+                                    .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                                Text(newLabelColor.displayName)
+                                    .font(AppTypography.caption)
+                            }
+                            .foregroundStyle(.primary)
+                        }
+                        .help("Choose label color")
+
+                        Button("Add", action: addLabel)
+                            .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .sidebarRow()
+            }
+
+            if coordinator.allLabels.isEmpty {
+                Text("No labels yet")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(.secondary)
+                    .sidebarRow()
+            } else {
+                ForEach(sortedLabels) { label in
+                    if editingLabelID == label.persistentModelID {
+                        labelEditRow(for: label)
+                    } else {
+                        labelDisplayRow(for: label)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func labelEditRow(for label: LabelTag) -> some View {
+        HStack(spacing: 8) {
+            EmojiPickerButton(selection: $editedLabelIcon)
+                .frame(width: 28, height: 22)
+                .help("Choose emoji icon (optional)")
+
+            TextField("Label name", text: $editedLabelName)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { commitEdit(label) }
+
+            Menu {
+                ForEach(LabelColor.allCases) { color in
+                    Button {
+                        editedLabelColor = color
+                    } label: {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(color.color)
+                                .frame(width: 16, height: 16)
+                                .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                            Text(color.displayName)
+                            if editedLabelColor == color {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(editedLabelColor.color)
+                        .frame(width: 16, height: 16)
+                        .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                    Text(editedLabelColor.displayName)
+                        .font(AppTypography.caption)
+                }
+                .foregroundStyle(.primary)
+            }
+
+            Button("Save") { commitEdit(label) }
+                .disabled(editedLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .sidebarRow()
+    }
+
+    @ViewBuilder
+    private func labelDisplayRow(for label: LabelTag) -> some View {
+        let isDocumentDrop = hoveredLabelDropTargetID == label.persistentModelID && draggingLabelID == nil
+        let showAboveLine = reorderInsertionEdge.flatMap { edge in
+            if case .above(let id) = edge, id == label.persistentModelID { return true }
+            return nil
+        } ?? false
+        let showBelowLine = reorderInsertionEdge.flatMap { edge in
+            if case .below(let id) = edge, id == label.persistentModelID { return true }
+            return nil
+        } ?? false
+
+        LibraryLabelRowView(
+            name: label.name,
+            color: label.labelColor.color,
+            icon: label.icon,
+            count: coordinator.sidebarCounts.count(for: label),
+            isSelected: coordinator.effectiveHighlightedLabelIDs.contains(label.persistentModelID)
+        )
+        .sidebarRow()
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.accentColor.opacity(isDocumentDrop ? 0.16 : 0))
+        )
+        .overlay(alignment: .top) {
+            if showAboveLine {
+                ReorderInsertionLine()
+                    .offset(y: -1.5)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if showBelowLine {
+                ReorderInsertionLine()
+                    .offset(y: 1.5)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if coordinator.selectedSmartFolderID != nil {
+                // Transition from smart folder to interactive label filtering:
+                // seed the filter with the folder's labels, then toggle the clicked one.
+                let currentHighlighted = coordinator.effectiveHighlightedLabelIDs
+                coordinator.sidebarSelection = .section(.allDocuments)
+                coordinator.labelFilterSelection.replaceVisualSelection(with: currentHighlighted)
+            }
+            toggleLabelSelection(label)
+        }
+        .draggable(DocumentLabelDragPayload.payload(for: label.id)) {
+            LabelDragPreview(name: label.name, color: label.labelColor.color, icon: label.icon)
+                .onAppear { draggingLabelID = label.id }
+        }
+        .dropDestination(for: String.self) { items, _ in
+            draggingLabelID = nil
+            reorderInsertionEdge = nil
+            return handleDroppedStrings(items, onto: label)
+        } isTargeted: { isTargeted in
+            if isTargeted {
+                hoveredLabelDropTargetID = label.persistentModelID
+                updateReorderInsertionEdge(for: label)
+            } else if hoveredLabelDropTargetID == label.persistentModelID {
+                hoveredLabelDropTargetID = nil
+                reorderInsertionEdge = nil
+            }
+        }
+        .accessibilityHint("Drop documents here to assign the \(label.name) label")
+        .contextMenu {
+            Button("Edit") {
+                beginEditing(label)
+            }
+
+            Button("Delete", role: .destructive) {
+                deleteLabel(label)
+            }
+        }
+        .onTapGesture(count: 2) {
+            beginEditing(label)
+        }
+    }
+
+    @ViewBuilder
+    private var smartFolderSection: some View {
+        let folders = coordinator.allSmartFolders
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "folder.badge.gearshape")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Smart Folders")
+                    .font(.system(size: 11, weight: .semibold))
+                    .textCase(.uppercase)
+
+                Spacer()
+
+                Button {
+                    smartFolderEditorConfig = SmartFolderEditorConfig(
+                        mode: .create,
+                        prefillLabelIDs: coordinator.prefillLabelIDsForNewSmartFolder()
+                    )
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Add Smart Folder")
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+
+            if folders.isEmpty {
+                Text("No smart folders yet")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(.secondary)
+                    .sidebarRow()
+            } else {
+                ForEach(folders) { folder in
+                    let isSelected = coordinator.sidebarSelection == .smartFolder(folder.persistentModelID)
+                        || coordinator.labelFilterMatchesSmartFolder(folder)
+                    let showAboveLine = smartFolderReorderInsertionEdge.flatMap { edge in
+                        if case .above(let id) = edge, id == folder.persistentModelID { return true }
+                        return nil
+                    } ?? false
+                    let showBelowLine = smartFolderReorderInsertionEdge.flatMap { edge in
+                        if case .below(let id) = edge, id == folder.persistentModelID { return true }
+                        return nil
+                    } ?? false
+
+                    SmartFolderRowView(
+                        name: folder.name,
+                        icon: folder.icon,
+                        count: coordinator.smartFolderCounts[folder.persistentModelID] ?? 0,
+                        isSelected: isSelected
+                    )
+                    .sidebarRow()
+                    .overlay(alignment: .top) {
+                        if showAboveLine {
+                            ReorderInsertionLine()
+                                .offset(y: -1.5)
+                        }
+                    }
+                    .overlay(alignment: .bottom) {
+                        if showBelowLine {
+                            ReorderInsertionLine()
+                                .offset(y: 1.5)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if coordinator.sidebarSelection == .smartFolder(folder.persistentModelID) {
+                            coordinator.sidebarSelection = .section(.allDocuments)
+                            coordinator.labelFilterSelection.replaceVisualSelection(with: [])
+                            coordinator.searchText = ""
+                        } else {
+                            coordinator.sidebarSelection = .smartFolder(folder.persistentModelID)
+                        }
+                    }
+                    .draggable(SmartFolderDragPayload.payload(for: folder.id)) {
+                        SmartFolderDragPreview(name: folder.name, icon: folder.icon)
+                            .onAppear { draggingSmartFolderID = folder.id }
+                    }
+                    .dropDestination(for: String.self) { items, _ in
+                        draggingSmartFolderID = nil
+                        smartFolderReorderInsertionEdge = nil
+                        return handleSmartFolderDrop(items, onto: folder)
+                    } isTargeted: { isTargeted in
+                        if isTargeted {
+                            updateSmartFolderReorderInsertionEdge(for: folder)
+                        } else if smartFolderReorderInsertionEdge != nil {
+                            smartFolderReorderInsertionEdge = nil
+                        }
+                    }
+                    .contextMenu {
+                        Button("Edit") {
+                            smartFolderEditorConfig = SmartFolderEditorConfig(
+                                mode: .edit(folder),
+                                prefillLabelIDs: folder.labelIDs
+                            )
+                        }
+                        Button("Delete", role: .destructive) {
+                            deleteSmartFolder(folder)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func updateSmartFolderReorderInsertionEdge(for target: SmartFolder) {
+        guard let draggingSmartFolderID else {
+            smartFolderReorderInsertionEdge = nil
+            return
+        }
+
+        let folders = coordinator.allSmartFolders
+        guard let sourceIndex = folders.firstIndex(where: { $0.id == draggingSmartFolderID }),
+              let targetIndex = folders.firstIndex(where: { $0.persistentModelID == target.persistentModelID }),
+              sourceIndex != targetIndex else {
+            smartFolderReorderInsertionEdge = nil
+            return
+        }
+
+        let targetID = target.persistentModelID
+        if sourceIndex < targetIndex {
+            smartFolderReorderInsertionEdge = .below(targetID)
+        } else {
+            smartFolderReorderInsertionEdge = .above(targetID)
+        }
+    }
+
+    private func handleSmartFolderDrop(_ items: [String], onto target: SmartFolder) -> Bool {
+        guard let payload = items.first else { return false }
+
+        // Smart folder reorder
+        if let sourceID = SmartFolderDragPayload.folderID(from: payload) {
+            let folders = coordinator.allSmartFolders
+            guard let sourceIndex = folders.firstIndex(where: { $0.id == sourceID }),
+                  let targetIndex = folders.firstIndex(where: { $0.persistentModelID == target.persistentModelID }),
+                  sourceIndex != targetIndex else {
+                return false
+            }
+
+            let source = IndexSet(integer: sourceIndex)
+            let destination = sourceIndex < targetIndex ? targetIndex + 1 : targetIndex
+
+            do {
+                try ManageSmartFoldersUseCase.reorder(from: source, to: destination, folders: folders, using: modelContext)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            return true
+        }
+
+        // Document drop — assign the smart folder's labels to the dropped documents
+        return coordinator.assignSmartFolderLabels(target, toDroppedPayload: items)
+    }
+
+    private func deleteSmartFolder(_ folder: SmartFolder) {
+        let wasSelected = coordinator.sidebarSelection == .smartFolder(folder.persistentModelID)
+        do {
+            try ManageSmartFoldersUseCase.delete(folder, using: modelContext)
+            if wasSelected {
+                coordinator.sidebarSelection = .section(.allDocuments)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func debugLogSidebarRenderTiming(startTime: TimeInterval, coordinator: LibraryCoordinator) {
         #if DEBUG
         let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
         Self.performanceLogger.log(
-            "[Performance][SidebarRender] section=\(coordinator.selectedSection.rawValue, privacy: .public) labels=\(coordinator.allLabels.count) visualFilters=\(coordinator.labelFilterSelection.visualSelection.count) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
+            "[Performance][SidebarRender] selection=\(coordinator.selectedSection?.rawValue ?? "smartFolder", privacy: .public) labels=\(coordinator.allLabels.count) visualFilters=\(coordinator.labelFilterSelection.visualSelection.count) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
         )
         #endif
     }
@@ -736,7 +941,7 @@ private struct LabelDragPreview: View {
     }
 }
 
-private struct EmojiPickerButton: NSViewRepresentable {
+struct EmojiPickerButton: NSViewRepresentable {
     @Binding var selection: String
 
     func makeNSView(context: Context) -> EmojiInputView {
@@ -766,7 +971,7 @@ private struct EmojiPickerButton: NSViewRepresentable {
     }
 }
 
-private final class EmojiInputView: NSView, NSTextInputClient {
+final class EmojiInputView: NSView, NSTextInputClient {
     var emoji = ""
     var onEmojiChanged: ((String) -> Void)?
 
@@ -828,6 +1033,98 @@ private final class EmojiInputView: NSView, NSTextInputClient {
         window?.convertToScreen(convert(bounds, to: nil)) ?? .zero
     }
     func characterIndex(for point: NSPoint) -> Int { 0 }
+}
+
+private struct SmartFolderRowView: View {
+    let name: String
+    let icon: String?
+    let count: Int
+    let isSelected: Bool
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let icon, !icon.isEmpty {
+                Text(icon)
+                    .font(.system(size: 12))
+            } else {
+                Image(systemName: "folder.badge.gearshape")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tint)
+            }
+            Text(name)
+                .fontWeight(isSelected ? .semibold : .regular)
+            Spacer()
+            Text("\(count)")
+                .font(AppTypography.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.accentColor.opacity(isSelected ? 0.30 : (isHovered ? 0.06 : 0)))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(Color.accentColor.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+private struct SmartFolderDragPreview: View {
+    let name: String
+    let icon: String?
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let icon, !icon.isEmpty {
+                Text(icon)
+                    .font(.callout)
+            } else {
+                Image(systemName: "folder.badge.gearshape")
+                    .font(.callout)
+                    .foregroundStyle(.tint)
+            }
+            Text(name)
+                .font(.callout)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+enum SmartFolderDragPayload {
+    private static let prefix = "smartfolder:"
+
+    static func payload(for folderID: UUID) -> String {
+        "\(prefix)\(folderID.uuidString)"
+    }
+
+    static func folderID(from payload: String) -> UUID? {
+        guard payload.hasPrefix(prefix) else { return nil }
+        return UUID(uuidString: String(payload.dropFirst(prefix.count)))
+    }
+}
+
+struct SmartFolderEditorConfig: Identifiable {
+    let id = UUID()
+    let mode: Mode
+    let prefillLabelIDs: [UUID]
+
+    enum Mode {
+        case create
+        case edit(SmartFolder)
+    }
 }
 
 #Preview {

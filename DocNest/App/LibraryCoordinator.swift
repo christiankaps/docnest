@@ -2,6 +2,11 @@ import OSLog
 import SwiftUI
 import SwiftData
 
+enum SidebarSelection: Hashable {
+    case section(LibrarySection)
+    case smartFolder(PersistentIdentifier)
+}
+
 struct ImportProgress {
     let total: Int
     let completed: Int
@@ -23,7 +28,7 @@ final class LibraryCoordinator {
     var modelContext: ModelContext?
 
     // MARK: - UI state (moved from RootView @State)
-    var selectedSection: LibrarySection = .allDocuments
+    var sidebarSelection: SidebarSelection = .section(.allDocuments)
     var selectedDocumentIDs: Set<PersistentIdentifier> = []
     var searchText = ""
     var searchFocusRequestToken = 0
@@ -39,6 +44,8 @@ final class LibraryCoordinator {
 
     // MARK: - Cached derived state
     private(set) var allLabels: [LabelTag] = []
+    private(set) var allSmartFolders: [SmartFolder] = []
+    private(set) var smartFolderCounts: [PersistentIdentifier: Int] = [:]
     private(set) var activeDocuments: [DocumentRecord] = []
     private(set) var trashedDocuments: [DocumentRecord] = []
     private(set) var filteredDocuments: [DocumentRecord] = []
@@ -52,10 +59,46 @@ final class LibraryCoordinator {
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
     let recentDocumentLimit = 10
 
+    // MARK: - Convenience selection helpers
+
+    var selectedSection: LibrarySection? {
+        if case .section(let s) = sidebarSelection { return s }
+        return nil
+    }
+
+    var selectedSmartFolderID: PersistentIdentifier? {
+        if case .smartFolder(let id) = sidebarSelection { return id }
+        return nil
+    }
+
+    var isBinSelected: Bool {
+        sidebarSelection == .section(.bin)
+    }
+
+    /// Whether the current interactive label filter selection exactly matches a smart folder's labels.
+    func labelFilterMatchesSmartFolder(_ folder: SmartFolder) -> Bool {
+        guard selectedSmartFolderID == nil else { return false }
+        let appliedIDs = labelFilterSelection.visualSelection
+        guard !appliedIDs.isEmpty else { return false }
+        let folderLabelPIDs = resolvedLabelPersistentIDs(from: folder.labelIDs)
+        return appliedIDs == folderLabelPIDs
+    }
+
+    /// The set of label PersistentIdentifiers that should appear highlighted in the sidebar.
+    /// When a smart folder is selected, this reflects the folder's labels instead of the interactive filter.
+    var effectiveHighlightedLabelIDs: Set<PersistentIdentifier> {
+        if let folderID = selectedSmartFolderID,
+           let folder = allSmartFolders.first(where: { $0.persistentModelID == folderID }) {
+            return resolvedLabelPersistentIDs(from: folder.labelIDs)
+        }
+        return labelFilterSelection.visualSelection
+    }
+
     // MARK: - Data ingestion
 
-    func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag]) {
+    func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag], allSmartFolders: [SmartFolder] = []) {
         self.allLabels = allLabels
+        self.allSmartFolders = allSmartFolders
 
         var active: [DocumentRecord] = []
         var trashed: [DocumentRecord] = []
@@ -69,6 +112,7 @@ final class LibraryCoordinator {
         activeDocuments = active
         trashedDocuments = trashed
 
+        recomputeSmartFolderCounts()
         recomputeFilteredDocuments()
         recomputeSelectedDocuments()
     }
@@ -82,11 +126,16 @@ final class LibraryCoordinator {
 
         let sectionDocuments = sectionScopedDocuments
 
-        filteredDocuments = SearchDocumentsUseCase.filter(
-            sectionDocuments,
-            query: searchText,
-            selectedLabelIDs: labelFilterSelection.appliedSelection
-        )
+        if selectedSmartFolderID != nil {
+            // Smart folder already applied its own query + label filter
+            filteredDocuments = sectionDocuments
+        } else {
+            filteredDocuments = SearchDocumentsUseCase.filter(
+                sectionDocuments,
+                query: searchText,
+                selectedLabelIDs: labelFilterSelection.appliedSelection
+            )
+        }
 
         recomputeSidebarCounts(sectionDocuments: sectionDocuments)
 
@@ -102,16 +151,53 @@ final class LibraryCoordinator {
     }
 
     private var sectionScopedDocuments: [DocumentRecord] {
-        switch selectedSection {
-        case .allDocuments:
+        switch sidebarSelection {
+        case .section(.allDocuments):
             activeDocuments
-        case .recent:
+        case .section(.recent):
             Array(activeDocuments.prefix(recentDocumentLimit))
-        case .needsLabels:
+        case .section(.needsLabels):
             activeDocuments.filter { $0.labels.isEmpty }
-        case .bin:
+        case .section(.bin):
             trashedDocuments
+        case .smartFolder(let folderID):
+            smartFolderDocuments(for: folderID)
         }
+    }
+
+    private func smartFolderDocuments(for folderID: PersistentIdentifier) -> [DocumentRecord] {
+        guard let folder = allSmartFolders.first(where: { $0.persistentModelID == folderID }) else {
+            return []
+        }
+        let labelPIDs = resolvedLabelPersistentIDs(from: folder.labelIDs)
+        return SearchDocumentsUseCase.filter(
+            activeDocuments,
+            query: "",
+            selectedLabelIDs: labelPIDs
+        )
+    }
+
+    private func resolvedLabelPersistentIDs(from uuids: [UUID]) -> Set<PersistentIdentifier> {
+        var result = Set<PersistentIdentifier>()
+        for uuid in uuids {
+            if let label = allLabels.first(where: { $0.id == uuid }) {
+                result.insert(label.persistentModelID)
+            }
+        }
+        return result
+    }
+
+    private func recomputeSmartFolderCounts() {
+        var counts: [PersistentIdentifier: Int] = [:]
+        for folder in allSmartFolders {
+            let labelPIDs = resolvedLabelPersistentIDs(from: folder.labelIDs)
+            counts[folder.persistentModelID] = SearchDocumentsUseCase.filter(
+                activeDocuments,
+                query: "",
+                selectedLabelIDs: labelPIDs
+            ).count
+        }
+        smartFolderCounts = counts
     }
 
     private func recomputeSidebarCounts(sectionDocuments: [DocumentRecord]) {
@@ -366,7 +452,7 @@ final class LibraryCoordinator {
         }
 
         do {
-            if selectedSection == .bin {
+            if isBinSelected {
                 let mode: DocumentDeletionMode = libraryURL == nil ? .removeFromLibrary : .deleteStoredFiles
                 try DeleteDocumentsUseCase.execute(
                     explicitSelection,
@@ -387,8 +473,15 @@ final class LibraryCoordinator {
             return
         }
 
-        let activeFilterLabels = allLabels.filter { label in
-            labelFilterSelection.visualSelection.contains(label.persistentModelID)
+        let activeFilterLabels: [LabelTag]
+        if let folderID = selectedSmartFolderID,
+           let folder = allSmartFolders.first(where: { $0.persistentModelID == folderID }) {
+            let folderLabelUUIDs = Set(folder.labelIDs)
+            activeFilterLabels = allLabels.filter { folderLabelUUIDs.contains($0.id) }
+        } else {
+            activeFilterLabels = allLabels.filter { label in
+                labelFilterSelection.visualSelection.contains(label.persistentModelID)
+            }
         }
 
         importProgress = ImportProgress(total: 0, completed: 0)
@@ -426,6 +519,43 @@ final class LibraryCoordinator {
                 return nil
             }
             return DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
+        }
+    }
+
+    // MARK: - Smart folder helpers
+
+    func assignSmartFolderLabels(_ folder: SmartFolder, toDroppedPayload items: [String]) -> Bool {
+        guard let modelContext else { return false }
+
+        let documentIDs = parseDroppedDocumentIDs(items)
+        guard !documentIDs.isEmpty else { return false }
+
+        let documents = activeDocuments.filter { documentIDs.contains($0.id) }
+        guard !documents.isEmpty else { return false }
+
+        let folderLabelUUIDs = Set(folder.labelIDs)
+        let labels = allLabels.filter { folderLabelUUIDs.contains($0.id) }
+        guard !labels.isEmpty else { return false }
+
+        do {
+            for label in labels {
+                let needsAssignment = documents.filter { doc in
+                    !doc.labels.contains(where: { $0.persistentModelID == label.persistentModelID })
+                }
+                if !needsAssignment.isEmpty {
+                    try ManageLabelsUseCase.assign(label, to: needsAssignment, using: modelContext)
+                }
+            }
+            return true
+        } catch {
+            importSummaryMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func prefillLabelIDsForNewSmartFolder() -> [UUID] {
+        labelFilterSelection.appliedSelection.compactMap { persistentID in
+            allLabels.first(where: { $0.persistentModelID == persistentID })?.id
         }
     }
 
@@ -520,8 +650,9 @@ final class LibraryCoordinator {
     ) {
         #if DEBUG
         let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
+        let selectionLabel = self.selectedSection?.rawValue ?? "smartFolder"
         Self.performanceLogger.log(
-            "[Performance][Filter] section=\(self.selectedSection.rawValue, privacy: .public) source=\(sourceCount) filtered=\(filteredCount) query=\(queryLength) labels=\(activeLabelFilters) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
+            "[Performance][Filter] selection=\(selectionLabel, privacy: .public) source=\(sourceCount) filtered=\(filteredCount) query=\(queryLength) labels=\(activeLabelFilters) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
         )
         #endif
     }
