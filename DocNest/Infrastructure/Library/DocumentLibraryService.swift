@@ -191,7 +191,13 @@ enum DocumentLibraryService {
             let isSameProcess = existing.pid == currentPID && existing.hostname == currentHost
 
             if !isSameProcess {
-                throw LockError.lockedByAnotherInstance(existing)
+                let isSameHost = existing.hostname == currentHost
+                let ownerStillRunning = isSameHost && kill(existing.pid, 0) == 0
+
+                if ownerStillRunning {
+                    throw LockError.lockedByAnotherInstance(existing)
+                }
+                // Owner process no longer exists — treat lock as stale.
             }
         }
 
