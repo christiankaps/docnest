@@ -55,49 +55,33 @@ struct ImportPDFDocumentsResult {
     }
 
     var summaryMessage: String {
-        let importedLine = importedCount == 1
-            ? "Imported 1 document."
-            : "Imported \(importedCount) documents."
+        var parts: [String] = []
 
-        guard hasUserMessage else {
-            return importedLine
+        if importedCount > 0 {
+            parts.append(importedCount == 1 ? "Imported 1 document" : "Imported \(importedCount) documents")
         }
 
-        var lines = [importedLine]
-
         if hasDuplicates {
-            lines.append(duplicates.count == 1 ? "Skipped 1 duplicate:" : "Skipped \(duplicates.count) duplicates:")
-            lines.append(contentsOf: duplicates.map { "- \($0.fileName)" })
+            parts.append(duplicates.count == 1 ? "1 duplicate skipped" : "\(duplicates.count) duplicates skipped")
         }
 
         if hasUnsupportedFiles {
-            lines.append(unsupportedFiles.count == 1 ? "Skipped 1 unsupported file:" : "Skipped \(unsupportedFiles.count) unsupported files:")
-            lines.append(contentsOf: unsupportedFiles.map { "- \($0.fileName)" })
+            parts.append(unsupportedFiles.count == 1 ? "1 unsupported file skipped" : "\(unsupportedFiles.count) unsupported files skipped")
         }
 
         if hasDownloadFailures {
-            lines.append(downloadFailures.count == 1 ? "Failed to download 1 URL:" : "Failed to download \(downloadFailures.count) URLs:")
-            lines.append(contentsOf: downloadFailures.map { "- \($0.url.absoluteString): \($0.message)" })
-        }
-
-        if hasAutoAssignedLabels {
-            lines.append("Automatically assigned labels: \(autoAssignedLabels.joined(separator: ", ")).")
-        }
-
-        let failureLines = failures.map { failure in
-            if let fileName = failure.fileName {
-                return "- \(fileName): \(failure.message)"
-            }
-
-            return "- \(failure.message)"
+            parts.append(downloadFailures.count == 1 ? "1 download failed" : "\(downloadFailures.count) downloads failed")
         }
 
         if hasFailures {
-            lines.append("Some files could not be imported:")
-            lines.append(contentsOf: failureLines)
+            parts.append(failures.count == 1 ? "1 file failed" : "\(failures.count) files failed")
         }
 
-        return lines.joined(separator: "\n")
+        if parts.isEmpty {
+            return "Import complete."
+        }
+
+        return parts.joined(separator: ". ") + "."
     }
 }
 

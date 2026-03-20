@@ -18,30 +18,25 @@ struct ExportDocumentsResult {
     }
 
     var summaryMessage: String {
-        let exportedLine = exportedCount == 1
-            ? "Exported 1 document."
-            : "Exported \(exportedCount) documents."
+        var parts: [String] = []
 
-        guard hasUserMessage else {
-            return exportedLine
+        if exportedCount > 0 {
+            parts.append(exportedCount == 1 ? "Exported 1 document" : "Exported \(exportedCount) documents")
         }
 
-        var lines = [exportedLine]
-
         if skippedCount > 0 {
-            lines.append(skippedCount == 1
-                ? "Skipped 1 document without a stored file."
-                : "Skipped \(skippedCount) documents without stored files.")
+            parts.append(skippedCount == 1 ? "1 skipped" : "\(skippedCount) skipped")
         }
 
         if !failures.isEmpty {
-            lines.append(failures.count == 1
-                ? "1 document could not be exported:"
-                : "\(failures.count) documents could not be exported:")
-            lines.append(contentsOf: failures.map { "- \($0.title): \($0.message)" })
+            parts.append(failures.count == 1 ? "1 failed" : "\(failures.count) failed")
         }
 
-        return lines.joined(separator: "\n")
+        if parts.isEmpty {
+            return "Export complete."
+        }
+
+        return parts.joined(separator: ". ") + "."
     }
 }
 

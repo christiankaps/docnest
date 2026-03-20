@@ -190,20 +190,70 @@ private struct RootViewImportModifier: ViewModifier {
                     coordinator.importSummaryMessage = "The selected files could not be read."
                 }
             }
-            .alert("Import Summary", isPresented: coordinator.importSummaryBinding) {
-                Button("OK", role: .cancel) {
+            .modifier(SummaryToastModifier(coordinator: coordinator))
+    }
+}
+
+private struct SummaryToastModifier: ViewModifier {
+    let coordinator: LibraryCoordinator
+
+    @State private var visibleMessage: String?
+    @State private var dismissTask: Task<Void, Never>?
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .bottom) {
+                if let message = visibleMessage {
+                    SummaryToastView(message: message)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .onTapGesture {
+                            dismissToast()
+                        }
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: visibleMessage)
+            .onChange(of: coordinator.importSummaryMessage) { _, newValue in
+                if let msg = newValue {
+                    showToast(msg)
                     coordinator.importSummaryMessage = nil
                 }
-            } message: {
-                Text(coordinator.importSummaryMessage ?? "")
             }
-            .alert("Export Summary", isPresented: coordinator.exportSummaryBinding) {
-                Button("OK", role: .cancel) {
+            .onChange(of: coordinator.exportSummaryMessage) { _, newValue in
+                if let msg = newValue {
+                    showToast(msg)
                     coordinator.exportSummaryMessage = nil
                 }
-            } message: {
-                Text(coordinator.exportSummaryMessage ?? "")
             }
+    }
+
+    private func showToast(_ message: String) {
+        dismissTask?.cancel()
+        visibleMessage = message
+        dismissTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            visibleMessage = nil
+        }
+    }
+
+    private func dismissToast() {
+        dismissTask?.cancel()
+        visibleMessage = nil
+    }
+}
+
+private struct SummaryToastView: View {
+    let message: String
+
+    var body: some View {
+        Text(message)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+            .padding(.bottom, 16)
     }
 }
 

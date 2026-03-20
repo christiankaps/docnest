@@ -570,14 +570,6 @@ final class LibraryCoordinator {
         )
     }
 
-    var importSummaryBinding: Binding<Bool> {
-        optionalPresenceBinding(for: \.importSummaryMessage)
-    }
-
-    var exportSummaryBinding: Binding<Bool> {
-        optionalPresenceBinding(for: \.exportSummaryMessage)
-    }
-
     var pendingDroppedLabelAssignmentBinding: Binding<Bool> {
         optionalPresenceBinding(for: \.pendingDroppedLabelAssignment)
     }

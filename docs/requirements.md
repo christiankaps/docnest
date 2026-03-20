@@ -109,8 +109,8 @@ A saved label combination that appears as a virtual folder in the sidebar, for e
 - Import captures file hash, filename, creation date, import timestamp, and page count.
 - Documents receive a stable internal ID.
 - Duplicate detection is required, at least hash-based.
-- User sees which files are new and which are duplicates.
-- User receives clear feedback when individual files fail in batch import.
+- User sees summary counts for imported, skipped, and failed files.
+- User receives clear feedback when files fail in batch import.
 - Labels currently active as filters are automatically assigned to newly imported documents so they appear immediately in the filtered view.
 - Import runs in the background with a progress indicator (spinner and file counter) shown next to the search bar.
 - User can cancel an in-progress import; already-imported files are kept.
@@ -127,7 +127,8 @@ A saved label combination that appears as a virtual folder in the sidebar, for e
 - Optional copy-into-library instead of external reference; for v1, copy into library is recommended.
 
 #### Decision for Current Implementation
-- Hash-based duplicates are skipped in v1 and shown as skipped in import status.
+- Hash-based duplicates are skipped in v1 and counted in import status.
+- Import and export summary messages show only counts (no individual filenames) and appear as an auto-dismissing toast overlay at the bottom of the window. Toasts disappear after 5 seconds or on click.
 
 #### Drag-and-Drop Requirements for v1
 - Drag-and-drop uses the same import pipeline as the file dialog; validation, duplicate handling, file copy, and feedback are identical.
