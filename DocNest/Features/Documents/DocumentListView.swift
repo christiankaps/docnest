@@ -596,10 +596,13 @@ struct DocumentListView: View {
         guard !sortedDocs.isEmpty else { return .ignored }
 
         let ids = sortedDocs.map(\.persistentModelID)
+        let isShift = keyPress.modifiers.contains(.shift)
 
-        // Find the current index based on the last selected document.
-        let currentIndex: Int? = if let last = coordinator.selectedDocumentIDs.first(where: { id in ids.contains(id) }) {
-            ids.firstIndex(of: last)
+        // Find the current cursor position — the last navigated-to item.
+        let currentIndex: Int? = if let anchor = selectionAnchor, let index = ids.firstIndex(of: anchor) {
+            index
+        } else if let first = coordinator.selectedDocumentIDs.first(where: { ids.contains($0) }) {
+            ids.firstIndex(of: first)
         } else {
             nil
         }
@@ -622,7 +625,13 @@ struct DocumentListView: View {
         }
 
         let nextID = ids[nextIndex]
-        coordinator.selectedDocumentIDs = [nextID]
+
+        if isShift {
+            // Extend selection to include the next item
+            coordinator.selectedDocumentIDs.insert(nextID)
+        } else {
+            coordinator.selectedDocumentIDs = [nextID]
+        }
         selectionAnchor = nextID
         scrollProxy?.scrollTo(nextID, anchor: nil)
 
