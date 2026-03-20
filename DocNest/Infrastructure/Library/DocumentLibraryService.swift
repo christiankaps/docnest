@@ -173,6 +173,7 @@ enum DocumentLibraryService {
             for: DocumentRecord.self,
             LabelTag.self,
             SmartFolder.self,
+            LabelGroup.self,
             configurations: configuration
         )
     }

@@ -3,8 +3,8 @@ import SwiftData
 
 enum ManageLabelsUseCase {
     @discardableResult
-    static func createLabel(named name: String, color: LabelColor, icon: String? = nil, using modelContext: ModelContext) throws -> LabelTag {
-        let result = try createOrFetchLabel(named: name, color: color, icon: icon, using: modelContext)
+    static func createLabel(named name: String, color: LabelColor, icon: String? = nil, groupID: UUID? = nil, using modelContext: ModelContext) throws -> LabelTag {
+        let result = try createOrFetchLabel(named: name, color: color, icon: icon, groupID: groupID, using: modelContext)
 
         if result.didCreateLabel {
             try modelContext.save()
@@ -83,6 +83,18 @@ enum ManageLabelsUseCase {
         try modelContext.save()
     }
 
+    static func assignToGroup(_ label: LabelTag, groupID: UUID?, using modelContext: ModelContext) throws {
+        label.groupID = groupID
+        try modelContext.save()
+    }
+
+    static func update(_ label: LabelTag, name: String, color: LabelColor, icon: String?, groupID: UUID?, using modelContext: ModelContext) throws {
+        let renamedLabel = try rename(label, to: name, using: modelContext)
+        try changeColor(of: renamedLabel, to: color, using: modelContext)
+        try changeIcon(of: renamedLabel, to: icon, using: modelContext)
+        try assignToGroup(renamedLabel, groupID: groupID, using: modelContext)
+    }
+
     static func changeColor(of label: LabelTag, to color: LabelColor, using modelContext: ModelContext) throws {
         label.labelColor = color
         try modelContext.save()
@@ -104,7 +116,7 @@ enum ManageLabelsUseCase {
         try modelContext.save()
     }
 
-    private static func createOrFetchLabel(named name: String, color: LabelColor = .blue, icon: String? = nil, using modelContext: ModelContext) throws -> LabelMutationResult {
+    private static func createOrFetchLabel(named name: String, color: LabelColor = .blue, icon: String? = nil, groupID: UUID? = nil, using modelContext: ModelContext) throws -> LabelMutationResult {
         let normalizedName = try normalizedLabelName(from: name)
 
         let descriptor = FetchDescriptor<LabelTag>(sortBy: [SortDescriptor(\.sortOrder, order: .forward)])
@@ -117,7 +129,7 @@ enum ManageLabelsUseCase {
         }
 
         let nextSortOrder = (allLabels.map(\.sortOrder).max() ?? -1) + 1
-        let label = LabelTag(name: normalizedName, colorName: color.rawValue, sortOrder: nextSortOrder)
+        let label = LabelTag(name: normalizedName, colorName: color.rawValue, sortOrder: nextSortOrder, groupID: groupID)
         label.icon = icon
         modelContext.insert(label)
         return LabelMutationResult(label: label, didCreateLabel: true)

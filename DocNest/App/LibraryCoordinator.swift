@@ -44,6 +44,7 @@ final class LibraryCoordinator {
 
     // MARK: - Cached derived state
     private(set) var allLabels: [LabelTag] = []
+    private(set) var allLabelGroups: [LabelGroup] = []
     private(set) var allSmartFolders: [SmartFolder] = []
     private(set) var smartFolderCounts: [PersistentIdentifier: Int] = [:]
     private(set) var activeDocuments: [DocumentRecord] = []
@@ -96,9 +97,10 @@ final class LibraryCoordinator {
 
     // MARK: - Data ingestion
 
-    func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag], allSmartFolders: [SmartFolder] = []) {
+    func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag], allSmartFolders: [SmartFolder] = [], allLabelGroups: [LabelGroup] = []) {
         self.allLabels = allLabels
         self.allSmartFolders = allSmartFolders
+        self.allLabelGroups = allLabelGroups
 
         var active: [DocumentRecord] = []
         var trashed: [DocumentRecord] = []

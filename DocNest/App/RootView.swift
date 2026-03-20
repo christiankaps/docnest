@@ -21,6 +21,9 @@ struct RootView: View {
     @Query(sort: \SmartFolder.sortOrder, order: .forward)
     private var allSmartFolders: [SmartFolder]
 
+    @Query(sort: \LabelGroup.sortOrder, order: .forward)
+    private var allLabelGroups: [LabelGroup]
+
     var body: some View {
         HStack(spacing: 0) {
             LibrarySidebarView()
@@ -46,7 +49,7 @@ struct RootView: View {
         .toolbar { toolbarContent }
         .modifier(RootViewImportModifier(coordinator: coordinator))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
-        .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders))
+        .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups))
         .focusedSceneValue(\.exportDocumentsAction) {
             coordinator.exportDocuments(coordinator.selectedDocuments)
         }
@@ -56,7 +59,7 @@ struct RootView: View {
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
-            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders)
+            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
             await ExtractDocumentTextUseCase.backfillAll(
                 documents: allDocuments,
                 libraryURL: libraryURL,
@@ -300,6 +303,7 @@ private struct RootViewChangeHandlers: ViewModifier {
     let allDocuments: [DocumentRecord]
     let allLabels: [LabelTag]
     let allSmartFolders: [SmartFolder]
+    let allLabelGroups: [LabelGroup]
 
     /// Lightweight fingerprint that changes when documents are added, removed,
     /// trashed/restored, or have their labels modified -- covering mutations
@@ -319,6 +323,7 @@ private struct RootViewChangeHandlers: ViewModifier {
         for label in allLabels {
             hasher.combine(label.persistentModelID)
             hasher.combine(label.name)
+            hasher.combine(label.groupID)
         }
         return hasher.finalize()
     }
@@ -330,6 +335,16 @@ private struct RootViewChangeHandlers: ViewModifier {
             hasher.combine(folder.name)
             hasher.combine(folder.labelIDs)
             hasher.combine(folder.sortOrder)
+        }
+        return hasher.finalize()
+    }
+
+    private var labelGroupFingerprint: Int {
+        var hasher = Hasher()
+        for group in allLabelGroups {
+            hasher.combine(group.persistentModelID)
+            hasher.combine(group.name)
+            hasher.combine(group.sortOrder)
         }
         return hasher.finalize()
     }
@@ -361,14 +376,17 @@ private struct RootViewChangeHandlers: ViewModifier {
                 coordinator.pruneSelectedDocumentIDs()
             }
             .onChange(of: documentFingerprint) {
-                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders)
+                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
             }
             .onChange(of: labelFingerprint) {
                 coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
-                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders)
+                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
             }
             .onChange(of: smartFolderFingerprint) {
-                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders)
+                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
+            }
+            .onChange(of: labelGroupFingerprint) {
+                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
             }
     }
 }

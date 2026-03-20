@@ -22,14 +22,6 @@ struct LibrarySidebarView: View {
     @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(\.modelContext) private var modelContext
 
-    @State private var isAddingLabel = false
-    @State private var newLabelName = ""
-    @State private var newLabelColor: LabelColor = .blue
-    @State private var newLabelIcon = ""
-    @State private var editingLabelID: PersistentIdentifier?
-    @State private var editedLabelName = ""
-    @State private var editedLabelColor: LabelColor = .blue
-    @State private var editedLabelIcon = ""
     @State private var errorMessage: String?
     @State private var pendingLabelDeletion: PendingLabelDeletion?
     @State private var hoveredLabelDropTargetID: PersistentIdentifier?
@@ -38,6 +30,12 @@ struct LibrarySidebarView: View {
     @State private var smartFolderEditorConfig: SmartFolderEditorConfig?
     @State private var draggingSmartFolderID: UUID?
     @State private var smartFolderReorderInsertionEdge: ReorderInsertionEdge?
+    @State private var labelEditorConfig: LabelEditorConfig?
+    @State private var collapsedGroupIDs: Set<UUID> = []
+    @State private var newGroupName = ""
+    @State private var isShowingNewGroupAlert = false
+    @State private var renamingGroupID: UUID?
+    @State private var renamingGroupName = ""
 
     private var sortedLabels: [LabelTag] {
         coordinator.allLabels.sorted {
@@ -91,6 +89,19 @@ struct LibrarySidebarView: View {
                 config: config,
                 allLabels: coordinator.allLabels
             )
+        }
+        .sheet(item: $labelEditorConfig) { config in
+            LabelEditorSheet(
+                config: config,
+                allGroups: coordinator.allLabelGroups
+            )
+        }
+        .alert("New Group", isPresented: $isShowingNewGroupAlert) {
+            TextField("Group name", text: $newGroupName)
+            Button("Create") { createNewGroup() }
+            Button("Cancel", role: .cancel) { newGroupName = "" }
+        } message: {
+            Text("Enter a name for the label group.")
         }
 
         #if DEBUG
@@ -184,15 +195,23 @@ struct LibrarySidebarView: View {
                     .help("Clear label filters")
                 }
 
-                Button {
-                    isAddingLabel = true
+                Menu {
+                    Button("New Label") {
+                        labelEditorConfig = LabelEditorConfig(mode: .create(groupID: nil))
+                    }
+                    Button("New Group") {
+                        isShowingNewGroupAlert = true
+                    }
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
                 .foregroundStyle(.secondary)
-                .help("Add Label")
+                .help("Add Label or Group")
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, 16)
@@ -206,115 +225,124 @@ struct LibrarySidebarView: View {
     @ViewBuilder
     private var labelSectionContent: some View {
         labelSection {
-            if isAddingLabel {
-                VStack(spacing: 8) {
-                    HStack(spacing: 8) {
-                        EmojiPickerButton(selection: $newLabelIcon)
-                            .frame(width: 28, height: 22)
-                            .help("Choose emoji icon (optional)")
-
-                        TextField("New label", text: $newLabelName)
-                            .textFieldStyle(.roundedBorder)
-                            .onSubmit(addLabel)
-
-                        Menu {
-                            ForEach(LabelColor.allCases) { color in
-                                Button {
-                                    newLabelColor = color
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Circle()
-                                            .fill(color.color)
-                                            .frame(width: 16, height: 16)
-                                            .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                                        Text(color.displayName)
-                                        if newLabelColor == color {
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(newLabelColor.color)
-                                    .frame(width: 16, height: 16)
-                                    .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                                Text(newLabelColor.displayName)
-                                    .font(AppTypography.caption)
-                            }
-                            .foregroundStyle(.primary)
-                        }
-                        .help("Choose label color")
-
-                        Button("Add", action: addLabel)
-                            .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-                .sidebarRow()
+            // Ungrouped labels
+            ForEach(ungroupedLabels) { label in
+                labelDisplayRow(for: label)
             }
 
-            if coordinator.allLabels.isEmpty {
+            // Grouped labels
+            ForEach(sortedGroups) { group in
+                labelGroupHeader(for: group)
+
+                if !collapsedGroupIDs.contains(group.id) {
+                    ForEach(labelsInGroup(group)) { label in
+                        labelDisplayRow(for: label)
+                            .padding(.leading, 12)
+                    }
+                }
+            }
+
+            if coordinator.allLabels.isEmpty && coordinator.allLabelGroups.isEmpty {
                 Text("No labels yet")
                     .font(AppTypography.caption)
                     .foregroundStyle(.secondary)
                     .sidebarRow()
-            } else {
-                ForEach(sortedLabels) { label in
-                    if editingLabelID == label.persistentModelID {
-                        labelEditRow(for: label)
-                    } else {
-                        labelDisplayRow(for: label)
-                    }
-                }
             }
         }
     }
 
+    private var ungroupedLabels: [LabelTag] {
+        sortedLabels.filter { $0.groupID == nil }
+    }
+
+    private var sortedGroups: [LabelGroup] {
+        coordinator.allLabelGroups.sorted {
+            if $0.sortOrder == $1.sortOrder {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.sortOrder < $1.sortOrder
+        }
+    }
+
+    private func labelsInGroup(_ group: LabelGroup) -> [LabelTag] {
+        sortedLabels.filter { $0.groupID == group.id }
+    }
+
     @ViewBuilder
-    private func labelEditRow(for label: LabelTag) -> some View {
-        HStack(spacing: 8) {
-            EmojiPickerButton(selection: $editedLabelIcon)
-                .frame(width: 28, height: 22)
-                .help("Choose emoji icon (optional)")
+    private func labelGroupHeader(for group: LabelGroup) -> some View {
+        let isCollapsed = collapsedGroupIDs.contains(group.id)
+        let groupLabels = labelsInGroup(group)
+        let isRenaming = renamingGroupID == group.id
 
-            TextField("Label name", text: $editedLabelName)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { commitEdit(label) }
+        if isRenaming {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 12)
 
-            Menu {
-                ForEach(LabelColor.allCases) { color in
-                    Button {
-                        editedLabelColor = color
-                    } label: {
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(color.color)
-                                .frame(width: 16, height: 16)
-                                .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                            Text(color.displayName)
-                            if editedLabelColor == color {
-                                Image(systemName: "checkmark")
-                            }
-                        }
+                TextField("Group name", text: $renamingGroupName)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+                    .onSubmit { commitGroupRename(group) }
+
+                Button("Save") { commitGroupRename(group) }
+                    .font(.caption)
+                    .disabled(renamingGroupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button("Cancel") {
+                    renamingGroupID = nil
+                    renamingGroupName = ""
+                }
+                .font(.caption)
+            }
+            .sidebarRow()
+        } else {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isCollapsed {
+                        collapsedGroupIDs.remove(group.id)
+                    } else {
+                        collapsedGroupIDs.insert(group.id)
                     }
                 }
             } label: {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(editedLabelColor.color)
-                        .frame(width: 16, height: 16)
-                        .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                    Text(editedLabelColor.displayName)
-                        .font(AppTypography.caption)
-                }
-                .foregroundStyle(.primary)
-            }
+                HStack(spacing: 4) {
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 12)
 
-            Button("Save") { commitEdit(label) }
-                .disabled(editedLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Text(group.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Text("\(groupLabels.count)")
+                        .font(AppTypography.caption.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+            .sidebarRow()
+            .dropDestination(for: String.self) { items, _ in
+                handleLabelDropOntoGroup(items, group: group)
+            }
+            .contextMenu {
+                Button("Rename Group") {
+                    renamingGroupID = group.id
+                    renamingGroupName = group.name
+                }
+                Button("Add Label to Group") {
+                    labelEditorConfig = LabelEditorConfig(mode: .create(groupID: group.id))
+                }
+                Divider()
+                Button("Delete Group", role: .destructive) {
+                    deleteGroup(group)
+                }
+            }
         }
-        .sidebarRow()
     }
 
     @ViewBuilder
@@ -384,7 +412,13 @@ struct LibrarySidebarView: View {
         .accessibilityHint("Drop documents here to assign the \(label.name) label")
         .contextMenu {
             Button("Edit") {
-                beginEditing(label)
+                labelEditorConfig = LabelEditorConfig(mode: .edit(label))
+            }
+
+            if label.groupID != nil {
+                Button("Remove from Group") {
+                    removeFromGroup(label)
+                }
             }
 
             Button("Delete", role: .destructive) {
@@ -392,7 +426,7 @@ struct LibrarySidebarView: View {
             }
         }
         .onTapGesture(count: 2) {
-            beginEditing(label)
+            labelEditorConfig = LabelEditorConfig(mode: .edit(label))
         }
     }
 
@@ -601,36 +635,58 @@ struct LibrarySidebarView: View {
         coordinator.labelFilterSelection.toggleVisualSelection(for: label.persistentModelID)
     }
 
-    private func addLabel() {
-        let icon = newLabelIcon.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func createNewGroup() {
+        guard !newGroupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            newGroupName = ""
+            return
+        }
         do {
-            _ = try ManageLabelsUseCase.createLabel(named: newLabelName, color: newLabelColor, icon: icon.isEmpty ? nil : String(icon.prefix(1)), using: modelContext)
-            newLabelName = ""
-            newLabelColor = .blue
-            newLabelIcon = ""
-            isAddingLabel = false
+            _ = try ManageLabelGroupsUseCase.create(named: newGroupName, using: modelContext)
+            newGroupName = ""
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func beginEditing(_ label: LabelTag) {
-        editingLabelID = label.persistentModelID
-        editedLabelName = label.name
-        editedLabelColor = label.labelColor
-        editedLabelIcon = label.icon ?? ""
-    }
-
-    private func commitEdit(_ label: LabelTag) {
+    private func commitGroupRename(_ group: LabelGroup) {
         do {
-            _ = try ManageLabelsUseCase.rename(label, to: editedLabelName, using: modelContext)
-            try ManageLabelsUseCase.changeColor(of: label, to: editedLabelColor, using: modelContext)
-            let iconTrimmed = editedLabelIcon.trimmingCharacters(in: .whitespacesAndNewlines)
-            try ManageLabelsUseCase.changeIcon(of: label, to: iconTrimmed.isEmpty ? nil : String(iconTrimmed.prefix(1)), using: modelContext)
-            editingLabelID = nil
-            editedLabelName = ""
+            try ManageLabelGroupsUseCase.rename(group, to: renamingGroupName, using: modelContext)
+            renamingGroupID = nil
+            renamingGroupName = ""
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteGroup(_ group: LabelGroup) {
+        do {
+            try ManageLabelGroupsUseCase.delete(group, using: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func removeFromGroup(_ label: LabelTag) {
+        do {
+            try ManageLabelsUseCase.assignToGroup(label, groupID: nil, using: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func handleLabelDropOntoGroup(_ items: [String], group: LabelGroup) -> Bool {
+        guard let payload = items.first,
+              let sourceLabelID = DocumentLabelDragPayload.labelID(from: payload),
+              let sourceLabel = sortedLabels.first(where: { $0.id == sourceLabelID }) else {
+            return false
+        }
+
+        do {
+            try ManageLabelsUseCase.assignToGroup(sourceLabel, groupID: group.id, using: modelContext)
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -703,16 +759,31 @@ struct LibrarySidebarView: View {
     }
 
     private func reorderLabel(sourceID: UUID, onto targetLabel: LabelTag) {
-        let labels = sortedLabels
-        guard let sourceIndex = labels.firstIndex(where: { $0.id == sourceID }),
-              let targetIndex = labels.firstIndex(where: { $0.persistentModelID == targetLabel.persistentModelID }),
+        guard let sourceLabel = sortedLabels.first(where: { $0.id == sourceID }) else { return }
+
+        let targetGroupID = targetLabel.groupID
+
+        // If moving between groups, update groupID first
+        if sourceLabel.groupID != targetGroupID {
+            do {
+                try ManageLabelsUseCase.assignToGroup(sourceLabel, groupID: targetGroupID, using: modelContext)
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+        }
+
+        // Reorder within the target scope (same group or ungrouped)
+        let labelsInScope = sortedLabels.filter { $0.groupID == targetGroupID }
+        guard let sourceIndex = labelsInScope.firstIndex(where: { $0.id == sourceID }),
+              let targetIndex = labelsInScope.firstIndex(where: { $0.persistentModelID == targetLabel.persistentModelID }),
               sourceIndex != targetIndex else { return }
 
         let source = IndexSet(integer: sourceIndex)
         let destination = sourceIndex < targetIndex ? targetIndex + 1 : targetIndex
 
         do {
-            try ManageLabelsUseCase.reorderLabels(from: source, to: destination, labels: labels, using: modelContext)
+            try ManageLabelsUseCase.reorderLabels(from: source, to: destination, labels: labelsInScope, using: modelContext)
         } catch {
             errorMessage = error.localizedDescription
         }

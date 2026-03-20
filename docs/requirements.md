@@ -77,6 +77,9 @@ A freely defined category that can be assigned to one or more documents.
 ### 5.4 Smart Folder
 A saved label combination that appears as a virtual folder in the sidebar, for example "Invoices" or "Tax Documents". Smart folders store only label collections, not search queries.
 
+### 5.5 Label Group
+An optional organizational container for labels in the sidebar. Label groups let users cluster related labels (e.g. a "Finance" group containing "Invoices", "Tax", "Receipts"). Groups are purely a sidebar display concept — they do not affect label filtering, smart folder matching, or document queries.
+
 ## 6. Functional Requirements
 
 ### 6.1 Library Management
@@ -203,8 +206,15 @@ A saved label combination that appears as a virtual folder in the sidebar, for e
 - Optional emoji icon per label. When set, the emoji replaces the colored circle in sidebar rows, drag previews, and label chips. Users choose an emoji via the system Character Palette (emoji keyboard).
 - Label suggestions based on recently used labels.
 
+#### Must (Label Groups)
+- User can create, rename, and delete label groups.
+- Labels can be assigned to a group via the label editor sheet or by dragging onto a group header.
+- Grouped labels appear under a collapsible group header in the sidebar, indented beneath the group name.
+- Ungrouped labels appear at the top level before any groups.
+- Deleting a group does not delete its labels; they become ungrouped.
+- Group order is reorderable via drag-and-drop in sidebar and persisted.
+
 #### May Follow Later
-- Hierarchical labels.
 - Rules such as "if filename contains X, suggest label Y".
 
 ### 6.5 Search and Filter
@@ -339,6 +349,8 @@ My Documents.docnestlibrary/
 - name
 - color
 - icon (optional emoji)
+- groupID (optional reference to Label Group)
+- sortOrder
 - createdAt
 
 ### 9.3 Relation
@@ -351,7 +363,12 @@ My Documents.docnestlibrary/
 - labelIDs (array of label UUIDs)
 - sortOrder
 
-### 9.5 Optional Later Entities
+### 9.5 Label Group Entity
+- id
+- name
+- sortOrder
+
+### 9.6 Optional Later Entities
 - CustomFieldDefinition
 - ImportJob
 - AuditEvent
@@ -388,7 +405,12 @@ My Documents.docnestlibrary/
 
 ### 10.6 Sidebar-Integrated Label Management
 - Labels are managed directly in left sidebar, not in separate modal dialog.
-- Inline sidebar actions: create label (via + with emoji icon, name, and color editable during creation), edit label (double-click or context menu opens same inline form with all fields — emoji, name, color — editable at once), delete (context menu).
+- The sidebar "+" button opens a menu with "New Label" and "New Group" options.
+- Label create and edit use a dedicated editor sheet (not inline editing). The sheet provides a spacious name field with emoji picker, a visual color swatch grid, and a group picker.
+- Editing a label (double-click or context menu "Edit") opens the same editor sheet pre-filled with the label's current values.
+- Label groups appear as collapsible sections in the sidebar with disclosure chevron, group name, and label count. Groups can be renamed inline, deleted, or have labels added via context menu.
+- Labels can be dragged onto a group header to move them into that group.
+- Ungrouped labels appear above groups; grouped labels appear indented under their group header.
 - Label order is reorderable via drag-and-drop in sidebar (drag label onto another label). Custom order is persisted.
 - Label drop targets show a visual hover highlight (accent color tint) during document drags.
 - Technical constraint: label rows must not use SwiftUI List `.onMove`, as this activates the List drop engine which intercepts all row-level drop events. Reordering is implemented via the row `.onDrop` handler by detecting label-type payloads.
@@ -505,15 +527,20 @@ Current state:
 - Labels can be created, renamed, merged, and deleted globally.
 - Each label has user-selectable color from fixed palette (10 options). Color is rendered consistently in sidebar, list, and inspector as colored chip.
 - Each label supports an optional emoji icon. When set, the emoji replaces the colored circle in sidebar rows, drag previews, and label chips throughout the app.
-- Label creation form includes emoji picker button (opens system Character Palette), name field, and color menu.
-- Editing a label (double-click or context menu "Edit") shows the same inline form as creation with all fields — emoji, name, color — editable at once.
+- Label create and edit use a dedicated editor sheet with spacious name field, emoji picker, visual color swatch grid (LazyVGrid of all 10 color options), and group picker. This replaces the previous inline sidebar form.
+- Editing a label (double-click or context menu "Edit") opens the editor sheet pre-filled with the label's current values.
 - Document detail view supports direct assignment/removal of existing labels plus create-and-assign of new labels via keyboard or direct action.
 - Sidebar supports multi-label filtering. With multiple active labels, list shows only documents containing all selected labels.
 - Deleting a label removes only associations. Documents and original files remain unchanged.
 - Document list supports multi-selection. Inspector can add/remove labels for entire selection.
 - For mixed label states, inspector separates shared labels from partially assigned labels and offers actions such as add to remaining documents.
-- Label management is integrated in left sidebar (create, edit, delete).
+- Label management is integrated in left sidebar (create, edit, delete). The "+" button opens a menu with "New Label" and "New Group".
 - Labels are reorderable in sidebar, persisted via sortOrder field.
+- Label groups allow organizing labels into collapsible categories in the sidebar (e.g. "Finance" containing "Invoices", "Tax", "Receipts").
+- Groups display as collapsible headers with disclosure chevron, group name, and label count. Grouped labels appear indented beneath their group header; ungrouped labels appear at the top level.
+- Groups support create, rename (inline), and delete via context menu. Deleting a group makes its labels ungrouped without deleting them.
+- Labels can be moved into a group by dragging onto the group header or via the group picker in the label editor sheet.
+- Group order is reorderable and persisted via sortOrder field.
 
 ### Phase 5: Search and Retrieval
 Goal: users find documents quickly.

@@ -33,13 +33,15 @@ final class LabelTag {
     var colorName: String
     var icon: String?
     var sortOrder: Int
+    var groupID: UUID?
     var documents: [DocumentRecord] = []
 
-    init(id: UUID = UUID(), name: String, colorName: String = LabelColor.blue.rawValue, sortOrder: Int = 0) {
+    init(id: UUID = UUID(), name: String, colorName: String = LabelColor.blue.rawValue, sortOrder: Int = 0, groupID: UUID? = nil) {
         self.id = id
         self.name = name
         self.colorName = colorName
         self.sortOrder = sortOrder
+        self.groupID = groupID
     }
 
     var labelColor: LabelColor {
