@@ -69,7 +69,6 @@ final class LibraryCoordinator {
         activeDocuments = active
         trashedDocuments = trashed
 
-        recomputeSidebarCounts()
         recomputeFilteredDocuments()
         recomputeSelectedDocuments()
     }
@@ -89,7 +88,7 @@ final class LibraryCoordinator {
             selectedLabelIDs: labelFilterSelection.appliedSelection
         )
 
-        recomputeSidebarCounts()
+        recomputeSidebarCounts(sectionDocuments: sectionDocuments)
 
         #if DEBUG
         debugLogFilterTiming(
@@ -115,13 +114,13 @@ final class LibraryCoordinator {
         }
     }
 
-    private func recomputeSidebarCounts() {
+    private func recomputeSidebarCounts(sectionDocuments: [DocumentRecord]) {
         sidebarCounts = LibrarySidebarCounts(
             activeDocuments: activeDocuments,
             trashedCount: trashedDocuments.count,
             labels: allLabels,
             recentLimit: recentDocumentLimit,
-            labelSourceDocuments: sectionScopedDocuments,
+            labelSourceDocuments: sectionDocuments,
             activeLabelFilterIDs: labelFilterSelection.appliedSelection
         )
     }
@@ -394,21 +393,21 @@ final class LibraryCoordinator {
 
         importProgress = ImportProgress(total: 0, completed: 0)
 
-        activeImportTask = Task { @MainActor in
+        activeImportTask = Task { @MainActor [weak self] in
             let importResult = await ImportPDFDocumentsUseCase.execute(
                 urls: urls,
                 into: libraryURL,
                 autoAssignLabels: activeFilterLabels,
                 using: modelContext
-            ) { completed, total in
-                self.importProgress = ImportProgress(total: total, completed: completed)
+            ) { [weak self] completed, total in
+                self?.importProgress = ImportProgress(total: total, completed: completed)
             }
 
-            importProgress = nil
-            activeImportTask = nil
+            self?.importProgress = nil
+            self?.activeImportTask = nil
 
             if importResult.hasUserMessage {
-                importSummaryMessage = importResult.summaryMessage
+                self?.importSummaryMessage = importResult.summaryMessage
             }
         }
     }

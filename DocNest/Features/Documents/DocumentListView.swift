@@ -20,23 +20,20 @@ enum DocumentLabelDragPayload {
     }
 }
 
-struct DocumentDragItem: Transferable {
-    let internalPayload: String
-    let fileURL: URL?
-    let suggestedName: String?
+enum DocumentDragHelper {
+    /// Builds the internal payload string for dragging documents.
+    static func internalPayload(for document: DocumentRecord, selectedIDs: Set<PersistentIdentifier>, filteredDocuments: [DocumentRecord]) -> String {
+        let documentIDsToDrag: [UUID]
 
-    static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .pdf) { item in
-            guard let fileURL = item.fileURL else {
-                throw CocoaError(.fileNoSuchFile)
-            }
-            return SentTransferredFile(fileURL, allowAccessingOriginalFile: true)
+        if selectedIDs.contains(document.persistentModelID) {
+            documentIDsToDrag = filteredDocuments
+                .filter { selectedIDs.contains($0.persistentModelID) }
+                .map(\.id)
+        } else {
+            documentIDsToDrag = [document.id]
         }
-        .suggestedFileName { $0.suggestedName ?? "Document.pdf" }
 
-        ProxyRepresentation { item in
-            item.internalPayload
-        }
+        return DocumentFileDragPayload.payload(for: documentIDsToDrag)
     }
 }
 
@@ -94,6 +91,7 @@ struct DocumentListView: View {
     @State private var renamingTitle = ""
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
+    @State private var cachedSortedDocuments: [DocumentRecord] = []
     @State private var availableListWidth = AppSplitViewLayout.documentListIdealWidth
     @AppStorage("docListThumbnailSize") private var thumbnailSize = 160.0
     @AppStorage("docListColumnWidthImported") private var importedColumnWidth = 120.0
@@ -107,14 +105,16 @@ struct DocumentListView: View {
     @AppStorage("docListShowSize") private var showsSizeColumn = true
     @AppStorage("docListShowLabels") private var showsLabelsColumn = true
 
-    private var sortedDocuments: [DocumentRecord] {
-        coordinator.filteredDocuments.sorted { lhs, rhs in
-            let comparison = compare(lhs, rhs, for: sortColumn)
+    private func recomputeSortedDocuments() {
+        let column = sortColumn
+        let direction = sortDirection
+        cachedSortedDocuments = coordinator.filteredDocuments.sorted { lhs, rhs in
+            let comparison = compare(lhs, rhs, for: column)
             if comparison == .orderedSame {
                 return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
             }
 
-            if sortDirection == .ascending {
+            if direction == .ascending {
                 return comparison == .orderedAscending
             }
 
@@ -167,7 +167,7 @@ struct DocumentListView: View {
     }
 
     var body: some View {
-        let documents = sortedDocuments
+        let documents = cachedSortedDocuments
         VStack(spacing: 0) {
             if documents.isEmpty || coordinator.documentListViewMode != .list {
                 listHeader
@@ -212,6 +212,18 @@ struct DocumentListView: View {
                         availableListWidth = newWidth
                     }
             }
+        }
+        .onAppear {
+            recomputeSortedDocuments()
+        }
+        .onChange(of: coordinator.filteredDocuments) {
+            recomputeSortedDocuments()
+        }
+        .onChange(of: sortColumn) {
+            recomputeSortedDocuments()
+        }
+        .onChange(of: sortDirection) {
+            recomputeSortedDocuments()
         }
     }
 
@@ -318,7 +330,7 @@ struct DocumentListView: View {
                                 handleRowTap(document: document, in: sortedDocs)
                             }
                             .contextMenu { documentContextMenu(for: document) }
-                            .draggable(dragItem(for: document))
+                            .draggable(dragPayload(for: document))
                             .dropDestination(for: String.self) { items, _ in
                                 guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
                                     return false
@@ -405,7 +417,7 @@ struct DocumentListView: View {
                             handleRowTap(document: document, in: sortedDocs)
                         }
                         .contextMenu { documentContextMenu(for: document) }
-                        .draggable(dragItem(for: document))
+                        .draggable(dragPayload(for: document))
                         .accessibilityLabel("\(document.title), PDF document")
                     }
                 }
@@ -572,25 +584,11 @@ struct DocumentListView: View {
         return [document]
     }
 
-    private func dragItem(for document: DocumentRecord) -> DocumentDragItem {
-        let documentIDsToDrag: [UUID]
-
-        if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
-            documentIDsToDrag = coordinator.filteredDocuments
-                .filter { coordinator.selectedDocumentIDs.contains($0.persistentModelID) }
-                .map(\.id)
-        } else {
-            documentIDsToDrag = [document.id]
-        }
-
-        let internalPayload = DocumentFileDragPayload.payload(for: documentIDsToDrag)
-        let fileURL = originalFileURL(for: document)
-        let suggestedName = ExportDocumentsUseCase.suggestedFileName(for: document)
-
-        return DocumentDragItem(
-            internalPayload: internalPayload,
-            fileURL: fileURL,
-            suggestedName: suggestedName
+    private func dragPayload(for document: DocumentRecord) -> String {
+        DocumentDragHelper.internalPayload(
+            for: document,
+            selectedIDs: coordinator.selectedDocumentIDs,
+            filteredDocuments: coordinator.filteredDocuments
         )
     }
 
@@ -656,6 +654,10 @@ struct DocumentListView: View {
             cancelRename()
             return
         }
+
+        let previousTitle = document.title
+        let previousStoredFilePath = document.storedFilePath
+
         document.title = trimmed
 
         if let storedFilePath = document.storedFilePath, let libraryURL = coordinator.libraryURL {
@@ -667,7 +669,15 @@ struct DocumentListView: View {
             )
         }
 
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            // Roll back to keep database and filesystem consistent
+            document.title = previousTitle
+            document.storedFilePath = previousStoredFilePath
+            coordinator.importSummaryMessage = "Could not save the renamed document: \(error.localizedDescription)"
+        }
+
         renamingDocumentID = nil
     }
 

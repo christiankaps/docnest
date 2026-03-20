@@ -140,9 +140,10 @@ private struct AboutView: View {
         }
     }
 
-    @MainActor
     private func loadStatistics() {
-        statistics = AboutStatisticsProvider.shared.controller?.libraryStatistics()
+        Task { @MainActor in
+            statistics = await AboutStatisticsProvider.shared.controller?.libraryStatistics()
+        }
     }
 }
 

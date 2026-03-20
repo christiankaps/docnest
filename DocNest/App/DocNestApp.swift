@@ -482,7 +482,7 @@ final class LibrarySessionController: ObservableObject {
         }
     }
 
-    func libraryStatistics() -> LibraryStatistics? {
+    func libraryStatistics() async -> LibraryStatistics? {
         guard let url = selectedLibraryURL,
               let container = modelContainer else {
             return nil
@@ -493,22 +493,28 @@ final class LibrarySessionController: ObservableObject {
         let documents = (try? context.fetch(descriptor)) ?? []
 
         let totalFileSize = documents.reduce(Int64(0)) { $0 + $1.fileSize }
+        let documentCount = documents.count
+        let path = url.path
 
-        var packageSize: Int64 = 0
-        if let enumerator = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: [.fileSizeKey],
-            options: [.skipsHiddenFiles]
-        ) {
-            for case let fileURL as URL in enumerator {
-                let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-                packageSize += Int64(size)
+        let packageSize = await Task.detached(priority: .utility) {
+            var size: Int64 = 0
+            guard let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: [.fileSizeKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                return size
             }
-        }
+            while let fileURL = enumerator.nextObject() as? URL {
+                let fileSize = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                size += Int64(fileSize)
+            }
+            return size
+        }.value
 
         return LibraryStatistics(
-            path: url.path,
-            documentCount: documents.count,
+            path: path,
+            documentCount: documentCount,
             totalFileSize: totalFileSize,
             libraryPackageSize: packageSize
         )
