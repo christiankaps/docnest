@@ -33,8 +33,18 @@ extension FocusedValues {
     }
 }
 
+// MARK: - App Delegate
+
+private final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+}
+
 @main
 struct DocNestApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     @FocusedValue(\.librarySession) private var librarySession
     @FocusedValue(\.exportDocumentsAction) private var exportDocumentsAction
     @FocusedValue(\.pasteDocumentsAction) private var pasteDocumentsAction
