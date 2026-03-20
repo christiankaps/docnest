@@ -45,17 +45,6 @@ struct DocNestApp: App {
     init() {
         NSWindow.allowsAutomaticWindowTabbing = false
 
-        // Enforce single instance: if another copy is already running, activate it and terminate this one.
-        let bundleID = Bundle.main.bundleIdentifier ?? ""
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-        if running.count > 1, let existing = running.first(where: { $0 != .current }) {
-            existing.activate()
-            // Small delay so the activation request is dispatched before termination.
-            DispatchQueue.main.async {
-                NSApplication.shared.terminate(nil)
-            }
-        }
-
         // Defer services registration until NSApp is fully initialized.
         DispatchQueue.main.async { [servicesProvider] in
             NSApp.servicesProvider = servicesProvider
