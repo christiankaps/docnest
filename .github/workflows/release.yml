@@ -10,16 +10,17 @@ permissions:
 jobs:
   build:
     name: Archive and package DMG
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
 
-      - name: Set up latest Xcode
-        uses: actions/setup-xcode@v4
-        with:
-          xcode-version: latest
+      - name: Select Xcode 26
+        run: |
+          XCODE_PATH="/Applications/Xcode_26.app"
+          echo "Using Xcode at $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
 
       - name: Archive
         run: |
