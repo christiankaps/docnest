@@ -593,6 +593,7 @@ struct DocumentListView: View {
     }
 
     private func handleArrowKey(_ keyPress: KeyPress, in sortedDocs: [DocumentRecord]) -> KeyPress.Result {
+        guard !coordinator.isQuickLabelPickerPresented else { return .ignored }
         guard !sortedDocs.isEmpty else { return .ignored }
 
         let ids = sortedDocs.map(\.persistentModelID)

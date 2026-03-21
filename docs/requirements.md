@@ -388,6 +388,7 @@ My Documents.docnestlibrary/
 - Drag files onto window to import.
 - Select a document in list and instantly see preview.
 - Assign labels via shortcuts or inspector.
+- Command+L opens a quick label picker overlay for fast keyboard-driven label assignment to selected documents.
 - Live filter result list while typing.
 - Command+F focuses search field in document view when a library is open.
 
@@ -541,6 +542,7 @@ Current state:
 - Groups support create, rename (inline), and delete via context menu. Deleting a group makes its labels ungrouped without deleting them.
 - Labels can be moved into a group by dragging onto the group header or via the group picker in the label editor sheet.
 - Group order is reorderable and persisted via sortOrder field.
+- Quick label picker (Cmd+L) provides a floating overlay for fast keyboard-driven label assignment. The picker includes a type-ahead search field that filters labels, arrow key navigation, and Enter to toggle labels on selected documents. Labels show assignment state indicators (checkmark for all, dash for partial). When not filtering, labels display grouped; when typing, the list is flat. The picker only opens when documents are selected and not in Bin.
 
 ### Phase 5: Search and Retrieval
 Goal: users find documents quickly.

@@ -40,6 +40,7 @@ final class LibraryCoordinator {
     var exportSummaryMessage: String?
     var isConfirmingBinRemoval = false
     var pendingDroppedLabelAssignment: PendingDroppedLabelAssignment?
+    var isQuickLabelPickerPresented = false
     var labelFilterSelection = DeferredSelectionState<PersistentIdentifier>()
 
     // MARK: - Cached derived state

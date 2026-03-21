@@ -125,6 +125,11 @@ struct DocNestApp: App {
                     NotificationCenter.default.post(name: .docNestFocusSearch, object: nil)
                 }
                 .keyboardShortcut("f", modifiers: [.command])
+
+                Button("Assign Labels") {
+                    NotificationCenter.default.post(name: .docNestQuickLabelPicker, object: nil)
+                }
+                .keyboardShortcut("l", modifiers: [.command])
             }
         }
     }

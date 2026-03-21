@@ -90,7 +90,22 @@ struct RootView: View {
                 )
                 .padding(20)
             }
+
+            if coordinator.isQuickLabelPickerPresented {
+                Color.black.opacity(0.001)
+                    .onTapGesture {
+                        coordinator.isQuickLabelPickerPresented = false
+                    }
+
+                QuickLabelPickerView(
+                    isPresented: Bindable(coordinator).isQuickLabelPickerPresented
+                )
+                .padding(.top, 80)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+            }
         }
+        .animation(.easeOut(duration: 0.15), value: coordinator.isQuickLabelPickerPresented)
         .background { QuickLookPanelResponder(coordinator: quickLook) }
         .onDrop(of: [.fileURL], delegate: FileImportDropDelegate(coordinator: coordinator))
         .onChange(of: coordinator.cachedShareURLs) {
@@ -353,6 +368,11 @@ private struct RootViewChangeHandlers: ViewModifier {
         content
             .onReceive(NotificationCenter.default.publisher(for: .docNestFocusSearch)) { _ in
                 coordinator.searchFocusRequestToken += 1
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .docNestQuickLabelPicker)) { _ in
+                guard !coordinator.selectedDocuments.isEmpty,
+                      !coordinator.isBinSelected else { return }
+                coordinator.isQuickLabelPickerPresented = true
             }
             .onDisappear {
                 coordinator.cancelPendingLabelFilter()
