@@ -175,6 +175,7 @@ An optional organizational container for labels in the sidebar. Label groups let
 - Dragging a document from the list to Finder or Desktop exports the file with the suggested filename. The drag provides both the PDF file (for external apps) and the internal payload (for in-app operations like label assignment and bin).
 
 - The document list supports two presentation modes: list and thumbnails. In thumbnail mode, documents appear as thumbnail tiles similar to Finder icon view. Thumbnail size is continuously adjustable via slider.
+- Thumbnail tiles display label color dot badges overlaid on the bottom-right corner of the thumbnail image (up to 4 dots with "+N" overflow) and a mini label bar beneath the title showing compact label chips (up to 2 chips with "+N" overflow).
 - Switching between list and thumbnail mode uses a segmented control in the top toolbar.
 - Toggling optional file-list attributes in list mode is done through right-click context menu in the list, not a separate header button.
 - Toolbar includes a Share button that opens native macOS share sheet for the selected document(s). Printing is reachable via share sheet.
@@ -515,6 +516,7 @@ Current state:
 - Export is accessible via document context menu and File menu bar (Shift+Cmd+E).
 - Export copies original PDFs as-is with descriptive filenames. Name collisions in bulk export are resolved automatically.
 - Dragging a document to Finder or Desktop exports it with the suggested filename via Transferable file representation.
+- Thumbnail tiles show label information: colored dot badges (up to 4 with "+N") overlaid on the thumbnail corner inside a dark capsule, and a compact label chip bar (up to 2 with "+N") beneath the document title. Documents with no labels show neither.
 
 ### Phase 4: Labels as Primary Organization
 Goal: user can organize documents effectively.

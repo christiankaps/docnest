@@ -929,6 +929,12 @@ private struct DocumentThumbnailCell: View {
             thumbnailImage
                 .frame(width: size, height: size * 1.3)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(alignment: .bottomTrailing) {
+                    if !document.labels.isEmpty {
+                        labelBadges
+                            .padding(4)
+                    }
+                }
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
@@ -949,12 +955,58 @@ private struct DocumentThumbnailCell: View {
                     .multilineTextAlignment(.center)
                     .frame(width: size)
             }
+
+            if !isRenaming, !document.labels.isEmpty {
+                miniLabelBar
+                    .frame(width: size)
+                    .clipped()
+            }
         }
         .padding(4)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
         )
+    }
+
+    private var labelBadges: some View {
+        let sorted = document.labels.sorted { $0.sortOrder < $1.sortOrder }
+        let visible = Array(sorted.prefix(4))
+        let extra = sorted.count - visible.count
+        return HStack(spacing: -2) {
+            ForEach(visible) { label in
+                Circle()
+                    .fill(label.labelColor.color)
+                    .frame(width: 10, height: 10)
+                    .overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1))
+            }
+            if extra > 0 {
+                Text("+\(extra)")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.leading, 4)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(.black.opacity(0.5)))
+    }
+
+    private var miniLabelBar: some View {
+        let sorted = document.labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let visible = Array(sorted.prefix(2))
+        let extra = sorted.count - visible.count
+        return HStack(spacing: 4) {
+            ForEach(visible) { label in
+                LabelChip(name: label.name, color: label.labelColor, icon: label.icon, size: .compact)
+            }
+            if extra > 0 {
+                Text("+\(extra)")
+                    .font(AppTypography.labelChip)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .lineLimit(1)
     }
 
     @ViewBuilder
