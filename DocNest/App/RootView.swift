@@ -310,6 +310,10 @@ private struct RootViewDialogsModifier: ViewModifier {
             .onDeleteCommand {
                 coordinator.deleteSelectedDocumentsFromKeyboard()
             }
+            .sheet(isPresented: Bindable(coordinator).isLabelManagerPresented) {
+                LabelManagerSheet()
+                    .environment(coordinator)
+            }
     }
 }
 
@@ -373,6 +377,9 @@ private struct RootViewChangeHandlers: ViewModifier {
                 guard !coordinator.selectedDocuments.isEmpty,
                       !coordinator.isBinSelected else { return }
                 coordinator.isQuickLabelPickerPresented = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .docNestLabelManager)) { _ in
+                coordinator.isLabelManagerPresented = true
             }
             .onDisappear {
                 coordinator.cancelPendingLabelFilter()

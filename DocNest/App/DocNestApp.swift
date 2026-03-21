@@ -39,6 +39,22 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        removeUnwantedEditMenuItems()
+    }
+
+    /// Removes system-injected Edit menu items that are not relevant for this app.
+    private func removeUnwantedEditMenuItems() {
+        guard let mainMenu = NSApplication.shared.mainMenu else { return }
+        let unwantedTitles: Set<String> = ["Writing Tools", "AutoFill"]
+        for menuItem in mainMenu.items {
+            guard let submenu = menuItem.submenu else { continue }
+            for item in submenu.items where unwantedTitles.contains(item.title) {
+                submenu.removeItem(item)
+            }
+        }
+    }
 }
 
 @main
@@ -54,6 +70,10 @@ struct DocNestApp: App {
 
     init() {
         NSWindow.allowsAutomaticWindowTabbing = false
+
+        // Suppress system-injected Edit menu items that are not relevant for this app.
+        UserDefaults.standard.set(true, forKey: "NSDisabledDictationMenuItem")
+        UserDefaults.standard.set(true, forKey: "NSDisabledCharacterPaletteMenuItem")
 
         // Defer services registration until NSApp is fully initialized.
         DispatchQueue.main.async { [servicesProvider] in
@@ -130,6 +150,13 @@ struct DocNestApp: App {
                     NotificationCenter.default.post(name: .docNestQuickLabelPicker, object: nil)
                 }
                 .keyboardShortcut("l", modifiers: [.command])
+
+                Divider()
+
+                Button("Manage Labels\u{2026}") {
+                    NotificationCenter.default.post(name: .docNestLabelManager, object: nil)
+                }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
             }
         }
     }
