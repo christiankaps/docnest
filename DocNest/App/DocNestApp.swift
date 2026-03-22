@@ -36,22 +36,48 @@ extension FocusedValues {
 // MARK: - App Delegate
 
 private final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var menuObserver: Any?
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        removeUnwantedEditMenuItems()
+        cleanUpMenuBar()
+        // SwiftUI rebuilds the menu bar after launch; observe additions and re-clean.
+        menuObserver = NotificationCenter.default.addObserver(
+            forName: NSMenu.didAddItemNotification,
+            object: NSApplication.shared.mainMenu,
+            queue: .main
+        ) { [weak self] _ in
+            self?.cleanUpMenuBar()
+        }
     }
 
-    /// Removes system-injected Edit menu items that are not relevant for this app.
-    private func removeUnwantedEditMenuItems() {
+    /// Performs all menu bar cleanup in a single pass.
+    private func cleanUpMenuBar() {
         guard let mainMenu = NSApplication.shared.mainMenu else { return }
-        let unwantedTitles: Set<String> = ["Writing Tools", "AutoFill"]
+
+        // Remove system-injected Edit sub-items that are not relevant for this app.
+        let unwantedSubItems: Set<String> = ["Writing Tools", "AutoFill"]
         for menuItem in mainMenu.items {
             guard let submenu = menuItem.submenu else { continue }
-            for item in submenu.items where unwantedTitles.contains(item.title) {
+            for item in submenu.items where unwantedSubItems.contains(item.title) {
                 submenu.removeItem(item)
+            }
+        }
+
+        // Remove top-level menus whose contents are empty (replaced with nothing).
+        let unwantedMenus: Set<String> = ["Format", "View", "Help"]
+        for menuItem in mainMenu.items where unwantedMenus.contains(menuItem.title) {
+            mainMenu.removeItem(menuItem)
+        }
+
+        // Strip leading separators from the Window menu.
+        for menuItem in mainMenu.items where menuItem.title == "Window" {
+            guard let submenu = menuItem.submenu else { continue }
+            while let first = submenu.items.first, first.isSeparatorItem {
+                submenu.removeItem(first)
             }
         }
     }
