@@ -30,6 +30,7 @@
 		3FF08EEC2F6D80C400770D38 /* SmartFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FF08EEB2F6D80C400770D38 /* SmartFolder.swift */; };
 		3FF08EEE2F6D80C400770D38 /* ManageSmartFoldersUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FF08EED2F6D80C400770D38 /* ManageSmartFoldersUseCase.swift */; };
 		3FF08EF02F6D826900770D38 /* SmartFolderEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FF08EEF2F6D826900770D38 /* SmartFolderEditorSheet.swift */; };
+		3FFBC7592F704C4600FA359D /* OCRTextExtractionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFBC7582F704C4600FA359D /* OCRTextExtractionService.swift */; };
 		4C1368A6F47101D34D33808A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBBA8006045ACAA798F6A49 /* RootView.swift */; };
 		6332EE665429D0D47E89D7F4 /* ResizeHandleCursorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA07191F675258A004D68388 /* ResizeHandleCursorState.swift */; };
 		6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */; };
@@ -96,6 +97,7 @@
 		3FF08EEB2F6D80C400770D38 /* SmartFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartFolder.swift; sourceTree = "<group>"; };
 		3FF08EED2F6D80C400770D38 /* ManageSmartFoldersUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageSmartFoldersUseCase.swift; sourceTree = "<group>"; };
 		3FF08EEF2F6D826900770D38 /* SmartFolderEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartFolderEditorSheet.swift; sourceTree = "<group>"; };
+		3FFBC7582F704C4600FA359D /* OCRTextExtractionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRTextExtractionService.swift; sourceTree = "<group>"; };
 		45B34DF5ACFF5069169049C6 /* DocNestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestApp.swift; sourceTree = "<group>"; };
 		4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInspectorView.swift; sourceTree = "<group>"; };
 		54801B6E1BCE4A70FCDB2E29 /* PDFViewRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewRepresentable.swift; sourceTree = "<group>"; };
@@ -152,6 +154,7 @@
 			children = (
 				E913A424206DBE20E2C89B02 /* Library */,
 				38435D2BDC8C055FF1387640 /* Preview */,
+				3FFBC7572F704C3500FA359D /* OCR */,
 			);
 			path = Infrastructure;
 			sourceTree = "<group>";
@@ -196,6 +199,14 @@
 				3F67E41D2F66E50C006439C6 /* QuickLookPanelResponder.swift */,
 			);
 			path = Preview;
+			sourceTree = "<group>";
+		};
+		3FFBC7572F704C3500FA359D /* OCR */ = {
+			isa = PBXGroup;
+			children = (
+				3FFBC7582F704C4600FA359D /* OCRTextExtractionService.swift */,
+			);
+			path = OCR;
 			sourceTree = "<group>";
 		};
 		574E3AA1DE04477D8D0EB337 /* Resources */ = {
@@ -464,6 +475,7 @@
 				8D1FC626EFC093CBE2FF7636 /* PDFViewRepresentable.swift in Sources */,
 				3F38EC862F63E3D500389314 /* ThumbnailCache.swift in Sources */,
 				3FDFEB852F6F496F00425275 /* QuickLabelPickerCommand.swift in Sources */,
+				3FFBC7592F704C4600FA359D /* OCRTextExtractionService.swift in Sources */,
 				6332EE665429D0D47E89D7F4 /* ResizeHandleCursorState.swift in Sources */,
 				4C1368A6F47101D34D33808A /* RootView.swift in Sources */,
 				EFE086EED508E58D74F74FD9 /* SearchDocumentsUseCase.swift in Sources */,

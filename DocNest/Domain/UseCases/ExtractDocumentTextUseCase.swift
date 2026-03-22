@@ -10,45 +10,38 @@ enum ExtractDocumentTextUseCase {
     static func backfillAll(
         documents: [DocumentRecord],
         libraryURL: URL,
-        modelContext: ModelContext
+        modelContext: ModelContext,
+        onProgress: (@MainActor (_ completed: Int, _ total: Int, _ currentTitle: String) -> Void)? = nil
     ) async {
-        let pending = documents.filter { $0.fullText == nil && $0.storedFilePath != nil }
+        let pending = documents.filter { $0.fullText == nil && !$0.ocrCompleted && $0.storedFilePath != nil }
         guard !pending.isEmpty else { return }
 
-        let results = await withTaskGroup(
-            of: (Int, String?).self,
-            returning: [(Int, String?)].self
-        ) { group in
-            for (index, document) in pending.enumerated() {
-                guard let storedFilePath = document.storedFilePath else { continue }
-                let fileURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
-                let title = document.title
+        for (index, document) in pending.enumerated() {
+            if Task.isCancelled { break }
 
-                group.addTask {
-                    do {
-                        guard let pdfDocument = PDFDocument(url: fileURL) else {
-                            throw CocoaError(.fileReadCorruptFile)
-                        }
-                        let text = ImportPDFDocumentsUseCase.extractText(from: pdfDocument)
-                        return (index, text)
-                    } catch {
-                        logger.error("Text extraction failed for '\(title)': \(error.localizedDescription)")
-                        return (index, nil)
-                    }
+            guard let storedFilePath = document.storedFilePath else { continue }
+            let fileURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
+            let title = document.title
+
+            onProgress?(index, pending.count, title)
+
+            let text: String? = await Task.detached(priority: .utility) {
+                guard let pdfDocument = PDFDocument(url: fileURL) else {
+                    logger.error("Could not open PDF for '\(title)'")
+                    return nil as String?
                 }
-            }
+                return await OCRTextExtractionService.extractText(from: pdfDocument)
+            }.value
 
-            var collected: [(Int, String?)] = []
-            for await result in group {
-                collected.append(result)
+            if Task.isCancelled { break }
+
+            if let text, !text.isEmpty {
+                document.fullText = text
             }
-            return collected
+            document.ocrCompleted = true
         }
 
-        for (index, text) in results {
-            pending[index].fullText = text
-        }
-
+        onProgress?(pending.count, pending.count, "")
         try? modelContext.save()
     }
 }

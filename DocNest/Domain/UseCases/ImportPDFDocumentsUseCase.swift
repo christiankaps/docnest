@@ -333,6 +333,7 @@ enum ImportPDFDocumentsUseCase {
             storedFilePath: storedFilePath
         )
         record.fullText = metadata.fullText
+        record.ocrCompleted = true
         return record
     }
 
@@ -346,21 +347,32 @@ enum ImportPDFDocumentsUseCase {
 
     private static func importMetadata(for url: URL) async throws -> ImportMetadata {
         let fileURL = url
-        return try await Task.detached(priority: .userInitiated) {
+        let (fileSize, creationDate, contentHash, pdfDocument) = try await Task.detached(priority: .userInitiated) {
             let resourceValues = try fileURL.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
+            let fileSize = Int64(resourceValues.fileSize ?? 0)
+            let creationDate = resourceValues.creationDate
             let contentHash = try hashFile(at: fileURL)
             let pdfDocument = PDFDocument(url: fileURL)
-            let pageCount = pdfDocument?.pageCount ?? 0
-            let fullText = extractText(from: pdfDocument)
-
-            return ImportMetadata(
-                contentHash: contentHash,
-                fileSize: Int64(resourceValues.fileSize ?? 0),
-                pageCount: pageCount,
-                sourceCreatedAt: resourceValues.creationDate,
-                fullText: fullText
-            )
+            return (fileSize, creationDate, contentHash, pdfDocument)
         }.value
+
+        let pageCount = pdfDocument?.pageCount ?? 0
+
+        // Use OCR-aware extraction (fast path for embedded text, Vision fallback for scanned pages)
+        let fullText: String?
+        if let pdfDocument {
+            fullText = await OCRTextExtractionService.extractText(from: pdfDocument)
+        } else {
+            fullText = nil
+        }
+
+        return ImportMetadata(
+            contentHash: contentHash,
+            fileSize: fileSize,
+            pageCount: pageCount,
+            sourceCreatedAt: creationDate,
+            fullText: fullText
+        )
     }
 
     private static func hashFile(at url: URL) throws -> String {
@@ -492,17 +504,6 @@ enum ImportPDFDocumentsUseCase {
         }
 
         return pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
-    }
-
-    static func extractText(from pdfDocument: PDFDocument?) -> String? {
-        guard let pdfDocument, pdfDocument.pageCount > 0 else { return nil }
-        var pages: [String] = []
-        for index in 0..<pdfDocument.pageCount {
-            if let page = pdfDocument.page(at: index), let text = page.string, !text.isEmpty {
-                pages.append(text)
-            }
-        }
-        return pages.isEmpty ? nil : pages.joined(separator: "\n")
     }
 
     private static func normalizedTitle(for url: URL) -> String {

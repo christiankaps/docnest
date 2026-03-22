@@ -561,6 +561,13 @@ struct DocumentListView: View {
 
             Divider()
 
+            Button("Re-extract Text") {
+                guard let libraryURL = coordinator.libraryURL, let modelContext = coordinator.modelContext else { return }
+                coordinator.reExtractText(for: targets, libraryURL: libraryURL, modelContext: modelContext)
+            }
+
+            Divider()
+
             Button("Move to Bin") {
                 coordinator.moveToBin(targets)
             }

@@ -13,6 +13,7 @@ final class DocumentRecord {
     var contentHash: String
     var storedFilePath: String?
     var fullText: String?
+    var ocrCompleted: Bool = false
     var trashedAt: Date?
 
     @Relationship(deleteRule: .nullify, inverse: \LabelTag.documents)

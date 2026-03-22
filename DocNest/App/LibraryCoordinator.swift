@@ -12,6 +12,12 @@ struct ImportProgress {
     let completed: Int
 }
 
+struct OCRProgress {
+    let total: Int
+    let completed: Int
+    let currentTitle: String
+}
+
 struct PendingDroppedLabelAssignment {
     let labelID: PersistentIdentifier
     let documentIDs: Set<PersistentIdentifier>
@@ -43,6 +49,10 @@ final class LibraryCoordinator {
     var isQuickLabelPickerPresented = false
     var isLabelManagerPresented = false
     var labelFilterSelection = DeferredSelectionState<PersistentIdentifier>()
+
+    // MARK: - OCR state
+    private(set) var ocrProgress: OCRProgress?
+    private var activeOCRTask: Task<Void, Never>?
 
     // MARK: - Cached derived state
     private(set) var allLabels: [LabelTag] = []
@@ -513,6 +523,48 @@ final class LibraryCoordinator {
         activeImportTask?.cancel()
         activeImportTask = nil
         importProgress = nil
+    }
+
+    // MARK: - OCR actions
+
+    func runOCRBackfill(documents: [DocumentRecord], libraryURL: URL, modelContext: ModelContext) {
+        guard activeOCRTask == nil else { return }
+
+        activeOCRTask = Task { @MainActor [weak self] in
+            await ExtractDocumentTextUseCase.backfillAll(
+                documents: documents,
+                libraryURL: libraryURL,
+                modelContext: modelContext
+            ) { [weak self] completed, total, title in
+                self?.ocrProgress = OCRProgress(total: total, completed: completed, currentTitle: title)
+            }
+
+            self?.ocrProgress = nil
+            self?.activeOCRTask = nil
+        }
+    }
+
+    func reExtractText(for documents: [DocumentRecord], libraryURL: URL, modelContext: ModelContext) {
+        guard !documents.isEmpty else { return }
+
+        // Mark documents for re-extraction by clearing their text and ocrCompleted flag
+        for document in documents {
+            document.fullText = nil
+            document.ocrCompleted = false
+        }
+        try? modelContext.save()
+
+        // If an OCR task is already running, the backfill will pick these up.
+        // Otherwise, start a new backfill.
+        if activeOCRTask == nil {
+            runOCRBackfill(documents: documents, libraryURL: libraryURL, modelContext: modelContext)
+        }
+    }
+
+    func cancelOCR() {
+        activeOCRTask?.cancel()
+        activeOCRTask = nil
+        ocrProgress = nil
     }
 
     func shareableFileURLs(from documents: [DocumentRecord]) -> [URL] {

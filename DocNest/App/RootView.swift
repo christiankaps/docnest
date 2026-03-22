@@ -60,11 +60,7 @@ struct RootView: View {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
             coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
-            await ExtractDocumentTextUseCase.backfillAll(
-                documents: allDocuments,
-                libraryURL: libraryURL,
-                modelContext: modelContext
-            )
+            coordinator.runOCRBackfill(documents: allDocuments, libraryURL: libraryURL, modelContext: modelContext)
             // Import any URLs that arrived before the library was ready
             let pending = librarySession.drainPendingImportURLs()
             if !pending.isEmpty {
@@ -127,6 +123,13 @@ struct RootView: View {
                 if let progress = coordinator.importProgress {
                     ImportProgressIndicator(progress: progress) {
                         coordinator.cancelImport()
+                    }
+                    .transition(.opacity)
+                }
+
+                if let ocrProgress = coordinator.ocrProgress {
+                    OCRProgressIndicator(progress: ocrProgress) {
+                        coordinator.cancelOCR()
                     }
                     .transition(.opacity)
                 }
@@ -518,6 +521,31 @@ private struct ImportProgressIndicator: View {
             .help("Stop importing")
         }
         .help("Importing documents\u{2026}")
+    }
+}
+
+private struct OCRProgressIndicator: View {
+    let progress: OCRProgress
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ProgressView()
+                .controlSize(.small)
+
+            Text("OCR \(progress.completed)/\(progress.total)")
+                .font(.system(size: 11).monospacedDigit())
+                .foregroundStyle(.secondary)
+
+            Button(action: onCancel) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Stop OCR extraction")
+        }
+        .help("Extracting text\u{2026} \(progress.currentTitle)")
     }
 }
 

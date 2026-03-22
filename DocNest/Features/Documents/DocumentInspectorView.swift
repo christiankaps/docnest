@@ -210,6 +210,8 @@ struct DocumentInspectorView: View {
 
             labelSection(for: document)
 
+            textExtractionSection(for: document)
+
             if !document.contentHash.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Content Hash")
@@ -322,6 +324,48 @@ struct DocumentInspectorView: View {
                 }
                 .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func textExtractionSection(for document: DocumentRecord) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Text Extraction")
+                .font(AppTypography.sectionTitle)
+
+            HStack(spacing: 6) {
+                if document.ocrCompleted {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    if let text = document.fullText, !text.isEmpty {
+                        Text("Extracted (\(text.count) characters)")
+                            .font(AppTypography.body)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("No text found")
+                            .font(AppTypography.body)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if document.fullText != nil {
+                    Image(systemName: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                    Text("Legacy extraction (no OCR)")
+                        .font(AppTypography.body)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Image(systemName: "clock")
+                        .foregroundStyle(.orange)
+                    Text("Pending extraction")
+                        .font(AppTypography.body)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Button("Re-extract Text") {
+                guard let libraryURL = coordinator.libraryURL, let modelContext = coordinator.modelContext else { return }
+                coordinator.reExtractText(for: [document], libraryURL: libraryURL, modelContext: modelContext)
+            }
+            .disabled(document.storedFilePath == nil)
         }
     }
 
