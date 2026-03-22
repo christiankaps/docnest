@@ -22,6 +22,12 @@
 		3F908CD42F6E032200CE6FC4 /* LabelGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F908CD32F6E032200CE6FC4 /* LabelGroup.swift */; };
 		3F908CD62F6E037F00CE6FC4 /* ManageLabelGroupsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F908CD52F6E037F00CE6FC4 /* ManageLabelGroupsUseCase.swift */; };
 		3F908CD82F6E03CF00CE6FC4 /* LabelEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F908CD72F6E03CF00CE6FC4 /* LabelEditorSheet.swift */; };
+		3FA039F52F709CCA0005D532 /* WatchFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039F42F709CCA0005D532 /* WatchFolder.swift */; };
+		3FA039F72F709CF60005D532 /* ManageWatchFoldersUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039F62F709CF60005D532 /* ManageWatchFoldersUseCase.swift */; };
+		3FA039F92F709D0C0005D532 /* FolderMonitorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039F82F709D0C0005D532 /* FolderMonitorService.swift */; };
+		3FA039FB2F709D530005D532 /* WatchFolderEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039FA2F709D530005D532 /* WatchFolderEditorSheet.swift */; };
+		3FA039FD2F709FAB0005D532 /* WatchFolderSettingsCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039FC2F709FAB0005D532 /* WatchFolderSettingsCommand.swift */; };
+		3FA039FF2F709FC00005D532 /* WatchFolderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039FE2F709FC00005D532 /* WatchFolderSettingsView.swift */; };
 		3FDFEB852F6F496F00425275 /* QuickLabelPickerCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FDFEB842F6F496F00425275 /* QuickLabelPickerCommand.swift */; };
 		3FDFEB872F6F49B800425275 /* QuickLabelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FDFEB862F6F49B800425275 /* QuickLabelPickerView.swift */; };
 		3FDFEB892F6F4E6B00425275 /* LabelManagerCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FDFEB882F6F4E6B00425275 /* LabelManagerCommand.swift */; };
@@ -90,6 +96,12 @@
 		3F908CD32F6E032200CE6FC4 /* LabelGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelGroup.swift; sourceTree = "<group>"; };
 		3F908CD52F6E037F00CE6FC4 /* ManageLabelGroupsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageLabelGroupsUseCase.swift; sourceTree = "<group>"; };
 		3F908CD72F6E03CF00CE6FC4 /* LabelEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelEditorSheet.swift; sourceTree = "<group>"; };
+		3FA039F42F709CCA0005D532 /* WatchFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolder.swift; sourceTree = "<group>"; };
+		3FA039F62F709CF60005D532 /* ManageWatchFoldersUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageWatchFoldersUseCase.swift; sourceTree = "<group>"; };
+		3FA039F82F709D0C0005D532 /* FolderMonitorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderMonitorService.swift; sourceTree = "<group>"; };
+		3FA039FA2F709D530005D532 /* WatchFolderEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderEditorSheet.swift; sourceTree = "<group>"; };
+		3FA039FC2F709FAB0005D532 /* WatchFolderSettingsCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderSettingsCommand.swift; sourceTree = "<group>"; };
+		3FA039FE2F709FC00005D532 /* WatchFolderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderSettingsView.swift; sourceTree = "<group>"; };
 		3FDFEB842F6F496F00425275 /* QuickLabelPickerCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLabelPickerCommand.swift; sourceTree = "<group>"; };
 		3FDFEB862F6F49B800425275 /* QuickLabelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLabelPickerView.swift; sourceTree = "<group>"; };
 		3FDFEB882F6F4E6B00425275 /* LabelManagerCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelManagerCommand.swift; sourceTree = "<group>"; };
@@ -147,6 +159,7 @@
 				3F67E41F2F67640F006439C6 /* ExportDocumentsUseCase.swift */,
 				3FF08EED2F6D80C400770D38 /* ManageSmartFoldersUseCase.swift */,
 				3F908CD52F6E037F00CE6FC4 /* ManageLabelGroupsUseCase.swift */,
+				3FA039F62F709CF60005D532 /* ManageWatchFoldersUseCase.swift */,
 			);
 			path = UseCases;
 			sourceTree = "<group>";
@@ -168,6 +181,8 @@
 				3FF08EEF2F6D826900770D38 /* SmartFolderEditorSheet.swift */,
 				3F908CD72F6E03CF00CE6FC4 /* LabelEditorSheet.swift */,
 				3FDFEB8A2F6F4EC800425275 /* LabelManagerSheet.swift */,
+				3FA039FA2F709D530005D532 /* WatchFolderEditorSheet.swift */,
+				3FA039FE2F709FC00005D532 /* WatchFolderSettingsView.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -281,6 +296,7 @@
 				DFFA402AACB7259B8D838914 /* Design */,
 				3FDFEB842F6F496F00425275 /* QuickLabelPickerCommand.swift */,
 				3FDFEB882F6F4E6B00425275 /* LabelManagerCommand.swift */,
+				3FA039FC2F709FAB0005D532 /* WatchFolderSettingsCommand.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -292,6 +308,7 @@
 				23AC657950D272E01D18DE75 /* LabelTag.swift */,
 				3FF08EEB2F6D80C400770D38 /* SmartFolder.swift */,
 				3F908CD32F6E032200CE6FC4 /* LabelGroup.swift */,
+				3FA039F42F709CCA0005D532 /* WatchFolder.swift */,
 			);
 			path = Entities;
 			sourceTree = "<group>";
@@ -319,6 +336,7 @@
 				3B0FFAF2C02193A2F504BDB3 /* DocumentLibraryService.swift */,
 				F35D29609AD07395CE3098C2 /* DocumentStorageService.swift */,
 				3FFBC75A2F704EDC00FA359D /* DocNestSchemaVersioning.swift */,
+				3FA039F82F709D0C0005D532 /* FolderMonitorService.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -450,6 +468,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3FA039FD2F709FAB0005D532 /* WatchFolderSettingsCommand.swift in Sources */,
 				3F67E41C2F66E502006439C6 /* QuickLookCoordinator.swift in Sources */,
 				77424B1901611FDF26B6EBA6 /* AppSplitViewLayout.swift in Sources */,
 				3EB178A6D0FFD0F4CB64DA1D /* AppTypography.swift in Sources */,
@@ -461,13 +480,17 @@
 				6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */,
 				3FF08EEC2F6D80C400770D38 /* SmartFolder.swift in Sources */,
 				3FFBC75B2F704EDC00FA359D /* DocNestSchemaVersioning.swift in Sources */,
+				3FA039FB2F709D530005D532 /* WatchFolderEditorSheet.swift in Sources */,
 				3F908CD42F6E032200CE6FC4 /* LabelGroup.swift in Sources */,
 				BAD3422FCC9D99B891471458 /* DocumentLibraryService.swift in Sources */,
 				2423CFECF69765FB09B4592A /* DocumentListView.swift in Sources */,
+				3FA039F92F709D0C0005D532 /* FolderMonitorService.swift in Sources */,
 				3FDFEB8B2F6F4EC800425275 /* LabelManagerSheet.swift in Sources */,
+				3FA039FF2F709FC00005D532 /* WatchFolderSettingsView.swift in Sources */,
 				0C0958A98ED0BC8389BBA0C9 /* DocumentRecord.swift in Sources */,
 				A35D8B1AEE7796BDCF11A938 /* DocumentStorageService.swift in Sources */,
 				3FF08EEE2F6D80C400770D38 /* ManageSmartFoldersUseCase.swift in Sources */,
+				3FA039F72F709CF60005D532 /* ManageWatchFoldersUseCase.swift in Sources */,
 				FE3E50539F4B142C71550969 /* ImportPDFDocumentsUseCase.swift in Sources */,
 				BE2517F95F869DB2842C1F08 /* LabelChip.swift in Sources */,
 				3F363A692F6A0A9B008A3A41 /* AboutWindowController.swift in Sources */,
@@ -491,6 +514,7 @@
 				7A1E697690A2764E2A40E8BB /* SearchToolbarField.swift in Sources */,
 				3FDFEB872F6F49B800425275 /* QuickLabelPickerView.swift in Sources */,
 				3FE52D862F6B5EBB007DB86E /* ServicesProvider.swift in Sources */,
+				3FA039F52F709CCA0005D532 /* WatchFolder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -24,6 +24,9 @@ struct RootView: View {
     @Query(sort: \LabelGroup.sortOrder, order: .forward)
     private var allLabelGroups: [LabelGroup]
 
+    @Query(sort: \WatchFolder.sortOrder, order: .forward)
+    private var allWatchFolders: [WatchFolder]
+
     var body: some View {
         HStack(spacing: 0) {
             LibrarySidebarView()
@@ -49,7 +52,7 @@ struct RootView: View {
         .toolbar { toolbarContent }
         .modifier(RootViewImportModifier(coordinator: coordinator))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
-        .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups))
+        .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders))
         .focusedSceneValue(\.exportDocumentsAction) {
             coordinator.exportDocuments(coordinator.selectedDocuments)
         }
@@ -59,8 +62,9 @@ struct RootView: View {
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
-            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
+            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders)
             coordinator.runOCRBackfill(documents: allDocuments, libraryURL: libraryURL, modelContext: modelContext)
+            coordinator.setupWatchFolderMonitoring()
             // Import any URLs that arrived before the library was ready
             let pending = librarySession.drainPendingImportURLs()
             if !pending.isEmpty {
@@ -317,6 +321,10 @@ private struct RootViewDialogsModifier: ViewModifier {
                 LabelManagerSheet()
                     .environment(coordinator)
             }
+            .sheet(isPresented: Bindable(coordinator).isWatchFolderSettingsPresented) {
+                WatchFolderSettingsView()
+                    .environment(coordinator)
+            }
     }
 }
 
@@ -326,6 +334,7 @@ private struct RootViewChangeHandlers: ViewModifier {
     let allLabels: [LabelTag]
     let allSmartFolders: [SmartFolder]
     let allLabelGroups: [LabelGroup]
+    let allWatchFolders: [WatchFolder]
 
     /// Lightweight fingerprint that changes when documents are added, removed,
     /// trashed/restored, or have their labels modified -- covering mutations
@@ -371,6 +380,48 @@ private struct RootViewChangeHandlers: ViewModifier {
         return hasher.finalize()
     }
 
+    private var watchFolderFingerprint: Int {
+        var hasher = Hasher()
+        for folder in allWatchFolders {
+            hasher.combine(folder.persistentModelID)
+            hasher.combine(folder.name)
+            hasher.combine(folder.folderPath)
+            hasher.combine(folder.isEnabled)
+            hasher.combine(folder.labelIDs)
+            hasher.combine(folder.sortOrder)
+        }
+        return hasher.finalize()
+    }
+
+    private func reingest() {
+        coordinator.ingest(
+            allDocuments: allDocuments,
+            allLabels: allLabels,
+            allSmartFolders: allSmartFolders,
+            allLabelGroups: allLabelGroups,
+            allWatchFolders: allWatchFolders
+        )
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(ChangeHandlersNotifications(coordinator: coordinator))
+            .modifier(ChangeHandlersData(
+                coordinator: coordinator,
+                reingest: reingest,
+                allLabels: allLabels,
+                documentFingerprint: documentFingerprint,
+                labelFingerprint: labelFingerprint,
+                smartFolderFingerprint: smartFolderFingerprint,
+                labelGroupFingerprint: labelGroupFingerprint,
+                watchFolderFingerprint: watchFolderFingerprint
+            ))
+    }
+}
+
+private struct ChangeHandlersNotifications: ViewModifier {
+    let coordinator: LibraryCoordinator
+
     func body(content: Content) -> some View {
         content
             .onReceive(NotificationCenter.default.publisher(for: .docNestFocusSearch)) { _ in
@@ -384,8 +435,12 @@ private struct RootViewChangeHandlers: ViewModifier {
             .onReceive(NotificationCenter.default.publisher(for: .docNestLabelManager)) { _ in
                 coordinator.isLabelManagerPresented = true
             }
+            .onReceive(NotificationCenter.default.publisher(for: .docNestWatchFolderSettings)) { _ in
+                coordinator.isWatchFolderSettingsPresented = true
+            }
             .onDisappear {
                 coordinator.cancelPendingLabelFilter()
+                coordinator.tearDownWatchFolderMonitoring()
             }
             .onChange(of: coordinator.labelFilterSelection.visualSelection) { _, newSelection in
                 coordinator.scheduleLabelFilterApply(immediately: newSelection.isEmpty)
@@ -405,18 +460,37 @@ private struct RootViewChangeHandlers: ViewModifier {
                 coordinator.recomputeFilteredDocuments()
                 coordinator.pruneSelectedDocumentIDs()
             }
+    }
+}
+
+private struct ChangeHandlersData: ViewModifier {
+    let coordinator: LibraryCoordinator
+    let reingest: () -> Void
+    let allLabels: [LabelTag]
+    let documentFingerprint: Int
+    let labelFingerprint: Int
+    let smartFolderFingerprint: Int
+    let labelGroupFingerprint: Int
+    let watchFolderFingerprint: Int
+
+    func body(content: Content) -> some View {
+        content
             .onChange(of: documentFingerprint) {
-                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
+                reingest()
             }
             .onChange(of: labelFingerprint) {
                 coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
-                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
+                reingest()
             }
             .onChange(of: smartFolderFingerprint) {
-                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
+                reingest()
             }
             .onChange(of: labelGroupFingerprint) {
-                coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups)
+                reingest()
+            }
+            .onChange(of: watchFolderFingerprint) {
+                reingest()
+                coordinator.refreshWatchFolderMonitors()
             }
     }
 }

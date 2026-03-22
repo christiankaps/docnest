@@ -210,19 +210,35 @@ enum DocNestSchemaV2: VersionedSchema {
     }
 }
 
+// MARK: - Schema V3
+// Adds WatchFolder entity.
+
+enum DocNestSchemaV3: VersionedSchema {
+    static var versionIdentifier = Schema.Version(3, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [DocumentRecord.self, LabelTag.self, SmartFolder.self, LabelGroup.self, WatchFolder.self]
+    }
+}
+
 // MARK: - Migration Plan
 
 enum DocNestMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [DocNestSchemaV1.self, DocNestSchemaV2.self]
+        [DocNestSchemaV1.self, DocNestSchemaV2.self, DocNestSchemaV3.self]
     }
 
     static var stages: [MigrationStage] {
-        [migrateV1toV2]
+        [migrateV1toV2, migrateV2toV3]
     }
 
     static let migrateV1toV2 = MigrationStage.lightweight(
         fromVersion: DocNestSchemaV1.self,
         toVersion: DocNestSchemaV2.self
+    )
+
+    static let migrateV2toV3 = MigrationStage.lightweight(
+        fromVersion: DocNestSchemaV2.self,
+        toVersion: DocNestSchemaV3.self
     )
 }

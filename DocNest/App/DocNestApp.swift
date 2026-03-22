@@ -157,6 +157,10 @@ struct DocNestApp: App {
                     NotificationCenter.default.post(name: .docNestLabelManager, object: nil)
                 }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
+
+                Button("Watch Folders\u{2026}") {
+                    NotificationCenter.default.post(name: .docNestWatchFolderSettings, object: nil)
+                }
             }
         }
     }

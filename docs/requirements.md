@@ -79,6 +79,9 @@ A saved label combination that appears as a virtual folder in the sidebar, for e
 ### 5.5 Label Group
 An optional organizational container for labels in the sidebar. Label groups let users cluster related labels (e.g. a "Finance" group containing "Invoices", "Tax", "Receipts"). Groups are purely a sidebar display concept — they do not affect label filtering, smart folder matching, or document queries.
 
+### 5.6 Watch Folder
+A user-configured directory on the local filesystem that the app monitors for new PDF files. When new PDFs appear in a watch folder, they are automatically imported into the library. Each watch folder can optionally auto-assign a set of labels to imported documents. Watch folders are a library-level setting managed from the app menu bar, not displayed in the sidebar.
+
 ## 6. Functional Requirements
 
 ### 6.1 Library Management
@@ -268,6 +271,22 @@ An optional organizational container for labels in the sidebar. Label groups let
 - Repair or reindex functionality for a library.
 - Import and metadata changes should be transactional or crash-robust.
 
+### 6.8 Watch Folders
+
+#### Must
+- User can add, edit, pause/resume, and delete watch folders from a dedicated settings sheet accessible via the Edit menu ("Watch Folders…").
+- Each watch folder points to a local directory and monitors it for new PDF files using `DispatchSource.makeFileSystemObjectSource` with `O_EVTONLY` file descriptors.
+- When new PDFs appear in a watched directory, they are automatically imported through the standard import pipeline (same hash-based deduplication, file storage, and metadata capture).
+- Each watch folder can optionally auto-assign a set of labels to imported documents.
+- Watch folders can be individually enabled or disabled (paused). Disabled watch folders stop filesystem monitoring.
+- The settings sheet shows each watch folder's status: monitoring (green), paused, or path not found (warning).
+- Watch folder monitoring performs an initial scan on startup to catch files added while the app was closed.
+- Monitoring is shallow (top-level directory only), filtering for `.pdf` file extension.
+- Watch folder monitoring starts automatically when a library is opened and tears down when the library is closed or the app exits.
+
+#### Should
+- Context menu on each watch folder row offers Edit, Pause/Resume, Reveal in Finder, and Delete.
+
 ## 7. Non-Functional Requirements
 
 ### 7.1 Platform
@@ -376,7 +395,16 @@ My Documents.docnestlibrary/
 - name
 - sortOrder
 
-### 9.6 Optional Later Entities
+### 9.6 Watch Folder Entity
+- id
+- name
+- icon (optional emoji)
+- folderPath (absolute filesystem path, stored as String)
+- isEnabled (defaults to true)
+- labelIDs (array of label UUIDs for auto-assignment)
+- sortOrder
+
+### 9.7 Optional Later Entities
 - CustomFieldDefinition
 - ImportJob
 - AuditEvent
@@ -384,7 +412,7 @@ My Documents.docnestlibrary/
 ## 10. UX Requirements
 
 ### 10.1 Information Architecture
-- Sidebar for library, smart folders, and labels.
+- Sidebar for library, smart folders, and labels. Watch folders are a library-level setting and are not shown in the sidebar; they are managed via the Edit menu.
 - Main area for document list.
 - Detail/preview area for selected document.
 - Layout must scale meaningfully in normal window mode and fullscreen.
@@ -453,7 +481,7 @@ Goal: app can create and open libraries cleanly.
 Current state:
 - Library manifest includes a `formatVersion` field. New libraries are created with the current format version.
 - On open, the app validates the library structure and decodes the manifest. If the manifest version is older than the app's current version, sequential migration steps are applied and the manifest is rewritten.
-- SwiftData schema versioning is implemented via `DocNestSchemaV1`, `DocNestSchemaV2`, and `DocNestMigrationPlan` in `DocNestSchemaVersioning.swift`. The `ModelContainer` is opened with the migration plan. V1→V2 is a lightweight migration (adds `ocrCompleted: Bool` to `DocumentRecord`).
+- SwiftData schema versioning is implemented via `DocNestSchemaV1`, `DocNestSchemaV2`, `DocNestSchemaV3`, and `DocNestMigrationPlan` in `DocNestSchemaVersioning.swift`. The `ModelContainer` is opened with the migration plan. V1→V2 is a lightweight migration (adds `ocrCompleted: Bool` to `DocumentRecord`). V2→V3 is a lightweight migration (adds `WatchFolder` entity).
 
 ### Phase 2: Import Pipeline
 Goal: PDFs are imported robustly into library.
@@ -578,6 +606,14 @@ Current state:
 - Creating a smart folder pre-fills from the currently active label filters.
 - Dragging documents onto a smart folder row assigns the folder's labels to those documents.
 - Importing files while a smart folder is selected auto-assigns the folder's labels to imported documents.
+- Watch folders are implemented as a library-level setting accessible via "Watch Folders…" in the Edit menu.
+- Each watch folder monitors a local directory for new PDFs using `DispatchSource.makeFileSystemObjectSource` with `O_EVTONLY` file descriptors and `.write` event masks.
+- New PDFs are imported through the standard `ImportPDFDocumentsUseCase` pipeline with hash-based deduplication.
+- Watch folders support optional label auto-assignment to imported documents.
+- Watch folders can be individually paused/resumed. The settings sheet shows per-folder status (monitoring, paused, path not found).
+- An initial scan on startup catches files added while the app was closed.
+- Watch folder configuration is persisted via SwiftData (`WatchFolder` entity, schema V3).
+- The editor sheet provides name, emoji icon, folder path (via NSOpenPanel), enable toggle, and label auto-assign checkboxes.
 
 ### Phase 6: Data Integrity and Operational Stability
 Goal: app is production-usable and fault-tolerant.
@@ -592,6 +628,7 @@ Goal: app is production-usable and fault-tolerant.
 - Extended metadata fields.
 - Sync.
 - Import of additional file types.
+- Recursive watch folder scanning (currently shallow, top-level only).
 
 ## 12. MVP Definition
 

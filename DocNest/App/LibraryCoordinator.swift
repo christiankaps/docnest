@@ -24,6 +24,12 @@ struct PendingDroppedLabelAssignment {
     let alreadyAssignedCount: Int
 }
 
+enum WatchFolderStatus {
+    case monitoring
+    case paused
+    case pathInvalid
+}
+
 @MainActor
 @Observable
 final class LibraryCoordinator {
@@ -48,6 +54,7 @@ final class LibraryCoordinator {
     var pendingDroppedLabelAssignment: PendingDroppedLabelAssignment?
     var isQuickLabelPickerPresented = false
     var isLabelManagerPresented = false
+    var isWatchFolderSettingsPresented = false
     var labelFilterSelection = DeferredSelectionState<PersistentIdentifier>()
 
     // MARK: - OCR state
@@ -59,6 +66,8 @@ final class LibraryCoordinator {
     private(set) var allLabelGroups: [LabelGroup] = []
     private(set) var allSmartFolders: [SmartFolder] = []
     private(set) var smartFolderCounts: [PersistentIdentifier: Int] = [:]
+    private(set) var allWatchFolders: [WatchFolder] = []
+    private(set) var watchFolderStatuses: [UUID: WatchFolderStatus] = [:]
     private(set) var activeDocuments: [DocumentRecord] = []
     private(set) var trashedDocuments: [DocumentRecord] = []
     private(set) var filteredDocuments: [DocumentRecord] = []
@@ -68,6 +77,7 @@ final class LibraryCoordinator {
 
     // MARK: - Internal
     private var activeImportTask: Task<Void, Never>?
+    private let folderMonitorService = FolderMonitorService()
     private var pendingLabelFilterApplyTask: Task<Void, Never>?
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
     let recentDocumentLimit = 10
@@ -109,10 +119,11 @@ final class LibraryCoordinator {
 
     // MARK: - Data ingestion
 
-    func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag], allSmartFolders: [SmartFolder] = [], allLabelGroups: [LabelGroup] = []) {
+    func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag], allSmartFolders: [SmartFolder] = [], allLabelGroups: [LabelGroup] = [], allWatchFolders: [WatchFolder] = []) {
         self.allLabels = allLabels
         self.allSmartFolders = allSmartFolders
         self.allLabelGroups = allLabelGroups
+        self.allWatchFolders = allWatchFolders
 
         var active: [DocumentRecord] = []
         var trashed: [DocumentRecord] = []
@@ -613,6 +624,74 @@ final class LibraryCoordinator {
         labelFilterSelection.appliedSelection.compactMap { persistentID in
             allLabels.first(where: { $0.persistentModelID == persistentID })?.id
         }
+    }
+
+    // MARK: - Watch folder monitoring
+
+    func setupWatchFolderMonitoring() {
+        folderMonitorService.onNewPDFsDetected = { [weak self] urls, labelIDs in
+            self?.importFromWatchFolder(urls: urls, labelIDs: labelIDs)
+        }
+        refreshWatchFolderMonitors()
+    }
+
+    func refreshWatchFolderMonitors() {
+        for folder in allWatchFolders {
+            if folder.isEnabled && folderMonitorService.folderExists(at: folder.folderPath) {
+                if !folderMonitorService.isMonitoring(id: folder.id) {
+                    folderMonitorService.startMonitoring(folder)
+                } else {
+                    folderMonitorService.updateLabelIDs(for: folder.id, labelIDs: folder.labelIDs)
+                }
+            } else {
+                folderMonitorService.stopMonitoring(id: folder.id)
+            }
+        }
+
+        // Stop monitors for watch folders that have been deleted
+        let currentIDs = Set(allWatchFolders.map(\.id))
+        for folder in allWatchFolders where !currentIDs.contains(folder.id) {
+            folderMonitorService.stopMonitoring(id: folder.id)
+        }
+
+        recomputeWatchFolderStatuses()
+    }
+
+    func tearDownWatchFolderMonitoring() {
+        folderMonitorService.stopAll()
+    }
+
+    private func importFromWatchFolder(urls: [URL], labelIDs: [UUID]) {
+        guard let modelContext, let libraryURL else { return }
+
+        let labelsToAssign = allLabels.filter { labelIDs.contains($0.id) }
+
+        Task { @MainActor [weak self] in
+            let result = await ImportPDFDocumentsUseCase.execute(
+                urls: urls,
+                into: libraryURL,
+                autoAssignLabels: labelsToAssign,
+                using: modelContext
+            )
+
+            if result.importedCount > 0 {
+                self?.importSummaryMessage = "Watch folder: imported \(result.importedCount) document\(result.importedCount == 1 ? "" : "s")."
+            }
+        }
+    }
+
+    private func recomputeWatchFolderStatuses() {
+        var statuses: [UUID: WatchFolderStatus] = [:]
+        for folder in allWatchFolders {
+            if !folderMonitorService.folderExists(at: folder.folderPath) {
+                statuses[folder.id] = .pathInvalid
+            } else if !folder.isEnabled {
+                statuses[folder.id] = .paused
+            } else {
+                statuses[folder.id] = .monitoring
+            }
+        }
+        watchFolderStatuses = statuses
     }
 
     // MARK: - Binding helpers
