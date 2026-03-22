@@ -56,7 +56,6 @@ The app should feel local, fast, and trustworthy. Cloud features are optional fu
 - Solid metadata persistence and consistency checks.
 
 ### 4.2 Explicitly Out of Scope for v1
-- OCR pipeline for image files or scanned PDFs.
 - iCloud sync or multi-device sync.
 - Collaboration and multi-user support.
 - Automatic ML/AI classification.
@@ -102,6 +101,7 @@ An optional organizational container for labels in the sidebar. Label groups let
 - The .docnestlibrary package uses a dedicated file icon in Finder and in macOS open/save panels.
 - App provides a "Show in Finder" action for libraries and individual documents.
 - The library manifest includes a format version number. When opening a library created by an older app version, the app detects the version mismatch and runs any necessary migration steps before loading the library. After migration, the manifest is updated to the current version.
+- The SwiftData schema uses `VersionedSchema` and `SchemaMigrationPlan` to manage database evolution across app versions. Each schema version is captured as a full model snapshot. The `ModelContainer` is opened with the migration plan so that older databases are migrated forward automatically. Lightweight migrations (new columns with defaults) use `MigrationStage.lightweight`; breaking changes use `MigrationStage.custom`.
 
 ### 6.2 Document Import
 
@@ -238,7 +238,12 @@ An optional organizational container for labels in the sidebar. Label groups let
 
 #### v1 Assumption
 - For PDFs with extractable text, embedded text is indexed.
-- OCR for image PDFs is not part of v1.
+- For scanned or image-based PDFs, Vision framework OCR extracts text using VNRecognizeTextRequest with accurate recognition level. Pages with embedded text use the fast PDFKit path; pages without embedded text are rendered at 300 DPI and processed through OCR. Pages are processed sequentially to manage memory.
+- OCR runs during import (new documents are fully extracted before the import completes) and as a background backfill on app launch for documents not yet processed.
+- A toolbar progress indicator shows OCR backfill progress (document count and cancel button) next to the search bar.
+- Each document tracks an `ocrCompleted` flag to prevent infinite retry on genuinely blank documents.
+- Users can manually trigger re-extraction via "Re-extract Text" in the document context menu or the inspector's Text Extraction section.
+- The inspector shows per-document OCR status: extracted character count, "No text found", "Legacy extraction (no OCR)", or "Pending extraction".
 
 ### 6.6 Metadata Editing
 
@@ -343,6 +348,8 @@ My Documents.docnestlibrary/
 - importedAt
 - pageCount
 - fileSize
+- fullText (extracted PDF text including OCR)
+- ocrCompleted (whether OCR extraction has been attempted)
 - isDeleted or status field if soft delete is used
 
 ### 9.2 Label Entity
@@ -446,6 +453,7 @@ Goal: app can create and open libraries cleanly.
 Current state:
 - Library manifest includes a `formatVersion` field. New libraries are created with the current format version.
 - On open, the app validates the library structure and decodes the manifest. If the manifest version is older than the app's current version, sequential migration steps are applied and the manifest is rewritten.
+- SwiftData schema versioning is implemented via `DocNestSchemaV1`, `DocNestSchemaV2`, and `DocNestMigrationPlan` in `DocNestSchemaVersioning.swift`. The `ModelContainer` is opened with the migration plan. V1→V2 is a lightweight migration (adds `ocrCompleted: Bool` to `DocumentRecord`).
 
 ### Phase 2: Import Pipeline
 Goal: PDFs are imported robustly into library.
@@ -545,6 +553,7 @@ Current state:
 - Labels can be moved into a group by dragging onto the group header or via the group picker in the label editor sheet.
 - Group order is reorderable and persisted via sortOrder field.
 - Quick label picker (Cmd+L) provides a floating overlay for fast keyboard-driven label assignment. The picker includes a type-ahead search field that filters labels, arrow key navigation, and Enter to toggle labels on selected documents. Labels show assignment state indicators (checkmark for all, dash for partial). When not filtering, labels display grouped; when typing, the list is flat. The picker only opens when documents are selected and not in Bin.
+- Label Manager (Cmd+Shift+L, also accessible via Edit menu "Manage Labels…") provides a two-panel master-detail sheet for centralized label and group management. Left panel shows all labels organized by groups with native multi-select (Cmd+Click, Shift+Click). Right panel is context-sensitive: single-label editor, multi-selection bulk actions, create-new-label form, or empty state. Footer has +/- buttons for creating labels/groups and deleting selected items. Edits auto-save on change (color, icon, group) or on Enter (name).
 
 ### Phase 5: Search and Retrieval
 Goal: users find documents quickly.
@@ -559,7 +568,7 @@ Current state:
 - Search filters live across title, original filename, label names, and extracted PDF full text.
 - Multi-word search is token-based; document remains visible only if all terms are found across searchable metadata and full text.
 - Search text and label filters can be combined and operate on the same document list.
-- PDF text is extracted via PDFKit during import and stored in the document model. Existing documents without extracted text are backfilled on app launch.
+- PDF text extraction uses a two-tier approach: PDFKit for pages with embedded text (fast path) and Vision framework OCR for scanned/image pages (fallback). Text is extracted during import and stored in the document model. Existing documents without extracted text are backfilled on app launch with a toolbar progress indicator. Users can manually re-extract text via context menu or inspector.
 - Smart folders are implemented as saved label collections persisted via SwiftData.
 - Smart folders appear in their own sidebar section between Library and Labels, with create (+), edit, delete, and drag-to-reorder.
 - Selecting a smart folder highlights the corresponding labels in the sidebar and shows only documents matching all of the folder's labels.
@@ -579,7 +588,6 @@ Goal: app is production-usable and fault-tolerant.
 - Load tests with larger libraries.
 
 ### Phase 7: Post-v1 Extensions
-- OCR.
 - Rule-based label suggestions.
 - Extended metadata fields.
 - Sync.

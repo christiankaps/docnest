@@ -169,11 +169,11 @@ enum DocumentLibraryService {
             cloudKitDatabase: .none
         )
 
+        let schema = Schema(versionedSchema: DocNestSchemaV2.self)
+
         return try ModelContainer(
-            for: DocumentRecord.self,
-            LabelTag.self,
-            SmartFolder.self,
-            LabelGroup.self,
+            for: schema,
+            migrationPlan: DocNestMigrationPlan.self,
             configurations: configuration
         )
     }
