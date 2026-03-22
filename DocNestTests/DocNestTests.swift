@@ -225,10 +225,14 @@ final class DocNestTests: XCTestCase {
             at: tempRoot.appendingPathComponent("LockTest")
         )
 
-        // Simulate a lock from a different process
+        // Simulate a lock from a different process on the same host.
+        // Use the parent PID (the process that launched the test runner),
+        // which is always running and user-owned, so kill(ppid, 0) == 0
+        // and the lock is treated as actively held.
+        let parentPID = getppid()
         let foreignLock = LibraryLockFile(
-            hostname: "other-machine.local",
-            pid: 99999,
+            hostname: ProcessInfo.processInfo.hostName,
+            pid: parentPID,
             updatedAt: .now
         )
         let encoder = JSONEncoder()
