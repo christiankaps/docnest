@@ -212,6 +212,9 @@ enum DocNestSchemaV2: VersionedSchema {
 
 // MARK: - Schema V3
 // Adds WatchFolder entity.
+// Note: V3 is the current schema, so models reference the top-level types
+// directly. Defining models inside this enum would create distinct Swift types
+// that SwiftData cannot cast to/from the top-level types used by @Query.
 
 enum DocNestSchemaV3: VersionedSchema {
     static var versionIdentifier = Schema.Version(3, 0, 0)

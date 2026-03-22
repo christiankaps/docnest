@@ -36,49 +36,38 @@ extension FocusedValues {
 // MARK: - App Delegate
 
 private final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var menuObserver: Any?
-
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        cleanUpMenuBar()
-        // SwiftUI rebuilds the menu bar after launch; observe additions and re-clean.
-        menuObserver = NotificationCenter.default.addObserver(
-            forName: NSMenu.didAddItemNotification,
-            object: NSApplication.shared.mainMenu,
-            queue: .main
-        ) { [weak self] _ in
-            self?.cleanUpMenuBar()
-        }
+        removeUnwantedEditMenuItems()
     }
 
-    /// Performs all menu bar cleanup in a single pass.
-    private func cleanUpMenuBar() {
-        guard let mainMenu = NSApplication.shared.mainMenu else { return }
+    func applicationDidBecomeActive(_ notification: Notification) {
+        removeEmptyMenus()
+    }
 
-        // Remove system-injected Edit sub-items that are not relevant for this app.
-        let unwantedSubItems: Set<String> = ["Writing Tools", "AutoFill"]
+    /// Removes system-injected Edit menu items that are not relevant for this app.
+    private func removeUnwantedEditMenuItems() {
+        guard let mainMenu = NSApplication.shared.mainMenu else { return }
+        let unwantedTitles: Set<String> = ["Writing Tools", "AutoFill"]
         for menuItem in mainMenu.items {
             guard let submenu = menuItem.submenu else { continue }
-            for item in submenu.items where unwantedSubItems.contains(item.title) {
+            for item in submenu.items where unwantedTitles.contains(item.title) {
                 submenu.removeItem(item)
             }
         }
+    }
 
-        // Remove top-level menus whose contents are empty (replaced with nothing).
+    /// Removes top-level menus that have no meaningful content.
+    private func removeEmptyMenus() {
+        guard let mainMenu = NSApplication.shared.mainMenu else { return }
         let unwantedMenus: Set<String> = ["Format", "View", "Help"]
-        for menuItem in mainMenu.items where unwantedMenus.contains(menuItem.title) {
-            mainMenu.removeItem(menuItem)
-        }
-
-        // Strip leading separators from the Window menu.
-        for menuItem in mainMenu.items where menuItem.title == "Window" {
-            guard let submenu = menuItem.submenu else { continue }
-            while let first = submenu.items.first, first.isSeparatorItem {
-                submenu.removeItem(first)
-            }
+        mainMenu.items.removeAll { item in
+            guard unwantedMenus.contains(item.title) else { return false }
+            let realItems = item.submenu?.items.filter { !$0.isSeparatorItem } ?? []
+            return realItems.isEmpty
         }
     }
 }
@@ -121,72 +110,99 @@ struct DocNestApp: App {
         )
         .windowResizability(.contentMinSize)
         .commands {
-            CommandGroup(replacing: .appInfo) {
-                Button("About DocNest") {
-                    NSApplication.shared.activate(ignoringOtherApps: true)
-                    AboutWindowController.shared.showWindow(nil)
+            SuppressUnusedMenuCommands()
+            DocNestMenuCommands(
+                librarySession: librarySession,
+                exportDocumentsAction: exportDocumentsAction,
+                pasteDocumentsAction: pasteDocumentsAction
+            )
+        }
+    }
+}
+
+// MARK: - Menu Commands
+
+/// Suppresses unused system-injected menus (View, Format, Help) and empty
+/// standard command groups (Undo/Redo, Save, Print).
+struct SuppressUnusedMenuCommands: Commands {
+    var body: some Commands {
+        CommandGroup(replacing: .undoRedo) { }
+        CommandGroup(replacing: .saveItem) { }
+        CommandGroup(replacing: .printItem) { }
+        CommandGroup(replacing: .sidebar) { }
+        CommandGroup(replacing: .toolbar) { }
+        CommandGroup(replacing: .textFormatting) { }
+        CommandGroup(replacing: .help) { }
+    }
+}
+
+/// App-specific menu bar commands.
+struct DocNestMenuCommands: Commands {
+    let librarySession: LibrarySessionController?
+    let exportDocumentsAction: (() -> Void)?
+    let pasteDocumentsAction: (() -> Void)?
+
+    var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About DocNest") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                AboutWindowController.shared.showWindow(nil)
+            }
+        }
+        CommandGroup(replacing: .newItem) {
+            Button("Create Library") {
+                librarySession?.createLibrary()
+            }
+            Button("Open Library") {
+                librarySession?.openLibrary()
+            }
+            Divider()
+            Button("Show in Finder") {
+                if let url = librarySession?.selectedLibraryURL {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
             }
-            CommandGroup(replacing: .newItem) {
-                Button("Create Library") {
-                    librarySession?.createLibrary()
-                }
-                Button("Open Library") {
-                    librarySession?.openLibrary()
-                }
-                Divider()
-                Button("Show in Finder") {
-                    if let url = librarySession?.selectedLibraryURL {
-                        NSWorkspace.shared.activateFileViewerSelecting([url])
-                    }
-                }
-                .disabled(librarySession?.selectedLibraryURL == nil)
-                Divider()
-                Button("Close Library") {
-                    librarySession?.closeLibrary()
-                }
-                .disabled(librarySession?.selectedLibraryURL == nil)
+            .disabled(librarySession?.selectedLibraryURL == nil)
+            Divider()
+            Button("Close Library") {
+                librarySession?.closeLibrary()
             }
-            CommandGroup(replacing: .pasteboard) {
-                Button("Paste") {
-                    pasteDocumentsAction?()
-                }
-                .keyboardShortcut("v", modifiers: [.command])
-                .disabled(pasteDocumentsAction == nil)
+            .disabled(librarySession?.selectedLibraryURL == nil)
+        }
+        CommandGroup(replacing: .pasteboard) {
+            Button("Paste") {
+                pasteDocumentsAction?()
             }
-            CommandGroup(replacing: .undoRedo) { }
-            CommandGroup(replacing: .saveItem) { }
-            CommandGroup(replacing: .importExport) {
-                Button("Export\u{2026}") {
-                    exportDocumentsAction?()
-                }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
-                .disabled(exportDocumentsAction == nil)
+            .keyboardShortcut("v", modifiers: [.command])
+            .disabled(pasteDocumentsAction == nil)
+        }
+        CommandGroup(replacing: .importExport) {
+            Button("Export\u{2026}") {
+                exportDocumentsAction?()
             }
-            CommandGroup(replacing: .printItem) { }
-            CommandGroup(replacing: .textFormatting) { }
-            CommandGroup(replacing: .help) { }
-            CommandGroup(replacing: .textEditing) {
-                Button("Find") {
-                    NotificationCenter.default.post(name: .docNestFocusSearch, object: nil)
-                }
-                .keyboardShortcut("f", modifiers: [.command])
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .disabled(exportDocumentsAction == nil)
+        }
+        CommandGroup(replacing: .textEditing) {
+            Button("Find") {
+                NotificationCenter.default.post(name: .docNestFocusSearch, object: nil)
+            }
+            .keyboardShortcut("f", modifiers: [.command])
 
-                Button("Assign Labels") {
-                    NotificationCenter.default.post(name: .docNestQuickLabelPicker, object: nil)
-                }
-                .keyboardShortcut("l", modifiers: [.command])
+            Button("Assign Labels") {
+                NotificationCenter.default.post(name: .docNestQuickLabelPicker, object: nil)
+            }
+            .keyboardShortcut("l", modifiers: [.command])
 
-                Divider()
+            Divider()
 
-                Button("Manage Labels\u{2026}") {
-                    NotificationCenter.default.post(name: .docNestLabelManager, object: nil)
-                }
-                .keyboardShortcut("l", modifiers: [.command, .shift])
+            Button("Manage Labels\u{2026}") {
+                NotificationCenter.default.post(name: .docNestLabelManager, object: nil)
+            }
+            .keyboardShortcut("l", modifiers: [.command, .shift])
 
-                Button("Watch Folders\u{2026}") {
-                    NotificationCenter.default.post(name: .docNestWatchFolderSettings, object: nil)
-                }
+            Button("Watch Folders\u{2026}") {
+                NotificationCenter.default.post(name: .docNestWatchFolderSettings, object: nil)
             }
         }
     }
