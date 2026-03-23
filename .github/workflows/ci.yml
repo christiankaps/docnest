@@ -37,7 +37,21 @@ jobs:
             -configuration Debug \
             -destination 'platform=macOS' \
             -only-testing:DocNestTests \
-            -resultBundlePath "$RUNNER_TEMP/TestResults.xcresult" \
+            -resultBundlePath "$RUNNER_TEMP/UnitTestResults.xcresult" \
+            test \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Run UI Tests
+        run: |
+          xcodebuild \
+            -project DocNest.xcodeproj \
+            -scheme DocNest \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -only-testing:DocNestUITests \
+            -resultBundlePath "$RUNNER_TEMP/UITestResults.xcresult" \
             test \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
@@ -48,5 +62,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: TestResults
-          path: ${{ runner.temp }}/TestResults.xcresult
+          path: ${{ runner.temp }}/*.xcresult
           retention-days: 7
