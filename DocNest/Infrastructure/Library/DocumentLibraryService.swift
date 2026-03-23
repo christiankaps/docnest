@@ -169,7 +169,7 @@ enum DocumentLibraryService {
             cloudKitDatabase: .none
         )
 
-        let schema = Schema(versionedSchema: DocNestSchemaV3.self)
+        let schema = Schema(versionedSchema: DocNestSchemaV4.self)
 
         return try ModelContainer(
             for: schema,
