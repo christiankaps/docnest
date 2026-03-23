@@ -286,7 +286,7 @@ enum DocNestSchemaV3: VersionedSchema {
 }
 
 // MARK: - Schema V4
-// Renames sourceCreatedAt → documentDate on DocumentRecord (lightweight via @Attribute(.originalName)).
+// Renames sourceCreatedAt → documentDate on DocumentRecord (lightweight via @Attribute(originalName:)).
 // Note: V4 is the current schema; models reference top-level types directly so
 // that @Query descriptors remain compatible.
 

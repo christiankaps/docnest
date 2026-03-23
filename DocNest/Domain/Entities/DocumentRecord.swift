@@ -9,7 +9,7 @@ final class DocumentRecord {
     /// The content date of the document (e.g. invoice date, contract date).
     /// Extracted from OCR text during import; falls back to the file creation date.
     /// Renamed from `sourceCreatedAt` in schema V4.
-    @Attribute(.originalName("sourceCreatedAt")) var documentDate: Date?
+    @Attribute(originalName: "sourceCreatedAt") var documentDate: Date?
     var importedAt: Date
     var pageCount: Int
     var fileSize: Int64
