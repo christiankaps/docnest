@@ -92,6 +92,8 @@ struct DocumentListView: View {
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
     @State private var cachedSortedDocuments: [DocumentRecord] = []
+    @State private var cachedGroupedDocuments: [DocumentGroup] = []
+    @AppStorage("docListGroupMode") private var groupMode: DocumentGroupMode = .none
     @State private var availableListWidth = AppSplitViewLayout.documentListIdealWidth
     @AppStorage("docListThumbnailSize") private var thumbnailSize = 160.0
     @AppStorage("docListColumnWidthImported") private var importedColumnWidth = 120.0
@@ -120,6 +122,7 @@ struct DocumentListView: View {
 
             return comparison == .orderedDescending
         }
+        cachedGroupedDocuments = groupMode.group(cachedSortedDocuments)
     }
 
     private var effectiveOptionalColumns: OptionalColumnVisibility {
@@ -225,6 +228,9 @@ struct DocumentListView: View {
         .onChange(of: sortDirection) {
             recomputeSortedDocuments()
         }
+        .onChange(of: groupMode) {
+            recomputeSortedDocuments()
+        }
     }
 
     private var emptyContent: some View {
@@ -236,12 +242,7 @@ struct DocumentListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
         .contextMenu {
-            Text("Visible Attributes")
-            Toggle("Imported", isOn: $showsImportedColumn)
-            Toggle("Created", isOn: $showsCreatedColumn)
-            Toggle("Pages", isOn: $showsPagesColumn)
-            Toggle("Size", isOn: $showsSizeColumn)
-            Toggle("Labels", isOn: $showsLabelsColumn)
+            listColumnContextMenuItems
         }
     }
 
@@ -262,7 +263,7 @@ struct DocumentListView: View {
 
                     if effectiveOptionalColumns.created {
                         ResizableColumnHeader(width: $createdColumnWidth, minWidth: 96) {
-                            sortButton("Created", column: .createdAt)
+                            sortButton("Doc. Date", column: .documentDate)
                         }
                     }
 
@@ -291,7 +292,7 @@ struct DocumentListView: View {
                 HStack(spacing: 10) {
                     sortButton("Document", column: .title)
                     sortButton("Imported", column: .importedAt)
-                    sortButton("Created", column: .createdAt)
+                    sortButton("Doc. Date", column: .documentDate)
                     sortButton("Size", column: .fileSize)
 
                     Spacer(minLength: 0)
@@ -314,46 +315,97 @@ struct DocumentListView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                    ForEach(Array(sortedDocs.enumerated()), id: \.element.persistentModelID) { index, document in
-                        let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
+                    if groupMode == .none {
+                        Section {
+                            ForEach(Array(sortedDocs.enumerated()), id: \.element.persistentModelID) { index, document in
+                                documentListRow(document: document, index: index, allDocs: sortedDocs)
+                            }
+                        } header: {
+                            listHeader
+                        }
+                    } else {
+                        // Pinned column header as its own section
+                        Section {} header: { listHeader }
 
-                        documentRow(for: document)
-                            .padding(.horizontal, 12)
-                            .background(rowBackground(index: index, isSelected: isSelected))
-                            .contentShape(Rectangle())
-                            .id(document.persistentModelID)
-                            .onTapGesture(count: 2) {
-                                openQuickLook(for: document)
-                            }
-                            .onTapGesture {
-                                handleRowTap(document: document, in: sortedDocs)
-                            }
-                            .contextMenu { documentContextMenu(for: document) }
-                            .draggable(dragPayload(for: document))
-                            .dropDestination(for: String.self) { items, _ in
-                                guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
-                                    return false
+                        // One pinned section per group
+                        ForEach(Array(cachedGroupedDocuments.enumerated()), id: \.element.id) { _, group in
+                            Section {
+                                ForEach(Array(group.documents.enumerated()), id: \.element.persistentModelID) { index, document in
+                                    documentListRow(document: document, index: index, allDocs: sortedDocs)
                                 }
-                                let targets = dropTargetDocuments(for: document)
-                                return coordinator.assignDroppedLabelToDocuments(labelID, documents: targets)
+                            } header: {
+                                HStack {
+                                    Text(group.label)
+                                        .font(AppTypography.sectionTitle)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text("\(group.documents.count)")
+                                        .font(AppTypography.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 5)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background {
+                                    Color(nsColor: .windowBackgroundColor)
+                                        .overlay(Color.secondary.opacity(0.05))
+                                }
                             }
-                    }
-                    } header: {
-                        listHeader
+                        }
                     }
                 }
             }
             .onAppear { scrollProxy = proxy }
         }
         .contextMenu {
-            Text("Visible Attributes")
-            Toggle("Imported", isOn: $showsImportedColumn)
-            Toggle("Created", isOn: $showsCreatedColumn)
-            Toggle("Pages", isOn: $showsPagesColumn)
-            Toggle("Size", isOn: $showsSizeColumn)
-            Toggle("Labels", isOn: $showsLabelsColumn)
+            listColumnContextMenuItems
         }
+    }
+
+    @ViewBuilder
+    private func documentListRow(document: DocumentRecord, index: Int, allDocs: [DocumentRecord]) -> some View {
+        let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
+
+        documentRow(for: document)
+            .padding(.horizontal, 12)
+            .background(rowBackground(index: index, isSelected: isSelected))
+            .contentShape(Rectangle())
+            .id(document.persistentModelID)
+            .onTapGesture(count: 2) {
+                openQuickLook(for: document)
+            }
+            .onTapGesture {
+                handleRowTap(document: document, in: allDocs)
+            }
+            .contextMenu { documentContextMenu(for: document) }
+            .draggable(dragPayload(for: document))
+            .dropDestination(for: String.self) { items, _ in
+                guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
+                    return false
+                }
+                let targets = dropTargetDocuments(for: document)
+                return coordinator.assignDroppedLabelToDocuments(labelID, documents: targets)
+            }
+    }
+
+    @ViewBuilder
+    private var listColumnContextMenuItems: some View {
+        Text("Visible Attributes")
+        Toggle("Imported", isOn: $showsImportedColumn)
+        Toggle("Document Date", isOn: $showsCreatedColumn)
+        Toggle("Pages", isOn: $showsPagesColumn)
+        Toggle("Size", isOn: $showsSizeColumn)
+        Toggle("Labels", isOn: $showsLabelsColumn)
+        Divider()
+        Text("Group By")
+        Picker("Group By", selection: $groupMode) {
+            Text("None").tag(DocumentGroupMode.none)
+            Text("Year").tag(DocumentGroupMode.year)
+            Text("Year & Month").tag(DocumentGroupMode.yearMonth)
+            Text("Year & Calendar Week").tag(DocumentGroupMode.yearCalendarWeek)
+        }
+        .pickerStyle(.inline)
+        .labelsHidden()
     }
 
     private func handleRowTap(document: DocumentRecord, in sortedDocs: [DocumentRecord]) {
@@ -464,8 +516,8 @@ struct DocumentListView: View {
 
             if effectiveOptionalColumns.created {
                 Group {
-                    if let sourceCreatedAt = document.sourceCreatedAt {
-                        Text(sourceCreatedAt, format: .dateTime.year().month().day())
+                    if let documentDate = document.documentDate {
+                        Text(documentDate, format: .dateTime.year().month().day())
                     } else {
                         Text("-")
                             .foregroundStyle(.secondary)
@@ -731,8 +783,8 @@ struct DocumentListView: View {
             lhs.title.localizedCaseInsensitiveCompare(rhs.title)
         case .importedAt:
             lhs.importedAt.compare(rhs.importedAt)
-        case .createdAt:
-            compareOptionalDates(lhs.sourceCreatedAt, rhs.sourceCreatedAt)
+        case .documentDate:
+            compareOptionalDates(lhs.documentDate, rhs.documentDate)
         case .pageCount:
             compareIntegers(lhs.pageCount, rhs.pageCount)
         case .fileSize:
@@ -828,7 +880,7 @@ private struct ResizableColumnHeader<Content: View>: View {
 private enum SortColumn: Equatable {
     case title
     case importedAt
-    case createdAt
+    case documentDate
     case pageCount
     case fileSize
 
@@ -836,7 +888,7 @@ private enum SortColumn: Equatable {
         switch self {
         case .title:
             .ascending
-        case .importedAt, .createdAt, .pageCount, .fileSize:
+        case .importedAt, .documentDate, .pageCount, .fileSize:
             .descending
         }
     }
@@ -1103,4 +1155,79 @@ private struct DocumentListStatusBar: View {
         .environment(LibraryCoordinator())
         .environment(ThumbnailCache())
         .modelContainer(container)
+}
+
+// MARK: - Document Grouping
+
+struct DocumentGroup: Identifiable {
+    let id: String
+    let label: String
+    let documents: [DocumentRecord]
+}
+
+enum DocumentGroupMode: String, CaseIterable {
+    case none
+    case year
+    case yearMonth
+    case yearCalendarWeek
+
+    /// Groups the given sorted documents according to the mode.
+    /// Each group retains the ordering of the input array.
+    func group(_ documents: [DocumentRecord]) -> [DocumentGroup] {
+        guard self != .none else { return [] }
+
+        var groups: [(key: String, sortKey: String, docs: [DocumentRecord])] = []
+        var index: [String: Int] = [:]
+
+        for document in documents {
+            let (label, sortKey) = groupLabel(for: document)
+            if let existing = index[label] {
+                groups[existing].docs.append(document)
+            } else {
+                index[label] = groups.count
+                groups.append((key: label, sortKey: sortKey, docs: [document]))
+            }
+        }
+
+        // Sort groups: dated groups descending by sortKey, "No Date" always last.
+        let noDateKey = "No Date"
+        let sorted = groups.sorted { lhs, rhs in
+            if lhs.key == noDateKey { return false }
+            if rhs.key == noDateKey { return true }
+            return lhs.sortKey > rhs.sortKey
+        }
+
+        return sorted.map { DocumentGroup(id: $0.key, label: $0.key, documents: $0.docs) }
+    }
+
+    private func groupLabel(for document: DocumentRecord) -> (label: String, sortKey: String) {
+        guard let date = document.documentDate else {
+            return ("No Date", "")
+        }
+
+        let cal = Calendar.current
+        let year = cal.component(.year, from: date)
+
+        switch self {
+        case .none:
+            return ("", "")
+
+        case .year:
+            let label = String(year)
+            return (label, label)
+
+        case .yearMonth:
+            let month = cal.component(.month, from: date)
+            let monthName = date.formatted(.dateTime.month(.wide).locale(Locale.current))
+            let label = "\(monthName) \(year)"
+            let sortKey = String(format: "%04d-%02d", year, month)
+            return (label, sortKey)
+
+        case .yearCalendarWeek:
+            let week = cal.component(.weekOfYear, from: date)
+            let label = String(format: "%d · Week %d", year, week)
+            let sortKey = String(format: "%04d-%02d", year, week)
+            return (label, sortKey)
+        }
+    }
 }

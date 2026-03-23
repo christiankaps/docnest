@@ -257,6 +257,60 @@ A user-configured directory on the local filesystem that the app monitors for ne
 #### Should
 - Custom fields can be prepared as later extension but are not required in v1.
 
+### 6.9 Document Date
+
+The Document Date represents the semantic content date of a document (e.g. the invoice date printed on an invoice, the signing date of a contract, the date printed in a letter). This is distinct from the file system creation date and the import timestamp.
+
+#### Must
+
+**Attribute and Data Model**
+- Every document has an optional `documentDate: Date?` field stored in the metadata database.
+- The field is separate from `importedAt` (set at import time, immutable) and from the file system creation date.
+- The data model field is named `documentDate` and was renamed from `sourceCreatedAt` in schema V4; the SwiftData migration is lightweight using `@Attribute(.originalName("sourceCreatedAt"))`.
+
+**Date Extraction on Import**
+- During import, after OCR text extraction completes, the app attempts to extract a document date from the extracted text using `DocumentDateExtractor`.
+- `DocumentDateExtractor` recognises common English and German date formats:
+  - ISO 8601: `2024-03-15`
+  - English long form: `March 15, 2024` and `15 March 2024`
+  - English abbreviated: `Mar 15, 2024` and `15 Mar 2024`
+  - German long form: `15. März 2024`
+  - German abbreviated: `15. Mär. 2024`
+  - European numeric: `15.03.2024`
+  - US numeric: `03/15/2024`
+- The first plausible date found in the document text is used as the `documentDate`. Plausible means between 1 January 1900 and 10 years in the future.
+- If no date is found in the text, the file system creation date (captured at import) is used as the fallback.
+- If neither source yields a date, `documentDate` is left as `nil`.
+
+**Details View Editing**
+- The document inspector shows the Document Date as a graphical (calendar-style) date picker for the selected document.
+- The date picker uses macOS `.graphical` style, showing a mini month calendar widget directly in the inspector panel.
+- Changes to the date picker are saved immediately to the database without a separate Save button.
+- A clear button (×) next to the section header allows removing the document date, setting it back to `nil`.
+- When the document date is `nil`, the calendar is shown with today pre-selected; a hint text below the picker explains that no date is set.
+
+**Document List Column**
+- The document list includes a "Doc. Date" column (previously labelled "Created") that shows `documentDate`.
+- The column is sortable; documents without a date sort before dated documents when sorted ascending, and after when sorted descending.
+- The column can be toggled on or off via the list context menu, like other optional columns.
+
+**Grouping in the Document List**
+- The document list supports grouping by Document Date, selectable via the list context menu under "Group By":
+  - **None** (default): no grouping, flat list as before.
+  - **Year**: documents grouped by the year of their Document Date; labelled `2024`, `2023`, etc.
+  - **Year & Month**: sub-grouped by year and month; labelled `March 2024`, `February 2024`, etc. (using the current system locale for month names).
+  - **Year & Calendar Week**: sub-grouped by year and ISO calendar week; labelled `2024 · Week 12`, etc.
+- Within each group, documents follow the active sort order.
+- Documents without a Document Date are collected in a "No Date" group, always shown last.
+- Group headers are pinned (sticky) at the top of the scroll area while scrolling through a group.
+- Each group header shows the group label and the document count for that group.
+- The selected grouping mode is persisted across app launches via `@AppStorage`.
+- Grouping applies to both list mode and thumbnail mode.
+
+#### Should
+- Date extraction confidence could be improved over time by extending `DocumentDateExtractor` with additional locale patterns or contextual heuristics (e.g. prefer dates appearing near keywords like "Invoice Date:", "Datum:", "Date:").
+- A "Re-extract date" action in the context menu or inspector could re-run `DocumentDateExtractor` on the stored full text for documents whose date was set from the file creation date fallback.
+
 ### 6.7 Data Integrity and Recovery
 
 #### Must
@@ -363,7 +417,7 @@ My Documents.docnestlibrary/
 - storedFilePath
 - contentHash
 - title
-- documentDate
+- documentDate (optional; semantic content date extracted from OCR text or falling back to file creation date; user-editable; stored as `documentDate`, formerly `sourceCreatedAt`)
 - importedAt
 - pageCount
 - fileSize

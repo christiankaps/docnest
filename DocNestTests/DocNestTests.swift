@@ -67,7 +67,7 @@ final class DocNestTests: XCTestCase {
         let doc = DocumentRecord(
             originalFileName: "test.pdf",
             title: "Test",
-            sourceCreatedAt: .now.addingTimeInterval(-86_400),
+            documentDate: .now.addingTimeInterval(-86_400),
             importedAt: .now,
             pageCount: 1,
             fileSize: 8_192,
@@ -520,7 +520,7 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(documents.first?.pageCount, 1)
         XCTAssertFalse(documents.first?.contentHash.isEmpty ?? true)
         XCTAssertGreaterThan(documents.first?.fileSize ?? 0, 0)
-        XCTAssertNotNil(documents.first?.sourceCreatedAt)
+        XCTAssertNotNil(documents.first?.documentDate)
 
         guard let storedFilePath = documents.first?.storedFilePath else {
             XCTFail("Expected imported document to include a stored file path")

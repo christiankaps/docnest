@@ -161,41 +161,48 @@ struct DocumentInspectorView: View {
                     .font(AppTypography.body)
                     .foregroundStyle(.secondary)
 
-                HStack(spacing: 6) {
-                    if isEditingDocumentDate {
-                        DatePicker(
-                            "Document Date",
-                            selection: $editingDocumentDate,
-                            displayedComponents: .date
-                        )
-                        .labelsHidden()
-                        .datePickerStyle(.field)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text("Document Date")
+                            .font(AppTypography.sectionTitle)
 
-                        Button("Save") {
-                            commitDocumentDateEdit(for: document)
-                        }
-                        .buttonStyle(.borderless)
+                        Spacer()
 
-                        Button("Cancel") {
-                            isEditingDocumentDate = false
-                        }
-                        .buttonStyle(.borderless)
-                    } else if let sourceCreatedAt = document.sourceCreatedAt {
-                        Text("Document Date \(sourceCreatedAt.formatted(date: .abbreviated, time: .omitted))")
-                            .font(AppTypography.body)
-                            .foregroundStyle(.secondary)
-                            .onTapGesture(count: 2) {
-                                editingDocumentDate = sourceCreatedAt
-                                isEditingDocumentDate = true
+                        if document.documentDate != nil {
+                            Button {
+                                document.documentDate = nil
+                                try? modelContext.save()
+                            } label: {
+                                Image(systemName: "xmark.circle")
+                                    .foregroundStyle(.secondary)
                             }
-                            .help("Double-click to edit document date")
-                    } else {
-                        Button("Set Document Date") {
-                            editingDocumentDate = .now
-                            isEditingDocumentDate = true
+                            .buttonStyle(.borderless)
+                            .help("Clear document date")
                         }
-                        .buttonStyle(.borderless)
-                        .font(AppTypography.body)
+                    }
+
+                    // Graphical (calendar) date picker – always shown for single document.
+                    // Binding writes directly to the model and saves on change.
+                    DatePicker(
+                        "Document Date",
+                        selection: Binding(
+                            get: { document.documentDate ?? editingDocumentDate },
+                            set: { newDate in
+                                document.documentDate = newDate
+                                editingDocumentDate = newDate
+                                try? modelContext.save()
+                            }
+                        ),
+                        displayedComponents: .date
+                    )
+                    .labelsHidden()
+                    .datePickerStyle(.graphical)
+                    .frame(maxWidth: 320)
+
+                    if document.documentDate == nil {
+                        Text("No date set — tap a day in the calendar to assign one.")
+                            .font(AppTypography.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -569,7 +576,7 @@ struct DocumentInspectorView: View {
     }
 
     private func commitDocumentDateEdit(for document: DocumentRecord) {
-        document.sourceCreatedAt = editingDocumentDate
+        document.documentDate = editingDocumentDate
         do {
             try modelContext.save()
         } catch {
@@ -729,7 +736,7 @@ private enum DocumentInspectorPreviewData {
         let document = DocumentRecord(
             originalFileName: "invoice-march-2026.pdf",
             title: "Invoice March 2026",
-            sourceCreatedAt: .now.addingTimeInterval(-86_400 * 2),
+            documentDate: .now.addingTimeInterval(-86_400 * 2),
             importedAt: .now,
             pageCount: 4,
             fileSize: 182_144,
