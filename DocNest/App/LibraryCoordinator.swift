@@ -575,8 +575,12 @@ final class LibraryCoordinator {
     func reExtractDocumentDate(for documents: [DocumentRecord], modelContext: ModelContext) {
         guard !documents.isEmpty else { return }
         for document in documents {
-            guard let text = document.fullText, !text.isEmpty else { continue }
-            document.documentDate = DocumentDateExtractor.extractDate(from: text)
+            if let text = document.fullText, !text.isEmpty,
+               let extracted = DocumentDateExtractor.extractDate(from: text) {
+                document.documentDate = extracted
+            } else {
+                document.documentDate = document.importedAt
+            }
         }
         try? modelContext.save()
     }
