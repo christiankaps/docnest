@@ -6,7 +6,10 @@ final class DocumentRecord {
     var id: UUID
     var originalFileName: String
     var title: String
-    var sourceCreatedAt: Date?
+    /// The content date of the document (e.g. invoice date, contract date).
+    /// Extracted from OCR text during import; falls back to the file creation date.
+    /// Renamed from `sourceCreatedAt` in schema V4.
+    @Attribute(originalName: "sourceCreatedAt") var documentDate: Date?
     var importedAt: Date
     var pageCount: Int
     var fileSize: Int64
@@ -23,7 +26,7 @@ final class DocumentRecord {
         id: UUID = UUID(),
         originalFileName: String,
         title: String,
-        sourceCreatedAt: Date? = nil,
+        documentDate: Date? = nil,
         importedAt: Date,
         pageCount: Int,
         fileSize: Int64 = 0,
@@ -35,7 +38,7 @@ final class DocumentRecord {
         self.id = id
         self.originalFileName = originalFileName
         self.title = title
-        self.sourceCreatedAt = sourceCreatedAt
+        self.documentDate = documentDate
         self.importedAt = importedAt
         self.pageCount = pageCount
         self.fileSize = fileSize
@@ -56,7 +59,7 @@ extension DocumentRecord {
             DocumentRecord(
                 originalFileName: "invoice-march-2026.pdf",
                 title: "Invoice March 2026",
-                sourceCreatedAt: .now.addingTimeInterval(-86_400 * 2),
+                documentDate: .now.addingTimeInterval(-86_400 * 2),
                 importedAt: .now,
                 pageCount: 4,
                 fileSize: 182_144,
@@ -66,7 +69,7 @@ extension DocumentRecord {
             DocumentRecord(
                 originalFileName: "consulting-contract.pdf",
                 title: "Consulting Contract",
-                sourceCreatedAt: .now.addingTimeInterval(-86_400 * 14),
+                documentDate: .now.addingTimeInterval(-86_400 * 14),
                 importedAt: .now.addingTimeInterval(-86_400 * 8),
                 pageCount: 12,
                 fileSize: 904_112,
@@ -76,7 +79,7 @@ extension DocumentRecord {
             DocumentRecord(
                 originalFileName: "scan-receipt.pdf",
                 title: "Receipt Scan",
-                sourceCreatedAt: .now.addingTimeInterval(-86_400 * 25),
+                documentDate: .now.addingTimeInterval(-86_400 * 25),
                 importedAt: .now.addingTimeInterval(-86_400 * 20),
                 pageCount: 1,
                 fileSize: 96_512,

@@ -90,7 +90,7 @@ enum ImportPDFDocumentsUseCase {
         let contentHash: String
         let fileSize: Int64
         let pageCount: Int
-        let sourceCreatedAt: Date?
+        let documentDate: Date?
         let fullText: String?
     }
 
@@ -325,7 +325,7 @@ enum ImportPDFDocumentsUseCase {
             id: documentID,
             originalFileName: originalFileName,
             title: title,
-            sourceCreatedAt: metadata.sourceCreatedAt,
+            documentDate: metadata.documentDate,
             importedAt: importedAt,
             pageCount: metadata.pageCount,
             fileSize: metadata.fileSize,
@@ -366,11 +366,19 @@ enum ImportPDFDocumentsUseCase {
             fullText = nil
         }
 
+        // Derive document date: prefer a date found in the document content, fall back to file creation date.
+        let documentDate: Date?
+        if let text = fullText, let extracted = DocumentDateExtractor.extractDate(from: text) {
+            documentDate = extracted
+        } else {
+            documentDate = creationDate
+        }
+
         return ImportMetadata(
             contentHash: contentHash,
             fileSize: fileSize,
             pageCount: pageCount,
-            sourceCreatedAt: creationDate,
+            documentDate: documentDate,
             fullText: fullText
         )
     }

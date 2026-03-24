@@ -67,7 +67,7 @@ final class DocNestTests: XCTestCase {
         let doc = DocumentRecord(
             originalFileName: "test.pdf",
             title: "Test",
-            sourceCreatedAt: .now.addingTimeInterval(-86_400),
+            documentDate: .now.addingTimeInterval(-86_400),
             importedAt: .now,
             pageCount: 1,
             fileSize: 8_192,
@@ -225,14 +225,19 @@ final class DocNestTests: XCTestCase {
             at: tempRoot.appendingPathComponent("LockTest")
         )
 
-        // Simulate a lock from a different process on the same host.
-        // Use the parent PID (the process that launched the test runner),
-        // which is always running and user-owned, so kill(ppid, 0) == 0
-        // and the lock is treated as actively held.
-        let parentPID = getppid()
+        // Spawn a short-lived child process so we have a PID that is
+        // definitely alive and owned by the current user. This ensures
+        // kill(pid, 0) == 0 succeeds reliably on both local machines and
+        // CI runners, where the parent PID may not be signalable.
+        let sleeper = Process()
+        sleeper.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        sleeper.arguments = ["60"]
+        try sleeper.run()
+        defer { sleeper.terminate(); sleeper.waitUntilExit() }
+
         let foreignLock = LibraryLockFile(
             hostname: ProcessInfo.processInfo.hostName,
-            pid: parentPID,
+            pid: sleeper.processIdentifier,
             updatedAt: .now
         )
         let encoder = JSONEncoder()
@@ -520,7 +525,7 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(documents.first?.pageCount, 1)
         XCTAssertFalse(documents.first?.contentHash.isEmpty ?? true)
         XCTAssertGreaterThan(documents.first?.fileSize ?? 0, 0)
-        XCTAssertNotNil(documents.first?.sourceCreatedAt)
+        XCTAssertNotNil(documents.first?.documentDate)
 
         guard let storedFilePath = documents.first?.storedFilePath else {
             XCTFail("Expected imported document to include a stored file path")
