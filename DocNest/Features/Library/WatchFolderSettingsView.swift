@@ -67,10 +67,7 @@ struct WatchFolderSettingsView: View {
         }
         .frame(width: 520, height: 420)
         .sheet(item: $editorConfig) { config in
-            WatchFolderEditorSheet(
-                config: config,
-                allLabels: coordinator.allLabels
-            )
+            WatchFolderEditorSheet(config: config)
         }
         .alert("Watch Folder Error", isPresented: errorBinding) {
             Button("OK", role: .cancel) {

@@ -20,7 +20,9 @@ struct WatchFolderEditorConfig: Identifiable {
 
 struct WatchFolderEditorSheet: View {
     let config: WatchFolderEditorConfig
-    let allLabels: [LabelTag]
+
+    @Query(sort: [SortDescriptor(\LabelTag.sortOrder, order: .forward), SortDescriptor(\LabelTag.name, order: .forward)])
+    private var allLabels: [LabelTag]
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -30,6 +32,7 @@ struct WatchFolderEditorSheet: View {
     @State private var folderPath: String = ""
     @State private var isEnabled: Bool = true
     @State private var selectedLabelIDs: Set<UUID> = []
+    @State private var newLabelName: String = ""
     @State private var errorMessage: String?
 
     private var isEditing: Bool {
@@ -85,38 +88,51 @@ struct WatchFolderEditorSheet: View {
                 Toggle("Enabled", isOn: $isEnabled)
 
                 // Label auto-assign
-                if !allLabels.isEmpty {
-                    Section("Auto-assign Labels") {
-                        ForEach(allLabels) { label in
-                            let isSelected = selectedLabelIDs.contains(label.id)
-                            Button {
-                                if isSelected {
-                                    selectedLabelIDs.remove(label.id)
-                                } else {
-                                    selectedLabelIDs.insert(label.id)
-                                }
-                            } label: {
-                                HStack(spacing: 8) {
-                                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-
-                                    if let labelIcon = label.icon, !labelIcon.isEmpty {
-                                        Text(labelIcon)
-                                            .font(.system(size: 12))
-                                    } else {
-                                        Circle()
-                                            .fill(label.labelColor.color)
-                                            .frame(width: 8, height: 8)
-                                    }
-
-                                    Text(label.name)
-
-                                    Spacer()
-                                }
-                                .contentShape(Rectangle())
+                Section("Auto-assign Labels") {
+                    ForEach(allLabels) { label in
+                        let isSelected = selectedLabelIDs.contains(label.id)
+                        Button {
+                            if isSelected {
+                                selectedLabelIDs.remove(label.id)
+                            } else {
+                                selectedLabelIDs.insert(label.id)
                             }
-                            .buttonStyle(.plain)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+
+                                if let labelIcon = label.icon, !labelIcon.isEmpty {
+                                    Text(labelIcon)
+                                        .font(.system(size: 12))
+                                } else {
+                                    Circle()
+                                        .fill(label.labelColor.color)
+                                        .frame(width: 8, height: 8)
+                                }
+
+                                Text(label.name)
+
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                    }
+
+                    HStack(spacing: 6) {
+                        TextField("New label", text: $newLabelName)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { createNewLabel() }
+
+                        Button {
+                            createNewLabel()
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
 
@@ -178,6 +194,18 @@ struct WatchFolderEditorSheet: View {
         folderPath = url.path
         if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             name = url.lastPathComponent
+        }
+    }
+
+    private func createNewLabel() {
+        let trimmed = newLabelName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            let label = try ManageLabelsUseCase.createLabel(named: trimmed, color: .blue, using: modelContext)
+            selectedLabelIDs.insert(label.id)
+            newLabelName = ""
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
