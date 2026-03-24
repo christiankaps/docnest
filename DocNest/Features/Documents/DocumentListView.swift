@@ -263,7 +263,7 @@ struct DocumentListView: View {
 
                     if effectiveOptionalColumns.created {
                         ResizableColumnHeader(width: $createdColumnWidth, minWidth: 96) {
-                            sortButton("Doc. Date", column: .documentDate)
+                            sortButton("Document Date", column: .documentDate)
                         }
                     }
 
@@ -292,7 +292,7 @@ struct DocumentListView: View {
                 HStack(spacing: 10) {
                     sortButton("Document", column: .title)
                     sortButton("Imported", column: .importedAt)
-                    sortButton("Doc. Date", column: .documentDate)
+                    sortButton("Document Date", column: .documentDate)
                     sortButton("Size", column: .fileSize)
 
                     Spacer(minLength: 0)
