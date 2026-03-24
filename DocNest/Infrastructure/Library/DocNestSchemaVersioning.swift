@@ -212,6 +212,8 @@ enum DocNestSchemaV2: VersionedSchema {
 
 // MARK: - Schema V3
 // Adds WatchFolder entity.
+// All models are defined as inner types so the version checksum is self-contained
+// and does not depend on top-level types that may change in later schema versions.
 
 enum DocNestSchemaV3: VersionedSchema {
     static var versionIdentifier = Schema.Version(3, 0, 0)
@@ -281,6 +283,65 @@ enum DocNestSchemaV3: VersionedSchema {
             self.colorName = colorName
             self.sortOrder = sortOrder
             self.groupID = groupID
+        }
+    }
+
+    @Model
+    final class SmartFolder {
+        var id: UUID
+        var name: String
+        var icon: String?
+        var labelIDs: [UUID]
+        var sortOrder: Int
+
+        init(id: UUID = UUID(), name: String, icon: String? = nil, labelIDs: [UUID] = [], sortOrder: Int = 0) {
+            self.id = id
+            self.name = name
+            self.icon = icon
+            self.labelIDs = labelIDs
+            self.sortOrder = sortOrder
+        }
+    }
+
+    @Model
+    final class LabelGroup {
+        var id: UUID
+        var name: String
+        var sortOrder: Int
+
+        init(id: UUID = UUID(), name: String, sortOrder: Int = 0) {
+            self.id = id
+            self.name = name
+            self.sortOrder = sortOrder
+        }
+    }
+
+    @Model
+    final class WatchFolder {
+        var id: UUID
+        var name: String
+        var icon: String?
+        var folderPath: String
+        var isEnabled: Bool
+        var labelIDs: [UUID]
+        var sortOrder: Int
+
+        init(
+            id: UUID = UUID(),
+            name: String,
+            icon: String? = nil,
+            folderPath: String,
+            isEnabled: Bool = true,
+            labelIDs: [UUID] = [],
+            sortOrder: Int = 0
+        ) {
+            self.id = id
+            self.name = name
+            self.icon = icon
+            self.folderPath = folderPath
+            self.isEnabled = isEnabled
+            self.labelIDs = labelIDs
+            self.sortOrder = sortOrder
         }
     }
 }
