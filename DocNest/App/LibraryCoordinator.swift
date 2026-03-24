@@ -572,6 +572,15 @@ final class LibraryCoordinator {
         }
     }
 
+    func reExtractDocumentDate(for documents: [DocumentRecord], modelContext: ModelContext) {
+        guard !documents.isEmpty else { return }
+        for document in documents {
+            guard let text = document.fullText, !text.isEmpty else { continue }
+            document.documentDate = DocumentDateExtractor.extractDate(from: text)
+        }
+        try? modelContext.save()
+    }
+
     func cancelOCR() {
         activeOCRTask?.cancel()
         activeOCRTask = nil

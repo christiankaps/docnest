@@ -618,6 +618,12 @@ struct DocumentListView: View {
                 coordinator.reExtractText(for: targets, libraryURL: libraryURL, modelContext: modelContext)
             }
 
+            Button("Re-extract Date") {
+                guard let modelContext = coordinator.modelContext else { return }
+                coordinator.reExtractDocumentDate(for: targets, modelContext: modelContext)
+            }
+            .disabled(targets.allSatisfy { $0.fullText == nil || $0.fullText?.isEmpty == true })
+
             Divider()
 
             Button("Move to Bin") {

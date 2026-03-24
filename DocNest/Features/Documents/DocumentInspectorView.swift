@@ -13,8 +13,7 @@ struct DocumentInspectorView: View {
     @State private var pendingDeletion: [DocumentRecord] = []
     @State private var editingTitle = ""
     @State private var isEditingTitle = false
-    @State private var editingDocumentDate: Date = .now
-    @State private var isEditingDocumentDate = false
+    @State private var dateFieldText = ""
 
     private var singleSelectedDocument: DocumentRecord? {
         documents.count == 1 ? documents.first : nil
@@ -74,7 +73,7 @@ struct DocumentInspectorView: View {
         }
         .onChange(of: documents.first?.persistentModelID) {
             isEditingTitle = false
-            isEditingDocumentDate = false
+            dateFieldText = formattedDateString(from: singleSelectedDocument?.documentDate)
         }
         .alert("Inspector Error", isPresented: inspectorErrorBinding) {
             Button("OK", role: .cancel) {
@@ -168,9 +167,21 @@ struct DocumentInspectorView: View {
 
                         Spacer()
 
-                        if document.documentDate != nil {
+                        Button {
+                            coordinator.reExtractDocumentDate(for: [document], modelContext: modelContext)
+                            dateFieldText = formattedDateString(from: document.documentDate)
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Re-extract date from document text")
+                        .disabled(document.fullText == nil || document.fullText?.isEmpty == true)
+
+                        if document.documentDate != nil || !dateFieldText.isEmpty {
                             Button {
                                 document.documentDate = nil
+                                dateFieldText = ""
                                 try? modelContext.save()
                             } label: {
                                 Image(systemName: "xmark.circle")
@@ -181,26 +192,19 @@ struct DocumentInspectorView: View {
                         }
                     }
 
-                    // Graphical (calendar) date picker – always shown for single document.
-                    // Binding writes directly to the model and saves on change.
-                    DatePicker(
-                        "Document Date",
-                        selection: Binding(
-                            get: { document.documentDate ?? editingDocumentDate },
-                            set: { newDate in
-                                document.documentDate = newDate
-                                editingDocumentDate = newDate
-                                try? modelContext.save()
-                            }
-                        ),
-                        displayedComponents: .date
-                    )
-                    .labelsHidden()
-                    .datePickerStyle(.graphical)
-                    .frame(maxWidth: 320)
+                    TextField("DD.MM.YYYY", text: $dateFieldText)
+                        .font(.body.monospaced())
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 140)
+                        .onChange(of: dateFieldText) {
+                            applyDateMask(for: document)
+                        }
+                        .onAppear {
+                            dateFieldText = formattedDateString(from: document.documentDate)
+                        }
 
-                    if document.documentDate == nil {
-                        Text("No date set — tap a day in the calendar to assign one.")
+                    if document.documentDate == nil && dateFieldText.isEmpty {
+                        Text("Type a date, e.g. 01.03.2026")
                             .font(AppTypography.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -575,14 +579,44 @@ struct DocumentInspectorView: View {
         isEditingTitle = false
     }
 
-    private func commitDocumentDateEdit(for document: DocumentRecord) {
-        document.documentDate = editingDocumentDate
-        do {
-            try modelContext.save()
-        } catch {
-            inspectorErrorMessage = error.localizedDescription
+    private static let germanDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "dd.MM.yyyy"
+        f.locale = Locale(identifier: "de_DE")
+        f.isLenient = false
+        return f
+    }()
+
+    private func formattedDateString(from date: Date?) -> String {
+        guard let date else { return "" }
+        return Self.germanDateFormatter.string(from: date)
+    }
+
+    private func applyDateMask(for document: DocumentRecord) {
+        // Strip non-digits
+        let digits = dateFieldText.filter(\.isWholeNumber)
+        let clamped = String(digits.prefix(8))
+
+        // Re-insert dots after DD and MM
+        var masked = ""
+        for (i, ch) in clamped.enumerated() {
+            if i == 2 || i == 4 { masked.append(".") }
+            masked.append(ch)
         }
-        isEditingDocumentDate = false
+
+        if dateFieldText != masked {
+            dateFieldText = masked
+            return // onChange will re-fire with the corrected value
+        }
+
+        // When we have a full date (8 digits → DD.MM.YYYY), try to parse and save
+        if clamped.count == 8 {
+            if let parsed = Self.germanDateFormatter.date(from: masked),
+               Self.germanDateFormatter.string(from: parsed) == masked {
+                document.documentDate = parsed
+                try? modelContext.save()
+            }
+        }
     }
 
     private func promptDeletionAction(for documents: [DocumentRecord]) {
