@@ -26,7 +26,7 @@ final class AboutWindowController: NSWindowController {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
-        fatalError()
+        nil
     }
 
     override func showWindow(_ sender: Any?) {

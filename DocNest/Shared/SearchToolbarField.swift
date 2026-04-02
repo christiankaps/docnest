@@ -31,7 +31,7 @@ struct SearchToolbarField: NSViewRepresentable {
         }
 
         context.coordinator.lastFocusRequestToken = focusRequestToken
-        DispatchQueue.main.async {
+        Task { @MainActor in
             nsView.window?.makeFirstResponder(nsView)
             nsView.currentEditor()?.selectAll(nil)
         }

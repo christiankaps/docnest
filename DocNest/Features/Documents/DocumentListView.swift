@@ -1144,23 +1144,10 @@ private struct DocumentListStatusBar: View {
 }
 
 #Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: DocumentRecord.self, configurations: config)
-
-    let labels = LabelTag.makeSamples()
-    container.mainContext.insert(labels.finance)
-    container.mainContext.insert(labels.tax)
-    container.mainContext.insert(labels.contracts)
-
-    let samples = DocumentRecord.makeSamples(labels: labels)
-    for sample in samples {
-        container.mainContext.insert(sample)
-    }
-
     return DocumentListView()
         .environment(LibraryCoordinator())
         .environment(ThumbnailCache())
-        .modelContainer(container)
+        .modelContainer(PreviewData.documentListContainer)
 }
 
 // MARK: - Document Grouping
@@ -1236,4 +1223,25 @@ enum DocumentGroupMode: String, CaseIterable {
             return (label, sortKey)
         }
     }
+}
+
+@MainActor
+private enum PreviewData {
+    static let documentListContainer: ModelContainer = {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        do {
+            let container = try ModelContainer(for: DocumentRecord.self, configurations: configuration)
+            let labels = LabelTag.makeSamples()
+            container.mainContext.insert(labels.finance)
+            container.mainContext.insert(labels.tax)
+            container.mainContext.insert(labels.contracts)
+
+            for sample in DocumentRecord.makeSamples(labels: labels) {
+                container.mainContext.insert(sample)
+            }
+            return container
+        } catch {
+            preconditionFailure("Failed to create DocumentListView preview container: \(error)")
+        }
+    }()
 }

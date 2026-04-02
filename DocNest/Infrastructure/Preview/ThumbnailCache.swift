@@ -56,6 +56,12 @@ final class ThumbnailCache {
         let fileURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
 
         inFlightTasks[key] = Task.detached(priority: .utility) { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    self?.inFlightTasks.removeValue(forKey: key)
+                }
+            }
+
             guard !Task.isCancelled else { return }
             guard DocumentStorageService.fileExists(at: storedFilePath, libraryURL: libraryURL) else { return }
             guard let pdfDocument = PDFDocument(url: fileURL),
@@ -67,7 +73,6 @@ final class ThumbnailCache {
                 guard let self else { return }
                 self.backingCache.setObject(nsImage, forKey: key as NSString)
                 self.loadedThumbnails[key] = nsImage
-                self.inFlightTasks.removeValue(forKey: key)
                 self.pruneStaleEntries()
             }
         }
