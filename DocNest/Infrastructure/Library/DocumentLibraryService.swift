@@ -32,7 +32,13 @@ enum DocumentLibraryService {
     static let packageExtension = "docnestlibrary"
     static let currentFormatVersion = 1
 
+    struct LibraryAccessSession {
+        let url: URL
+        let startedAccessingSecurityScope: Bool
+    }
+
     private static let persistedLibraryPathKey = "selectedLibraryPath"
+    private static let persistedLibraryBookmarkKey = "selectedLibraryBookmark"
     private static let launchArgumentSelectedLibraryPath = "-selectedLibraryPath"
     private static let manifestFileName = "library.json"
     private static let lockFileName = ".lock"
@@ -43,24 +49,63 @@ enum DocumentLibraryService {
         "Diagnostics"
     ]
 
-    static func restorePersistedLibraryURL() -> URL? {
+    static func restorePersistedLibraryAccess() -> LibraryAccessSession? {
         if let launchArgumentLibraryURL = selectedLibraryURL(from: ProcessInfo.processInfo.arguments) {
-            return launchArgumentLibraryURL
+            return accessLibrary(at: launchArgumentLibraryURL)
+        }
+
+        if let bookmarkData = UserDefaults.standard.data(forKey: persistedLibraryBookmarkKey) {
+            var isStale = false
+            do {
+                let resolvedURL = try URL(
+                    resolvingBookmarkData: bookmarkData,
+                    options: [.withSecurityScope],
+                    relativeTo: nil,
+                    bookmarkDataIsStale: &isStale
+                ).standardizedFileURL
+
+                let session = accessLibrary(at: resolvedURL)
+                if isStale {
+                    persistLibraryURL(resolvedURL)
+                }
+                return session
+            } catch {
+                UserDefaults.standard.removeObject(forKey: persistedLibraryBookmarkKey)
+            }
         }
 
         guard let path = UserDefaults.standard.string(forKey: persistedLibraryPathKey) else {
             return nil
         }
 
-        return URL(fileURLWithPath: path)
+        return accessLibrary(at: URL(fileURLWithPath: path))
     }
 
     static func persistLibraryURL(_ url: URL?) {
         if let url {
-            UserDefaults.standard.set(url.standardizedFileURL.path, forKey: persistedLibraryPathKey)
+            let standardizedURL = url.standardizedFileURL
+            UserDefaults.standard.set(standardizedURL.path, forKey: persistedLibraryPathKey)
+
+            if let bookmarkData = try? standardizedURL.bookmarkData(
+                options: [.withSecurityScope],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            ) {
+                UserDefaults.standard.set(bookmarkData, forKey: persistedLibraryBookmarkKey)
+            }
         } else {
             UserDefaults.standard.removeObject(forKey: persistedLibraryPathKey)
+            UserDefaults.standard.removeObject(forKey: persistedLibraryBookmarkKey)
         }
+    }
+
+    static func accessLibrary(at url: URL) -> LibraryAccessSession {
+        let standardizedURL = url.standardizedFileURL
+        let startedAccessingSecurityScope = standardizedURL.startAccessingSecurityScopedResource()
+        return LibraryAccessSession(
+            url: standardizedURL,
+            startedAccessingSecurityScope: startedAccessingSecurityScope
+        )
     }
 
     static func promptForExistingLibrary() -> URL? {

@@ -446,6 +446,7 @@ final class LibrarySessionController: ObservableObject {
     private static let lockHeartbeatInterval: TimeInterval = 30
 
     private var terminationObserver: Any?
+    private var activeLibraryAccessSession: DocumentLibraryService.LibraryAccessSession?
 
     func queueImportURLs(_ urls: [URL]) {
         pendingImportURLs.append(contentsOf: urls)
@@ -459,11 +460,11 @@ final class LibrarySessionController: ObservableObject {
 
     func restorePersistedLibrary() {
         guard selectedLibraryURL == nil,
-              let persistedLibraryURL = DocumentLibraryService.restorePersistedLibraryURL() else {
+              let accessSession = DocumentLibraryService.restorePersistedLibraryAccess() else {
             return
         }
 
-        openValidatedLibrary(at: persistedLibraryURL)
+        openValidatedLibrary(accessSession)
     }
 
     func createLibrary() {
@@ -473,7 +474,7 @@ final class LibrarySessionController: ObservableObject {
 
         do {
             let libraryURL = try DocumentLibraryService.createLibrary(at: url)
-            try openLibrary(at: libraryURL)
+            openValidatedLibrary(DocumentLibraryService.accessLibrary(at: libraryURL))
         } catch {
             libraryErrorMessage = error.localizedDescription
         }
@@ -484,11 +485,11 @@ final class LibrarySessionController: ObservableObject {
             return
         }
 
-        openValidatedLibrary(at: url)
+        openValidatedLibrary(DocumentLibraryService.accessLibrary(at: url))
     }
 
     func openLibraryFromFinder(_ url: URL) {
-        openValidatedLibrary(at: url)
+        openValidatedLibrary(DocumentLibraryService.accessLibrary(at: url))
     }
 
     func closeLibrary() {
@@ -496,30 +497,48 @@ final class LibrarySessionController: ObservableObject {
         if let url = selectedLibraryURL {
             DocumentLibraryService.releaseLock(for: url)
         }
+        if let accessSession = activeLibraryAccessSession,
+           accessSession.startedAccessingSecurityScope {
+            accessSession.url.stopAccessingSecurityScopedResource()
+        }
+        activeLibraryAccessSession = nil
         selectedLibraryURL = nil
         modelContainer = nil
     }
 
-    private func openValidatedLibrary(at url: URL) {
+    private func openValidatedLibrary(_ accessSession: DocumentLibraryService.LibraryAccessSession) {
         do {
-            let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: url)
+            let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: accessSession.url)
             try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
             try DocumentLibraryService.acquireLock(for: validatedURL)
-            try openLibrary(at: validatedURL)
+            try openLibrary(
+                DocumentLibraryService.LibraryAccessSession(
+                    url: validatedURL,
+                    startedAccessingSecurityScope: accessSession.startedAccessingSecurityScope
+                )
+            )
         } catch {
+            if accessSession.startedAccessingSecurityScope {
+                accessSession.url.stopAccessingSecurityScopedResource()
+            }
             closeLibrary()
             DocumentLibraryService.persistLibraryURL(nil)
             libraryErrorMessage = error.localizedDescription
         }
     }
 
-    private func openLibrary(at libraryURL: URL) throws {
-        modelContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
-        selectedLibraryURL = libraryURL
-        DocumentLibraryService.persistLibraryURL(libraryURL)
+    private func openLibrary(_ accessSession: DocumentLibraryService.LibraryAccessSession) throws {
+        if let currentURL = selectedLibraryURL,
+           currentURL != accessSession.url {
+            closeLibrary()
+        }
+        modelContainer = try DocumentLibraryService.openModelContainer(for: accessSession.url)
+        selectedLibraryURL = accessSession.url
+        activeLibraryAccessSession = accessSession
+        DocumentLibraryService.persistLibraryURL(accessSession.url)
         libraryErrorMessage = nil
-        startLockHeartbeat(for: libraryURL)
-        observeAppTermination(for: libraryURL)
+        startLockHeartbeat(for: accessSession.url)
+        observeAppTermination(for: accessSession.url)
     }
 
     // MARK: - Lock Heartbeat
