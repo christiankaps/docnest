@@ -1205,4 +1205,3 @@ struct SmartFolderEditorConfig: Identifiable {
 }
 
 
-
