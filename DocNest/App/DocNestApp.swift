@@ -36,26 +36,148 @@ extension FocusedValues {
 // MARK: - App Delegate
 
 private final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var menuCleanupTimer: Timer?
+    private var menuCleanupDeadline: Date?
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        removeUnwantedEditMenuItems()
+        startMenuCleanupPass()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        startMenuCleanupPass()
+    }
+
+    func applicationWillResignActive(_ notification: Notification) {
+        stopMenuCleanupTimer()
+    }
+
+    private func configureMainMenu() {
+        removeUnwantedMenuItems()
+        normalizeMenusRecursively()
         removeEmptyMenus()
     }
 
-    /// Removes system-injected Edit menu items that are not relevant for this app.
-    private func removeUnwantedEditMenuItems() {
+    private func startMenuCleanupPass() {
+        configureMainMenu()
+
+        menuCleanupDeadline = Date().addingTimeInterval(5)
+        if menuCleanupTimer == nil {
+            menuCleanupTimer = Timer.scheduledTimer(
+                withTimeInterval: 0.5,
+                repeats: true
+            ) { [weak self] _ in
+                guard let self else { return }
+                self.configureMainMenu()
+
+                if let deadline = self.menuCleanupDeadline, Date() >= deadline {
+                    self.stopMenuCleanupTimer()
+                }
+            }
+        }
+    }
+
+    private func stopMenuCleanupTimer() {
+        menuCleanupTimer?.invalidate()
+        menuCleanupTimer = nil
+        menuCleanupDeadline = nil
+    }
+
+    /// Removes system-injected menu items that are not relevant for this app.
+    private func removeUnwantedMenuItems() {
         guard let mainMenu = NSApplication.shared.mainMenu else { return }
-        let unwantedTitles: Set<String> = ["Writing Tools", "AutoFill"]
-        for menuItem in mainMenu.items {
-            guard let submenu = menuItem.submenu else { continue }
-            for item in submenu.items where unwantedTitles.contains(item.title) {
-                submenu.removeItem(item)
+        let unwantedExactTitles: Set<String> = [
+            "Writing Tools",
+            "Schreibwerkzeuge",
+            "AutoFill",
+            "Toolbar",
+            "Show Toolbar",
+            "Hide Toolbar",
+            "Customize Toolbar…",
+            "Show Sidebar",
+            "Hide Sidebar"
+        ]
+        let unwantedTitleFragments = [
+            "Writing Tools",
+            "Schreibwerkzeuge"
+        ]
+        removeMenuItems(
+            in: mainMenu,
+            matchingExactTitles: unwantedExactTitles,
+            containingTitleFragments: unwantedTitleFragments
+        )
+
+        if let formatMenuItem = mainMenu.items.first(where: { $0.title == "Format" }) {
+            mainMenu.removeItem(formatMenuItem)
+        }
+    }
+
+    private func removeMenuItems(
+        in menu: NSMenu,
+        matchingExactTitles exactTitles: Set<String>,
+        containingTitleFragments titleFragments: [String]
+    ) {
+        for item in menu.items.reversed() {
+            if let submenu = item.submenu {
+                removeMenuItems(
+                    in: submenu,
+                    matchingExactTitles: exactTitles,
+                    containingTitleFragments: titleFragments
+                )
+            }
+
+            let matchesExactTitle = exactTitles.contains(item.title)
+            let matchesTitleFragment = titleFragments.contains { fragment in
+                item.title.localizedCaseInsensitiveContains(fragment)
+            }
+
+            if matchesExactTitle || matchesTitleFragment {
+                menu.removeItem(item)
+            }
+        }
+    }
+
+    /// Removes empty items and repeated/edge separators so partially replaced
+    /// SwiftUI command groups do not leave visual debris in the menu bar.
+    private func normalizeMenusRecursively() {
+        guard let mainMenu = NSApplication.shared.mainMenu else { return }
+        normalize(menu: mainMenu)
+    }
+
+    private func normalize(menu: NSMenu) {
+        for item in menu.items {
+            if let submenu = item.submenu {
+                normalize(menu: submenu)
+            }
+        }
+
+        var previousWasSeparator = true
+        for item in menu.items.reversed() {
+            let submenuIsEmpty = item.submenu.map { submenu in
+                submenu.items.allSatisfy(\.isSeparatorItem)
+            } ?? false
+
+            let isEmptyLeafItem = !item.isSeparatorItem
+                && item.submenu == nil
+                && item.action == nil
+                && item.keyEquivalent.isEmpty
+                && item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+            if submenuIsEmpty || isEmptyLeafItem {
+                menu.removeItem(item)
+                continue
+            }
+
+            if item.isSeparatorItem {
+                if previousWasSeparator {
+                    menu.removeItem(item)
+                }
+                previousWasSeparator = true
+            } else {
+                previousWasSeparator = false
             }
         }
     }
@@ -63,9 +185,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Removes top-level menus that have no meaningful content.
     private func removeEmptyMenus() {
         guard let mainMenu = NSApplication.shared.mainMenu else { return }
-        let unwantedMenus: Set<String> = ["Format", "View", "Help"]
+        let removableMenus: Set<String> = ["File", "Edit", "Format", "View", "Help"]
         mainMenu.items.removeAll { item in
-            guard unwantedMenus.contains(item.title) else { return false }
+            guard removableMenus.contains(item.title) else { return false }
             let realItems = item.submenu?.items.filter { !$0.isSeparatorItem } ?? []
             return realItems.isEmpty
         }
@@ -122,17 +244,20 @@ struct DocNestApp: App {
 
 // MARK: - Menu Commands
 
-/// Suppresses unused system-injected menus (View, Format, Help) and empty
-/// standard command groups (Undo/Redo, Save, Print).
+/// Suppresses unused system-injected command groups so the menu bar only shows
+/// actions DocNest actually supports.
 struct SuppressUnusedMenuCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .undoRedo) { }
         CommandGroup(replacing: .saveItem) { }
         CommandGroup(replacing: .printItem) { }
+        CommandGroup(replacing: .newItem) { }
+        CommandGroup(replacing: .systemServices) { }
+        CommandGroup(replacing: .windowArrangement) { }
+        CommandGroup(replacing: .windowSize) { }
         CommandGroup(replacing: .sidebar) { }
         CommandGroup(replacing: .toolbar) { }
         CommandGroup(replacing: .textFormatting) { }
-        CommandGroup(replacing: .help) { }
     }
 }
 
