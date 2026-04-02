@@ -634,13 +634,18 @@ final class LibrarySessionController: ObservableObject {
     private func openValidatedLibrary(_ accessSession: DocumentLibraryService.LibraryAccessSession) {
         do {
             let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: accessSession.url)
-            try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
+            let migration = try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
             try DocumentLibraryService.acquireLock(for: validatedURL)
             try openLibrary(
                 DocumentLibraryService.LibraryAccessSession(
                     url: validatedURL,
                     startedAccessingSecurityScope: accessSession.startedAccessingSecurityScope
-                )
+                ),
+                manifest: DocumentLibraryManifest(
+                    formatVersion: migration.toFormatVersion,
+                    createdAt: manifest.createdAt
+                ),
+                migration: migration
             )
         } catch {
             if accessSession.startedAccessingSecurityScope {
@@ -652,12 +657,23 @@ final class LibrarySessionController: ObservableObject {
         }
     }
 
-    private func openLibrary(_ accessSession: DocumentLibraryService.LibraryAccessSession) throws {
+    private func openLibrary(
+        _ accessSession: DocumentLibraryService.LibraryAccessSession,
+        manifest: DocumentLibraryManifest,
+        migration: LibraryMigrationResult
+    ) throws {
         if let currentURL = selectedLibraryURL,
            currentURL != accessSession.url {
             closeLibrary()
         }
-        modelContainer = try DocumentLibraryService.openModelContainer(for: accessSession.url)
+        let container = try DocumentLibraryService.openModelContainer(for: accessSession.url)
+        _ = try DocumentLibraryService.writeIntegrityReport(
+            for: accessSession.url,
+            manifest: manifest,
+            migration: migration,
+            modelContainer: container
+        )
+        modelContainer = container
         selectedLibraryURL = accessSession.url
         activeLibraryAccessSession = accessSession
         DocumentLibraryService.persistLibraryURL(accessSession.url)

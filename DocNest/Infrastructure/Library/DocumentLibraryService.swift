@@ -12,6 +12,53 @@ struct DocumentLibraryManifest: Codable {
     let createdAt: Date
 }
 
+struct LibraryMigrationResult: Codable {
+    let wasMigrated: Bool
+    let fromFormatVersion: Int
+    let toFormatVersion: Int
+
+    static func none(currentVersion: Int) -> LibraryMigrationResult {
+        LibraryMigrationResult(
+            wasMigrated: false,
+            fromFormatVersion: currentVersion,
+            toFormatVersion: currentVersion
+        )
+    }
+}
+
+struct LibraryIntegrityIssue: Codable, Identifiable {
+    enum Severity: String, Codable {
+        case warning
+        case error
+    }
+
+    let id: UUID
+    let severity: Severity
+    let code: String
+    let message: String
+
+    init(severity: Severity, code: String, message: String) {
+        self.id = UUID()
+        self.severity = severity
+        self.code = code
+        self.message = message
+    }
+}
+
+struct LibraryIntegrityReport: Codable {
+    let generatedAt: Date
+    let libraryPath: String
+    let manifestFormatVersion: Int
+    let schemaVersion: String
+    let migration: LibraryMigrationResult
+    let documentCount: Int
+    let issues: [LibraryIntegrityIssue]
+
+    var hasErrors: Bool {
+        issues.contains { $0.severity == .error }
+    }
+}
+
 struct LibraryLockFile: Codable {
     let hostname: String
     let pid: Int32
@@ -42,6 +89,7 @@ enum DocumentLibraryService {
     private static let launchArgumentSelectedLibraryPath = "-selectedLibraryPath"
     private static let manifestFileName = "library.json"
     private static let lockFileName = ".lock"
+    private static let integrityReportFileName = "integrity-report.json"
     private static let requiredDirectories = [
         "Metadata",
         "Originals",
@@ -158,8 +206,10 @@ enum DocumentLibraryService {
         return libraryURL
     }
 
-    static func migrateLibraryIfNeeded(at libraryURL: URL, manifest: DocumentLibraryManifest) throws {
-        guard manifest.formatVersion < currentFormatVersion else { return }
+    static func migrateLibraryIfNeeded(at libraryURL: URL, manifest: DocumentLibraryManifest) throws -> LibraryMigrationResult {
+        guard manifest.formatVersion < currentFormatVersion else {
+            return .none(currentVersion: manifest.formatVersion)
+        }
 
         // Future migrations go here, applied in order:
         // if manifest.formatVersion < 2 { ... }
@@ -170,6 +220,12 @@ enum DocumentLibraryService {
         )
         let data = try JSONEncoder.prettyPrinted.encode(updatedManifest)
         try data.write(to: manifestURL(for: libraryURL), options: .atomic)
+
+        return LibraryMigrationResult(
+            wasMigrated: true,
+            fromFormatVersion: manifest.formatVersion,
+            toFormatVersion: currentFormatVersion
+        )
     }
 
     static func validateLibrary(at url: URL) throws -> (URL, DocumentLibraryManifest) {
@@ -223,6 +279,33 @@ enum DocumentLibraryService {
         )
     }
 
+    @MainActor
+    static func writeIntegrityReport(
+        for libraryURL: URL,
+        manifest: DocumentLibraryManifest,
+        migration: LibraryMigrationResult,
+        modelContainer: ModelContainer
+    ) throws -> LibraryIntegrityReport {
+        let issues = try collectIntegrityIssues(
+            for: libraryURL,
+            manifest: manifest,
+            modelContext: modelContainer.mainContext
+        )
+        let documentCount = try modelContainer.mainContext.fetchCount(FetchDescriptor<DocumentRecord>())
+        let report = LibraryIntegrityReport(
+            generatedAt: .now,
+            libraryPath: libraryURL.path,
+            manifestFormatVersion: manifest.formatVersion,
+            schemaVersion: "4.0.0",
+            migration: migration,
+            documentCount: documentCount,
+            issues: issues
+        )
+        let reportData = try JSONEncoder.prettyPrinted.encode(report)
+        try reportData.write(to: diagnosticsReportURL(for: libraryURL), options: .atomic)
+        return report
+    }
+
     // MARK: - Library Lock
 
     static func readLockFile(for libraryURL: URL) -> LibraryLockFile? {
@@ -273,6 +356,105 @@ enum DocumentLibraryService {
     private static func lockFileURL(for libraryURL: URL) -> URL {
         metadataDirectory(for: libraryURL)
             .appendingPathComponent(lockFileName)
+    }
+
+    private static func diagnosticsDirectory(for libraryURL: URL) -> URL {
+        libraryURL.appendingPathComponent("Diagnostics", isDirectory: true)
+    }
+
+    private static func diagnosticsReportURL(for libraryURL: URL) -> URL {
+        diagnosticsDirectory(for: libraryURL)
+            .appendingPathComponent(integrityReportFileName)
+    }
+
+    @MainActor
+    private static func collectIntegrityIssues(
+        for libraryURL: URL,
+        manifest: DocumentLibraryManifest,
+        modelContext: ModelContext
+    ) throws -> [LibraryIntegrityIssue] {
+        var issues: [LibraryIntegrityIssue] = []
+
+        if manifest.formatVersion != currentFormatVersion {
+            issues.append(
+                LibraryIntegrityIssue(
+                    severity: .warning,
+                    code: "manifest.version.outdated",
+                    message: "Library manifest version is \(manifest.formatVersion), expected \(currentFormatVersion)."
+                )
+            )
+        }
+
+        let metadataStore = metadataStoreURL(for: libraryURL)
+        if !FileManager.default.fileExists(atPath: metadataStore.path) {
+            issues.append(
+                LibraryIntegrityIssue(
+                    severity: .warning,
+                    code: "metadata.store.missing",
+                    message: "Metadata store is missing at \(metadataStore.lastPathComponent). A new store may be created on first save."
+                )
+            )
+        }
+
+        let documents = try modelContext.fetch(FetchDescriptor<DocumentRecord>())
+        var seenHashes: [String: Int] = [:]
+
+        for document in documents {
+            if let storedFilePath = document.storedFilePath {
+                let fileURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
+                if !FileManager.default.fileExists(atPath: fileURL.path) {
+                    issues.append(
+                        LibraryIntegrityIssue(
+                            severity: .error,
+                            code: "document.file.missing",
+                            message: "Document \"\(document.title)\" references a missing stored file at \(storedFilePath)."
+                        )
+                    )
+                }
+
+                if !fileURL.standardizedFileURL.path.hasPrefix(libraryURL.standardizedFileURL.path + "/") {
+                    issues.append(
+                        LibraryIntegrityIssue(
+                            severity: .error,
+                            code: "document.file.outside-library",
+                            message: "Document \"\(document.title)\" resolves outside the library package."
+                        )
+                    )
+                }
+            } else if document.trashedAt == nil {
+                issues.append(
+                    LibraryIntegrityIssue(
+                        severity: .warning,
+                        code: "document.file.unset",
+                        message: "Active document \"\(document.title)\" has no stored file path."
+                    )
+                )
+            }
+
+            if document.contentHash.isEmpty {
+                issues.append(
+                    LibraryIntegrityIssue(
+                        severity: .warning,
+                        code: "document.hash.empty",
+                        message: "Document \"\(document.title)\" has an empty content hash."
+                    )
+                )
+            } else {
+                seenHashes[document.contentHash, default: 0] += 1
+            }
+        }
+
+        for (hash, count) in seenHashes where count > 1 {
+            issues.append(
+                LibraryIntegrityIssue(
+                    severity: .warning,
+                    code: "document.hash.duplicate",
+                    message: "Content hash \(String(hash.prefix(12))) is shared by \(count) documents."
+                )
+            )
+        }
+
+        return issues
     }
 
     enum LockError: LocalizedError {
