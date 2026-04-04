@@ -352,20 +352,46 @@ enum DocumentLibraryService {
         )
     }
 
-    @MainActor
+    static func refreshIntegrityArtifacts(
+        for libraryURL: URL,
+        manifest: DocumentLibraryManifest,
+        migration: LibraryMigrationResult,
+        packageRepair: LibraryRepairResult
+    ) async throws -> LibraryIntegrityReport {
+        try await Task.detached(priority: .utility) {
+            let modelContainer = try openModelContainer(for: libraryURL)
+            let modelContext = ModelContext(modelContainer)
+            let metadataRepair = try repairLibraryConsistency(
+                for: libraryURL,
+                modelContext: modelContext
+            )
+            let repair = LibraryRepairResult(
+                performedRepair: packageRepair.performedRepair || metadataRepair.performedRepair,
+                actions: packageRepair.actions + metadataRepair.actions
+            )
+            return try writeIntegrityReport(
+                for: libraryURL,
+                manifest: manifest,
+                migration: migration,
+                repair: repair,
+                modelContext: modelContext
+            )
+        }.value
+    }
+
     static func writeIntegrityReport(
         for libraryURL: URL,
         manifest: DocumentLibraryManifest,
         migration: LibraryMigrationResult,
         repair: LibraryRepairResult,
-        modelContainer: ModelContainer
+        modelContext: ModelContext
     ) throws -> LibraryIntegrityReport {
         let issues = try collectIntegrityIssues(
             for: libraryURL,
             manifest: manifest,
-            modelContext: modelContainer.mainContext
+            modelContext: modelContext
         )
-        let documentCount = try modelContainer.mainContext.fetchCount(FetchDescriptor<DocumentRecord>())
+        let documentCount = try modelContext.fetchCount(FetchDescriptor<DocumentRecord>())
         let report = LibraryIntegrityReport(
             generatedAt: .now,
             libraryPath: libraryURL.path,
@@ -381,12 +407,10 @@ enum DocumentLibraryService {
         return report
     }
 
-    @MainActor
     static func repairLibraryConsistency(
         for libraryURL: URL,
-        modelContainer: ModelContainer
+        modelContext: ModelContext
     ) throws -> LibraryRepairResult {
-        let modelContext = modelContainer.mainContext
         let documents = try modelContext.fetch(FetchDescriptor<DocumentRecord>())
         var actions: [LibraryRepairAction] = []
 
@@ -501,7 +525,6 @@ enum DocumentLibraryService {
             .appendingPathComponent(integrityReportFileName)
     }
 
-    @MainActor
     private static func collectIntegrityIssues(
         for libraryURL: URL,
         manifest: DocumentLibraryManifest,

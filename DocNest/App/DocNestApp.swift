@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import SwiftUI
 import SwiftData
 
@@ -562,6 +563,7 @@ private struct AppRootView: View {
 
 @MainActor
 final class LibrarySessionController: ObservableObject {
+    private static let logger = Logger(subsystem: "com.kaps.docnest", category: "LibrarySession")
     @Published private(set) var selectedLibraryURL: URL?
     @Published private(set) var modelContainer: ModelContainer?
     @Published var libraryErrorMessage: String?
@@ -572,6 +574,7 @@ final class LibrarySessionController: ObservableObject {
 
     private var terminationObserver: Any?
     private var activeLibraryAccessSession: DocumentLibraryService.LibraryAccessSession?
+    private var integrityRefreshTask: Task<Void, Never>?
 
     func queueImportURLs(_ urls: [URL]) {
         pendingImportURLs.append(contentsOf: urls)
@@ -618,6 +621,8 @@ final class LibrarySessionController: ObservableObject {
     }
 
     func closeLibrary() {
+        integrityRefreshTask?.cancel()
+        integrityRefreshTask = nil
         stopLockHeartbeat()
         if let url = selectedLibraryURL {
             DocumentLibraryService.releaseLock(for: url)
@@ -670,17 +675,6 @@ final class LibrarySessionController: ObservableObject {
             closeLibrary()
         }
         let container = try DocumentLibraryService.openModelContainer(for: accessSession.url)
-        let metadataRepair = try DocumentLibraryService.repairLibraryConsistency(
-            for: accessSession.url,
-            modelContainer: container
-        )
-        _ = try DocumentLibraryService.writeIntegrityReport(
-            for: accessSession.url,
-            manifest: manifest,
-            migration: migration,
-            repair: mergedRepairResult(packageRepair, metadataRepair),
-            modelContainer: container
-        )
         modelContainer = container
         selectedLibraryURL = accessSession.url
         activeLibraryAccessSession = accessSession
@@ -688,14 +682,21 @@ final class LibrarySessionController: ObservableObject {
         libraryErrorMessage = nil
         startLockHeartbeat(for: accessSession.url)
         observeAppTermination(for: accessSession.url)
-    }
-
-    private func mergedRepairResult(
-        _ lhs: LibraryRepairResult,
-        _ rhs: LibraryRepairResult
-    ) -> LibraryRepairResult {
-        let actions = lhs.actions + rhs.actions
-        return LibraryRepairResult(performedRepair: !actions.isEmpty, actions: actions)
+        integrityRefreshTask?.cancel()
+        integrityRefreshTask = Task { [libraryURL = accessSession.url, manifest, migration, packageRepair] in
+            do {
+                _ = try await DocumentLibraryService.refreshIntegrityArtifacts(
+                    for: libraryURL,
+                    manifest: manifest,
+                    migration: migration,
+                    packageRepair: packageRepair
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                Self.logger.error("Failed to refresh integrity artifacts: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     // MARK: - Lock Heartbeat
