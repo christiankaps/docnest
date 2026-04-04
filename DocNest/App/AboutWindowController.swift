@@ -39,11 +39,8 @@ final class AboutWindowController: NSWindowController {
 // MARK: - About View
 
 private struct AboutView: View {
-    private let appVersion: String = {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
-        return "\(version) (\(build))"
-    }()
+    private let releaseVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    private let buildNumber: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
 
     @State private var statistics: LibrarySessionController.LibraryStatistics?
 
@@ -58,7 +55,11 @@ private struct AboutView: View {
                 Text("DocNest")
                     .font(.system(size: 22, weight: .semibold))
 
-                Text("Version \(appVersion)")
+                Text("Version \(releaseVersion)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                Text("Build \(buildNumber)")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }

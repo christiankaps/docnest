@@ -18,6 +18,20 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
 
+      - name: Derive release version
+        run: |
+          RAW_TAG="${{ github.event.release.tag_name }}"
+          VERSION="${RAW_TAG#v}"
+          VERSION="${VERSION#V}"
+
+          if [ -z "$VERSION" ]; then
+            echo "Release tag did not contain a version"
+            exit 1
+          fi
+
+          echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=${{ github.run_number }}" >> "$GITHUB_ENV"
+
       - name: Archive
         run: |
           xcodebuild \
@@ -26,6 +40,8 @@ jobs:
             -configuration Release \
             -archivePath "$RUNNER_TEMP/DocNest.xcarchive" \
             archive \
+            MARKETING_VERSION="$RELEASE_VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             SKIP_INSTALL=NO \
             BUILD_LIBRARY_FOR_DISTRIBUTION=NO \
             CODE_SIGN_IDENTITY="-" \
