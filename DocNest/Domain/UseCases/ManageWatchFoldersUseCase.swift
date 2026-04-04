@@ -7,6 +7,7 @@ enum ManageWatchFoldersUseCase {
         named name: String,
         icon: String?,
         folderPath: String,
+        libraryURL: URL? = nil,
         isEnabled: Bool = true,
         labelIDs: [UUID],
         using modelContext: ModelContext
@@ -16,6 +17,8 @@ enum ManageWatchFoldersUseCase {
         guard !folderPath.isEmpty else {
             throw WatchFolderValidationError.emptyPath
         }
+
+        try validate(folderPath: folderPath, libraryURL: libraryURL)
 
         let descriptor = FetchDescriptor<WatchFolder>(sortBy: [SortDescriptor(\.sortOrder)])
         let existing = try modelContext.fetch(descriptor)
@@ -39,6 +42,7 @@ enum ManageWatchFoldersUseCase {
         name: String,
         icon: String?,
         folderPath: String,
+        libraryURL: URL? = nil,
         isEnabled: Bool,
         labelIDs: [UUID],
         using modelContext: ModelContext
@@ -48,6 +52,8 @@ enum ManageWatchFoldersUseCase {
         guard !folderPath.isEmpty else {
             throw WatchFolderValidationError.emptyPath
         }
+
+        try validate(folderPath: folderPath, libraryURL: libraryURL)
 
         folder.name = trimmedName
         folder.icon = icon?.isEmpty == true ? nil : icon
@@ -83,11 +89,21 @@ enum ManageWatchFoldersUseCase {
 
         return collapsed
     }
+
+    private static func validate(folderPath: String, libraryURL: URL?) throws {
+        guard let libraryURL else { return }
+
+        let watchFolderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
+        if DocumentLibraryService.contains(watchFolderURL, inLibrary: libraryURL) {
+            throw WatchFolderValidationError.insideLibrary
+        }
+    }
 }
 
 enum WatchFolderValidationError: LocalizedError {
     case emptyName
     case emptyPath
+    case insideLibrary
 
     var errorDescription: String? {
         switch self {
@@ -95,6 +111,8 @@ enum WatchFolderValidationError: LocalizedError {
             return "Watch folders need a name."
         case .emptyPath:
             return "Watch folders need a folder path."
+        case .insideLibrary:
+            return "The open DocNest library and its subfolders cannot be used as watch folders."
         }
     }
 }

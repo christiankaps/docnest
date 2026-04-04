@@ -21,6 +21,7 @@ struct WatchFolderEditorConfig: Identifiable {
 struct WatchFolderEditorSheet: View {
     let config: WatchFolderEditorConfig
 
+    @Environment(LibraryCoordinator.self) private var coordinator
     @Query(sort: [SortDescriptor(\LabelTag.sortOrder, order: .forward), SortDescriptor(\LabelTag.name, order: .forward)])
     private var allLabels: [LabelTag]
 
@@ -221,6 +222,7 @@ struct WatchFolderEditorSheet: View {
                     name: name,
                     icon: icon.isEmpty ? nil : String(icon.prefix(1)),
                     folderPath: folderPath,
+                    libraryURL: coordinator.libraryURL,
                     isEnabled: isEnabled,
                     labelIDs: labelIDArray,
                     using: modelContext
@@ -230,6 +232,7 @@ struct WatchFolderEditorSheet: View {
                     named: name,
                     icon: icon.isEmpty ? nil : String(icon.prefix(1)),
                     folderPath: folderPath,
+                    libraryURL: coordinator.libraryURL,
                     labelIDs: labelIDArray,
                     using: modelContext
                 )

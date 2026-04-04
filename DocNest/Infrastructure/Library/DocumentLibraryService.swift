@@ -1,5 +1,7 @@
 import AppKit
+import CryptoKit
 import Foundation
+import PDFKit
 import SwiftData
 import UniformTypeIdentifiers
 
@@ -24,6 +26,35 @@ struct LibraryMigrationResult: Codable {
             toFormatVersion: currentVersion
         )
     }
+}
+
+struct LibraryRepairAction: Codable, Identifiable {
+    enum Kind: String, Codable {
+        case createdDirectory
+        case recreatedManifest
+        case backfilledContentHash
+        case backfilledFileSize
+        case backfilledPageCount
+    }
+
+    let id: UUID
+    let kind: Kind
+    let target: String
+    let message: String
+
+    init(kind: Kind, target: String, message: String) {
+        self.id = UUID()
+        self.kind = kind
+        self.target = target
+        self.message = message
+    }
+}
+
+struct LibraryRepairResult: Codable {
+    let performedRepair: Bool
+    let actions: [LibraryRepairAction]
+
+    static let none = LibraryRepairResult(performedRepair: false, actions: [])
 }
 
 struct LibraryIntegrityIssue: Codable, Identifiable {
@@ -51,6 +82,7 @@ struct LibraryIntegrityReport: Codable {
     let manifestFormatVersion: Int
     let schemaVersion: String
     let migration: LibraryMigrationResult
+    let repair: LibraryRepairResult
     let documentCount: Int
     let issues: [LibraryIntegrityIssue]
 
@@ -192,18 +224,52 @@ enum DocumentLibraryService {
         let libraryURL = normalizedLibraryURL(from: url)
         try FileManager.default.createDirectory(at: libraryURL, withIntermediateDirectories: true)
 
+        try createRequiredDirectories(in: libraryURL)
+        try writeManifest(
+            DocumentLibraryManifest(formatVersion: currentFormatVersion, createdAt: .now),
+            for: libraryURL
+        )
+
+        return libraryURL
+    }
+
+    static func repairLibraryPackageIfNeeded(at url: URL) throws -> LibraryRepairResult {
+        let libraryURL = normalizedLibraryURL(from: url)
+        var actions: [LibraryRepairAction] = []
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: libraryURL.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+
         for directory in requiredDirectories {
-            try FileManager.default.createDirectory(
-                at: libraryURL.appendingPathComponent(directory, isDirectory: true),
-                withIntermediateDirectories: true
+            let directoryURL = libraryURL.appendingPathComponent(directory, isDirectory: true)
+            if !FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory) || !isDirectory.boolValue {
+                try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+                actions.append(
+                    LibraryRepairAction(
+                        kind: .createdDirectory,
+                        target: directory,
+                        message: "Created missing \(directory) directory."
+                    )
+                )
+            }
+        }
+
+        let manifestURL = manifestURL(for: libraryURL)
+        if !FileManager.default.fileExists(atPath: manifestURL.path) {
+            let manifest = DocumentLibraryManifest(formatVersion: currentFormatVersion, createdAt: .now)
+            try writeManifest(manifest, for: libraryURL)
+            actions.append(
+                LibraryRepairAction(
+                    kind: .recreatedManifest,
+                    target: manifestFileName,
+                    message: "Recreated missing library manifest."
+                )
             )
         }
 
-        let manifest = DocumentLibraryManifest(formatVersion: currentFormatVersion, createdAt: .now)
-        let manifestData = try JSONEncoder.prettyPrinted.encode(manifest)
-        try manifestData.write(to: manifestURL(for: libraryURL), options: .atomic)
-
-        return libraryURL
+        return LibraryRepairResult(performedRepair: !actions.isEmpty, actions: actions)
     }
 
     static func migrateLibraryIfNeeded(at libraryURL: URL, manifest: DocumentLibraryManifest) throws -> LibraryMigrationResult {
@@ -253,6 +319,13 @@ enum DocumentLibraryService {
         libraryURL.appendingPathComponent("Originals", isDirectory: true)
     }
 
+    static func contains(_ candidateURL: URL, inLibrary libraryURL: URL) -> Bool {
+        let libraryPath = libraryURL.standardizedFileURL.resolvingSymlinksInPath().path
+        let candidatePath = candidateURL.standardizedFileURL.resolvingSymlinksInPath().path
+
+        return candidatePath == libraryPath || candidatePath.hasPrefix(libraryPath + "/")
+    }
+
     static func metadataDirectory(for libraryURL: URL) -> URL {
         libraryURL.appendingPathComponent("Metadata", isDirectory: true)
     }
@@ -284,6 +357,7 @@ enum DocumentLibraryService {
         for libraryURL: URL,
         manifest: DocumentLibraryManifest,
         migration: LibraryMigrationResult,
+        repair: LibraryRepairResult,
         modelContainer: ModelContainer
     ) throws -> LibraryIntegrityReport {
         let issues = try collectIntegrityIssues(
@@ -298,12 +372,72 @@ enum DocumentLibraryService {
             manifestFormatVersion: manifest.formatVersion,
             schemaVersion: "4.0.0",
             migration: migration,
+            repair: repair,
             documentCount: documentCount,
             issues: issues
         )
         let reportData = try JSONEncoder.prettyPrinted.encode(report)
         try reportData.write(to: diagnosticsReportURL(for: libraryURL), options: .atomic)
         return report
+    }
+
+    @MainActor
+    static func repairLibraryConsistency(
+        for libraryURL: URL,
+        modelContainer: ModelContainer
+    ) throws -> LibraryRepairResult {
+        let modelContext = modelContainer.mainContext
+        let documents = try modelContext.fetch(FetchDescriptor<DocumentRecord>())
+        var actions: [LibraryRepairAction] = []
+
+        for document in documents {
+            guard let storedFilePath = document.storedFilePath else { continue }
+
+            let fileURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
+            guard FileManager.default.fileExists(atPath: fileURL.path) else { continue }
+            guard contains(fileURL, inLibrary: libraryURL) else { continue }
+
+            if document.contentHash.isEmpty {
+                document.contentHash = try hashFile(at: fileURL)
+                actions.append(
+                    LibraryRepairAction(
+                        kind: .backfilledContentHash,
+                        target: document.title,
+                        message: "Backfilled missing content hash for \"\(document.title)\"."
+                    )
+                )
+            }
+
+            if document.fileSize <= 0 {
+                let resourceValues = try fileURL.resourceValues(forKeys: [.fileSizeKey])
+                document.fileSize = Int64(resourceValues.fileSize ?? 0)
+                actions.append(
+                    LibraryRepairAction(
+                        kind: .backfilledFileSize,
+                        target: document.title,
+                        message: "Backfilled file size for \"\(document.title)\"."
+                    )
+                )
+            }
+
+            if document.pageCount <= 0,
+               let pdfDocument = PDFDocument(url: fileURL) {
+                document.pageCount = pdfDocument.pageCount
+                actions.append(
+                    LibraryRepairAction(
+                        kind: .backfilledPageCount,
+                        target: document.title,
+                        message: "Backfilled page count for \"\(document.title)\"."
+                    )
+                )
+            }
+        }
+
+        if !actions.isEmpty {
+            try modelContext.save()
+        }
+
+        return LibraryRepairResult(performedRepair: !actions.isEmpty, actions: actions)
     }
 
     // MARK: - Library Lock
@@ -455,6 +589,34 @@ enum DocumentLibraryService {
         }
 
         return issues
+    }
+
+    private static func createRequiredDirectories(in libraryURL: URL) throws {
+        for directory in requiredDirectories {
+            try FileManager.default.createDirectory(
+                at: libraryURL.appendingPathComponent(directory, isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+    }
+
+    private static func writeManifest(_ manifest: DocumentLibraryManifest, for libraryURL: URL) throws {
+        let manifestData = try JSONEncoder.prettyPrinted.encode(manifest)
+        try manifestData.write(to: manifestURL(for: libraryURL), options: .atomic)
+    }
+
+    private static func hashFile(at url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer {
+            try? handle.close()
+        }
+
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1_048_576), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     enum LockError: LocalizedError {

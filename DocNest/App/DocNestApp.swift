@@ -633,6 +633,7 @@ final class LibrarySessionController: ObservableObject {
 
     private func openValidatedLibrary(_ accessSession: DocumentLibraryService.LibraryAccessSession) {
         do {
+            let packageRepair = try DocumentLibraryService.repairLibraryPackageIfNeeded(at: accessSession.url)
             let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: accessSession.url)
             let migration = try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
             try DocumentLibraryService.acquireLock(for: validatedURL)
@@ -645,7 +646,8 @@ final class LibrarySessionController: ObservableObject {
                     formatVersion: migration.toFormatVersion,
                     createdAt: manifest.createdAt
                 ),
-                migration: migration
+                migration: migration,
+                packageRepair: packageRepair
             )
         } catch {
             if accessSession.startedAccessingSecurityScope {
@@ -660,17 +662,23 @@ final class LibrarySessionController: ObservableObject {
     private func openLibrary(
         _ accessSession: DocumentLibraryService.LibraryAccessSession,
         manifest: DocumentLibraryManifest,
-        migration: LibraryMigrationResult
+        migration: LibraryMigrationResult,
+        packageRepair: LibraryRepairResult
     ) throws {
         if let currentURL = selectedLibraryURL,
            currentURL != accessSession.url {
             closeLibrary()
         }
         let container = try DocumentLibraryService.openModelContainer(for: accessSession.url)
+        let metadataRepair = try DocumentLibraryService.repairLibraryConsistency(
+            for: accessSession.url,
+            modelContainer: container
+        )
         _ = try DocumentLibraryService.writeIntegrityReport(
             for: accessSession.url,
             manifest: manifest,
             migration: migration,
+            repair: mergedRepairResult(packageRepair, metadataRepair),
             modelContainer: container
         )
         modelContainer = container
@@ -680,6 +688,14 @@ final class LibrarySessionController: ObservableObject {
         libraryErrorMessage = nil
         startLockHeartbeat(for: accessSession.url)
         observeAppTermination(for: accessSession.url)
+    }
+
+    private func mergedRepairResult(
+        _ lhs: LibraryRepairResult,
+        _ rhs: LibraryRepairResult
+    ) -> LibraryRepairResult {
+        let actions = lhs.actions + rhs.actions
+        return LibraryRepairResult(performedRepair: !actions.isEmpty, actions: actions)
     }
 
     // MARK: - Lock Heartbeat

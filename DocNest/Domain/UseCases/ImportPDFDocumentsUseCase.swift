@@ -105,8 +105,18 @@ enum ImportPDFDocumentsUseCase {
         // Partition into file URLs and web URLs
         var fileURLs: [URL] = []
         var webURLs: [URL] = []
+        var failures: [ImportPDFDocumentsResult.Failure] = []
         for url in urls {
             if url.isFileURL {
+                if shouldRejectSelfImport(of: url, into: libraryURL) {
+                    failures.append(
+                        .init(
+                            fileName: url.lastPathComponent.isEmpty ? nil : url.lastPathComponent,
+                            message: "Items from inside the open DocNest library cannot be imported."
+                        )
+                    )
+                    continue
+                }
                 fileURLs.append(url)
             } else if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
                 webURLs.append(url)
@@ -138,13 +148,22 @@ enum ImportPDFDocumentsUseCase {
         var importedStoredPaths: [String] = []
         var duplicates: [ImportPDFDocumentsResult.Duplicate] = []
         var unsupportedFiles: [ImportPDFDocumentsResult.Unsupported] = []
-        var failures: [ImportPDFDocumentsResult.Failure] = []
         var batchHashes: Set<String> = []
 
         for (index, url) in resolvedURLs.enumerated() {
             defer { onProgress?(index + 1, resolvedURLs.count) }
 
             if Task.isCancelled { break }
+
+            guard !shouldRejectSelfImport(of: url, into: libraryURL) else {
+                failures.append(
+                    .init(
+                        fileName: url.lastPathComponent.isEmpty ? nil : url.lastPathComponent,
+                        message: "Items from inside the open DocNest library cannot be imported."
+                    )
+                )
+                continue
+            }
 
             guard isSupportedDocumentURL(url) else {
                 unsupportedFiles.append(.init(fileName: url.lastPathComponent))
@@ -512,6 +531,14 @@ enum ImportPDFDocumentsUseCase {
         }
 
         return pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
+    }
+
+    private static func shouldRejectSelfImport(of url: URL, into libraryURL: URL) -> Bool {
+        guard url.isFileURL else {
+            return false
+        }
+
+        return DocumentLibraryService.contains(url, inLibrary: libraryURL)
     }
 
     private static func normalizedTitle(for url: URL) -> String {
