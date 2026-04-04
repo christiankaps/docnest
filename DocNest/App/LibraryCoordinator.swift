@@ -74,10 +74,13 @@ final class LibraryCoordinator {
     private(set) var selectedDocuments: [DocumentRecord] = []
     private(set) var cachedShareURLs: [URL] = []
     private(set) var sidebarCounts = LibrarySidebarCounts.empty
+    private var labelsByUUID: [UUID: LabelTag] = [:]
+    private var labelUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
+    private var smartFoldersByPersistentID: [PersistentIdentifier: SmartFolder] = [:]
 
     // MARK: - Internal
     private var activeImportTask: Task<Void, Never>?
-    private let folderMonitorService = FolderMonitorService()
+    private let watchFolderController = WatchFolderController()
     private var pendingLabelFilterApplyTask: Task<Void, Never>?
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
     let recentDocumentLimit = 10
@@ -111,7 +114,7 @@ final class LibraryCoordinator {
     /// When a smart folder is selected, this reflects the folder's labels instead of the interactive filter.
     var effectiveHighlightedLabelIDs: Set<PersistentIdentifier> {
         if let folderID = selectedSmartFolderID,
-           let folder = allSmartFolders.first(where: { $0.persistentModelID == folderID }) {
+           let folder = smartFoldersByPersistentID[folderID] {
             return resolvedLabelPersistentIDs(from: folder.labelIDs)
         }
         return labelFilterSelection.visualSelection
@@ -124,6 +127,9 @@ final class LibraryCoordinator {
         self.allSmartFolders = allSmartFolders
         self.allLabelGroups = allLabelGroups
         self.allWatchFolders = allWatchFolders
+        labelsByUUID = Dictionary(uniqueKeysWithValues: allLabels.map { ($0.id, $0) })
+        labelUUIDByPersistentID = Dictionary(uniqueKeysWithValues: allLabels.map { ($0.persistentModelID, $0.id) })
+        smartFoldersByPersistentID = Dictionary(uniqueKeysWithValues: allSmartFolders.map { ($0.persistentModelID, $0) })
 
         var active: [DocumentRecord] = []
         var trashed: [DocumentRecord] = []
@@ -191,7 +197,7 @@ final class LibraryCoordinator {
     }
 
     private func smartFolderDocuments(for folderID: PersistentIdentifier) -> [DocumentRecord] {
-        guard let folder = allSmartFolders.first(where: { $0.persistentModelID == folderID }) else {
+        guard let folder = smartFoldersByPersistentID[folderID] else {
             return []
         }
         let labelPIDs = resolvedLabelPersistentIDs(from: folder.labelIDs)
@@ -205,7 +211,7 @@ final class LibraryCoordinator {
     private func resolvedLabelPersistentIDs(from uuids: [UUID]) -> Set<PersistentIdentifier> {
         var result = Set<PersistentIdentifier>()
         for uuid in uuids {
-            if let label = allLabels.first(where: { $0.id == uuid }) {
+            if let label = labelsByUUID[uuid] {
                 result.insert(label.persistentModelID)
             }
         }
@@ -361,7 +367,7 @@ final class LibraryCoordinator {
         let activeDocuments = documents.filter { $0.trashedAt == nil }
         guard !activeDocuments.isEmpty else { return false }
 
-        guard let label = allLabels.first(where: { $0.id == labelID }) else {
+        guard let label = labelsByUUID[labelID] else {
             return false
         }
 
@@ -440,7 +446,8 @@ final class LibraryCoordinator {
     func confirmDroppedLabelAssignment(allDocuments: [DocumentRecord]) {
         guard let modelContext,
               let pending = pendingDroppedLabelAssignment,
-              let label = allLabels.first(where: { $0.persistentModelID == pending.labelID }) else {
+              let labelUUID = labelUUIDByPersistentID[pending.labelID],
+              let label = labelsByUUID[labelUUID] else {
             pendingDroppedLabelAssignment = nil
             return
         }
@@ -500,7 +507,7 @@ final class LibraryCoordinator {
 
         let activeFilterLabels: [LabelTag]
         if let folderID = selectedSmartFolderID,
-           let folder = allSmartFolders.first(where: { $0.persistentModelID == folderID }) {
+           let folder = smartFoldersByPersistentID[folderID] {
             let folderLabelUUIDs = Set(folder.labelIDs)
             activeFilterLabels = allLabels.filter { folderLabelUUIDs.contains($0.id) }
         } else {
@@ -634,44 +641,26 @@ final class LibraryCoordinator {
     }
 
     func prefillLabelIDsForNewSmartFolder() -> [UUID] {
-        labelFilterSelection.appliedSelection.compactMap { persistentID in
-            allLabels.first(where: { $0.persistentModelID == persistentID })?.id
-        }
+        labelFilterSelection.appliedSelection.compactMap { labelUUIDByPersistentID[$0] }
     }
 
     // MARK: - Watch folder monitoring
 
     func setupWatchFolderMonitoring() {
-        folderMonitorService.onNewPDFsDetected = { [weak self] urls, labelIDs in
+        watchFolderController.onImportRequested = { [weak self] urls, labelIDs in
             self?.importFromWatchFolder(urls: urls, labelIDs: labelIDs)
         }
         refreshWatchFolderMonitors()
     }
 
     func refreshWatchFolderMonitors() {
-        for folder in allWatchFolders {
-            if folder.isEnabled && folderMonitorService.folderExists(at: folder.folderPath) {
-                if !folderMonitorService.isMonitoring(id: folder.id) {
-                    folderMonitorService.startMonitoring(folder)
-                } else {
-                    folderMonitorService.updateLabelIDs(for: folder.id, labelIDs: folder.labelIDs)
-                }
-            } else {
-                folderMonitorService.stopMonitoring(id: folder.id)
-            }
-        }
-
-        // Stop monitors for watch folders that have been deleted
-        let currentIDs = Set(allWatchFolders.map(\.id))
-        for folder in allWatchFolders where !currentIDs.contains(folder.id) {
-            folderMonitorService.stopMonitoring(id: folder.id)
-        }
-
-        recomputeWatchFolderStatuses()
+        watchFolderController.refresh(with: allWatchFolders)
+        watchFolderStatuses = watchFolderController.statuses
     }
 
     func tearDownWatchFolderMonitoring() {
-        folderMonitorService.stopAll()
+        watchFolderController.tearDown()
+        watchFolderStatuses = [:]
     }
 
     private func importFromWatchFolder(urls: [URL], labelIDs: [UUID]) {
@@ -691,20 +680,6 @@ final class LibraryCoordinator {
                 self?.importSummaryMessage = "Watch folder: imported \(result.importedCount) document\(result.importedCount == 1 ? "" : "s")."
             }
         }
-    }
-
-    private func recomputeWatchFolderStatuses() {
-        var statuses: [UUID: WatchFolderStatus] = [:]
-        for folder in allWatchFolders {
-            if !folderMonitorService.folderExists(at: folder.folderPath) {
-                statuses[folder.id] = .pathInvalid
-            } else if !folder.isEnabled {
-                statuses[folder.id] = .paused
-            } else {
-                statuses[folder.id] = .monitoring
-            }
-        }
-        watchFolderStatuses = statuses
     }
 
     // MARK: - Binding helpers
@@ -739,7 +714,8 @@ final class LibraryCoordinator {
 
     var droppedLabelAssignmentTitle: String {
         guard let pending = pendingDroppedLabelAssignment,
-              let label = allLabels.first(where: { $0.persistentModelID == pending.labelID }) else {
+              let labelUUID = labelUUIDByPersistentID[pending.labelID],
+              let label = labelsByUUID[labelUUID] else {
             return "Assign Label"
         }
 
@@ -800,4 +776,58 @@ final class LibraryCoordinator {
 
 extension LibrarySidebarCounts {
     static let empty = LibrarySidebarCounts(activeDocuments: [], trashedCount: 0, labels: [], recentLimit: 10, labelSourceDocuments: [], activeLabelFilterIDs: [])
+}
+
+@MainActor
+private final class WatchFolderController {
+    private let folderMonitorService = FolderMonitorService()
+
+    var onImportRequested: ((_ urls: [URL], _ labelIDs: [UUID]) -> Void)? {
+        didSet {
+            folderMonitorService.onNewPDFsDetected = onImportRequested
+        }
+    }
+
+    private(set) var statuses: [UUID: WatchFolderStatus] = [:]
+
+    func refresh(with watchFolders: [WatchFolder]) {
+        let currentIDs = Set(watchFolders.map(\.id))
+
+        for folder in watchFolders {
+            if folder.isEnabled && folderMonitorService.folderExists(at: folder.folderPath) {
+                if folderMonitorService.isMonitoring(id: folder.id) {
+                    folderMonitorService.updateLabelIDs(for: folder.id, labelIDs: folder.labelIDs)
+                } else {
+                    folderMonitorService.startMonitoring(folder)
+                }
+            } else {
+                folderMonitorService.stopMonitoring(id: folder.id)
+            }
+        }
+
+        for monitoredID in folderMonitorService.monitoredIDs where !currentIDs.contains(monitoredID) {
+            folderMonitorService.stopMonitoring(id: monitoredID)
+        }
+
+        recomputeStatuses(for: watchFolders)
+    }
+
+    func tearDown() {
+        folderMonitorService.stopAll()
+        statuses = [:]
+    }
+
+    private func recomputeStatuses(for watchFolders: [WatchFolder]) {
+        var nextStatuses: [UUID: WatchFolderStatus] = [:]
+        for folder in watchFolders {
+            if !folderMonitorService.folderExists(at: folder.folderPath) {
+                nextStatuses[folder.id] = .pathInvalid
+            } else if !folder.isEnabled {
+                nextStatuses[folder.id] = .paused
+            } else {
+                nextStatuses[folder.id] = .monitoring
+            }
+        }
+        statuses = nextStatuses
+    }
 }
