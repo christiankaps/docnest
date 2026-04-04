@@ -122,7 +122,7 @@ struct DocumentListView: View {
 
             return comparison == .orderedDescending
         }
-        cachedGroupedDocuments = groupMode.group(cachedSortedDocuments)
+        cachedGroupedDocuments = groupMode == .none ? [] : groupMode.group(cachedSortedDocuments)
     }
 
     private var effectiveOptionalColumns: OptionalColumnVisibility {
@@ -909,21 +909,17 @@ private struct DocumentLabelStrip: View {
     let labels: [LabelTag]
     var onRemove: ((LabelTag) -> Void)?
 
-    private var sortedLabels: [LabelTag] {
-        labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
-    private var visibleLabels: [LabelTag] {
-        Array(sortedLabels.prefix(2))
-    }
-
-    private var hiddenLabelCount: Int {
-        max(sortedLabels.count - visibleLabels.count, 0)
-    }
+    private let sortedLabels: [LabelTag]
+    private let visibleLabels: [LabelTag]
+    private let hiddenLabelCount: Int
 
     init(labels: [LabelTag], onRemove: ((LabelTag) -> Void)? = nil) {
         self.labels = labels
         self.onRemove = onRemove
+        let sorted = labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        self.sortedLabels = sorted
+        self.visibleLabels = Array(sorted.prefix(2))
+        self.hiddenLabelCount = max(sorted.count - self.visibleLabels.count, 0)
     }
 
     var body: some View {
@@ -989,6 +985,39 @@ private struct DocumentThumbnailCell: View {
 
     @Environment(ThumbnailCache.self) private var thumbnailCache
 
+    private let badgeLabels: [LabelTag]
+    private let badgeOverflowCount: Int
+    private let miniBarLabels: [LabelTag]
+    private let miniBarOverflowCount: Int
+
+    init(
+        document: DocumentRecord,
+        libraryURL: URL?,
+        size: Double,
+        isSelected: Bool,
+        isRenaming: Bool,
+        renamingTitle: Binding<String>,
+        onCommitRename: @escaping () -> Void,
+        onCancelRename: @escaping () -> Void
+    ) {
+        self.document = document
+        self.libraryURL = libraryURL
+        self.size = size
+        self.isSelected = isSelected
+        self.isRenaming = isRenaming
+        self._renamingTitle = renamingTitle
+        self.onCommitRename = onCommitRename
+        self.onCancelRename = onCancelRename
+
+        let labelsBySortOrder = document.labels.sorted { $0.sortOrder < $1.sortOrder }
+        self.badgeLabels = Array(labelsBySortOrder.prefix(4))
+        self.badgeOverflowCount = max(labelsBySortOrder.count - self.badgeLabels.count, 0)
+
+        let labelsByName = document.labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        self.miniBarLabels = Array(labelsByName.prefix(2))
+        self.miniBarOverflowCount = max(labelsByName.count - self.miniBarLabels.count, 0)
+    }
+
     var body: some View {
         VStack(spacing: 6) {
             thumbnailImage
@@ -1035,18 +1064,15 @@ private struct DocumentThumbnailCell: View {
     }
 
     private var labelBadges: some View {
-        let sorted = document.labels.sorted { $0.sortOrder < $1.sortOrder }
-        let visible = Array(sorted.prefix(4))
-        let extra = sorted.count - visible.count
         return HStack(spacing: -2) {
-            ForEach(visible) { label in
+            ForEach(badgeLabels) { label in
                 Circle()
                     .fill(label.labelColor.color)
                     .frame(width: 10, height: 10)
                     .overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1))
             }
-            if extra > 0 {
-                Text("+\(extra)")
+            if badgeOverflowCount > 0 {
+                Text("+\(badgeOverflowCount)")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.leading, 4)
@@ -1058,15 +1084,12 @@ private struct DocumentThumbnailCell: View {
     }
 
     private var miniLabelBar: some View {
-        let sorted = document.labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        let visible = Array(sorted.prefix(2))
-        let extra = sorted.count - visible.count
         return HStack(spacing: 4) {
-            ForEach(visible) { label in
+            ForEach(miniBarLabels) { label in
                 LabelChip(name: label.name, color: label.labelColor, icon: label.icon, size: .compact)
             }
-            if extra > 0 {
-                Text("+\(extra)")
+            if miniBarOverflowCount > 0 {
+                Text("+\(miniBarOverflowCount)")
                     .font(AppTypography.labelChip)
                     .foregroundStyle(.secondary)
             }
