@@ -472,25 +472,43 @@ private struct ChangeHandlersData: ViewModifier {
     let smartFolderFingerprint: Int
     let labelGroupFingerprint: Int
     let watchFolderFingerprint: Int
+    @State private var pendingRefreshTask: Task<Void, Never>?
+
+    private func scheduleRefresh(syncLabels: Bool = false, refreshWatchFolders: Bool = false) {
+        pendingRefreshTask?.cancel()
+        pendingRefreshTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+
+            if syncLabels {
+                coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
+            }
+            reingest()
+            if refreshWatchFolders {
+                coordinator.refreshWatchFolderMonitors()
+            }
+        }
+    }
 
     func body(content: Content) -> some View {
         content
             .onChange(of: documentFingerprint) {
-                reingest()
+                scheduleRefresh()
             }
             .onChange(of: labelFingerprint) {
-                coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
-                reingest()
+                scheduleRefresh(syncLabels: true)
             }
             .onChange(of: smartFolderFingerprint) {
-                reingest()
+                scheduleRefresh()
             }
             .onChange(of: labelGroupFingerprint) {
-                reingest()
+                scheduleRefresh()
             }
             .onChange(of: watchFolderFingerprint) {
-                reingest()
-                coordinator.refreshWatchFolderMonitors()
+                scheduleRefresh(refreshWatchFolders: true)
+            }
+            .onDisappear {
+                pendingRefreshTask?.cancel()
             }
     }
 }
