@@ -17,6 +17,10 @@ private struct PasteDocumentsActionKey: FocusedValueKey {
     typealias Value = () -> Void
 }
 
+private struct SelectAllDocumentsActionKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
 extension FocusedValues {
     var librarySession: LibrarySessionController? {
         get { self[LibrarySessionKey.self] }
@@ -31,6 +35,11 @@ extension FocusedValues {
     var pasteDocumentsAction: (() -> Void)? {
         get { self[PasteDocumentsActionKey.self] }
         set { self[PasteDocumentsActionKey.self] = newValue }
+    }
+
+    var selectAllDocumentsAction: (() -> Void)? {
+        get { self[SelectAllDocumentsActionKey.self] }
+        set { self[SelectAllDocumentsActionKey.self] = newValue }
     }
 }
 
@@ -202,6 +211,7 @@ struct DocNestApp: App {
     @FocusedValue(\.librarySession) private var librarySession
     @FocusedValue(\.exportDocumentsAction) private var exportDocumentsAction
     @FocusedValue(\.pasteDocumentsAction) private var pasteDocumentsAction
+    @FocusedValue(\.selectAllDocumentsAction) private var selectAllDocumentsAction
 
     /// Kept alive for the lifetime of the app so macOS can invoke the service.
     private let servicesProvider = ServicesProvider()
@@ -237,7 +247,8 @@ struct DocNestApp: App {
             DocNestMenuCommands(
                 librarySession: librarySession,
                 exportDocumentsAction: exportDocumentsAction,
-                pasteDocumentsAction: pasteDocumentsAction
+                pasteDocumentsAction: pasteDocumentsAction,
+                selectAllDocumentsAction: selectAllDocumentsAction
             )
         }
     }
@@ -267,6 +278,7 @@ struct DocNestMenuCommands: Commands {
     let librarySession: LibrarySessionController?
     let exportDocumentsAction: (() -> Void)?
     let pasteDocumentsAction: (() -> Void)?
+    let selectAllDocumentsAction: (() -> Void)?
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
@@ -327,6 +339,12 @@ struct DocNestMenuCommands: Commands {
                 NotificationCenter.default.post(name: .docNestQuickLabelPicker, object: nil)
             }
             .keyboardShortcut("l", modifiers: [.command])
+
+            Button("Select All") {
+                selectAllDocumentsAction?()
+            }
+            .keyboardShortcut("a", modifiers: [.command])
+            .disabled(selectAllDocumentsAction == nil)
 
             Divider()
 

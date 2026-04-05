@@ -59,6 +59,9 @@ struct RootView: View {
         .focusedSceneValue(\.pasteDocumentsAction) {
             pasteDocumentsFromPasteboard()
         }
+        .focusedSceneValue(\.selectAllDocumentsAction) {
+            selectAllFilteredDocuments()
+        }
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
@@ -194,6 +197,11 @@ struct RootView: View {
 
         guard !urls.isEmpty else { return }
         coordinator.importDocuments(from: urls)
+    }
+
+    private func selectAllFilteredDocuments() {
+        let documents = coordinator.filteredDocuments
+        coordinator.selectedDocumentIDs = Set(documents.map(\.persistentModelID))
     }
 
 }
