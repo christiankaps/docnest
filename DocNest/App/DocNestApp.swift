@@ -274,6 +274,14 @@ struct DocNestMenuCommands: Commands {
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 AboutWindowController.shared.showWindow(nil)
             }
+
+            Divider()
+
+            Button("DocNest Help") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                HelpWindowController.shared.showWindow(nil)
+            }
+            .keyboardShortcut("?", modifiers: [.command, .shift])
         }
         CommandGroup(replacing: .newItem) {
             Button("Create Library") {
@@ -330,6 +338,13 @@ struct DocNestMenuCommands: Commands {
             Button("Watch Folders\u{2026}") {
                 NotificationCenter.default.post(name: .docNestWatchFolderSettings, object: nil)
             }
+        }
+        CommandGroup(replacing: .help) {
+            Button("DocNest Help") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                HelpWindowController.shared.showWindow(nil)
+            }
+            .keyboardShortcut("?", modifiers: [.command, .shift])
         }
     }
 }
