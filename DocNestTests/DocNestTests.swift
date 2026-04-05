@@ -1364,4 +1364,41 @@ final class DocNestTests: XCTestCase {
 
         XCTAssertNil(document.trashedAt)
     }
+
+    func testReleaseVersionParsesMajorAndMinorOnly() {
+        let version = AppReleaseVersion(string: "2025.4")
+
+        XCTAssertEqual(version?.year, 2025)
+        XCTAssertEqual(version?.major, 4)
+        XCTAssertEqual(version?.minor, 0)
+        XCTAssertEqual(version?.description, "2025.4")
+    }
+
+    func testReleaseVersionParsesPatchVariant() {
+        let version = AppReleaseVersion(string: "2025.4.1")
+
+        XCTAssertEqual(version?.year, 2025)
+        XCTAssertEqual(version?.major, 4)
+        XCTAssertEqual(version?.minor, 1)
+        XCTAssertEqual(version?.description, "2025.4.1")
+    }
+
+    func testReleaseVersionIgnoresLeadingVPrefix() {
+        XCTAssertEqual(
+            AppReleaseVersion(string: "v2025.4.1"),
+            AppReleaseVersion(string: "2025.4.1")
+        )
+    }
+
+    func testReleaseVersionComparisonTreatsPatchAsNewerThanBaseRelease() {
+        let base = AppReleaseVersion(string: "2025.4")
+        let patch = AppReleaseVersion(string: "2025.4.1")
+        let nextMajor = AppReleaseVersion(string: "2025.5")
+
+        XCTAssertNotNil(base)
+        XCTAssertNotNil(patch)
+        XCTAssertNotNil(nextMajor)
+        XCTAssertLessThan(base!, patch!)
+        XCTAssertLessThan(patch!, nextMajor!)
+    }
 }

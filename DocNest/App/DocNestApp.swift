@@ -287,6 +287,11 @@ struct DocNestMenuCommands: Commands {
                 AboutWindowController.shared.showWindow(nil)
             }
 
+            Button("Check for Updates…") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                AppUpdateService.shared.checkForUpdates()
+            }
+
             Divider()
 
             Button("DocNest Help") {

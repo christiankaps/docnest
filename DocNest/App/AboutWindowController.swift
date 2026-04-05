@@ -72,10 +72,264 @@ final class HelpWindowController: NSWindowController {
 
 // MARK: - About View
 
+struct AppReleaseVersion: Comparable, CustomStringConvertible {
+    let year: Int
+    let major: Int
+    let minor: Int
+
+    init?(string: String) {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized: String
+        if trimmed.lowercased().hasPrefix("v") {
+            normalized = String(trimmed.dropFirst())
+        } else {
+            normalized = trimmed
+        }
+        let parts = normalized.split(separator: ".")
+
+        guard parts.count == 2 || parts.count == 3,
+              let year = Int(parts[0]),
+              let major = Int(parts[1]) else {
+            return nil
+        }
+
+        let minor: Int
+        if parts.count == 3 {
+            guard let parsedMinor = Int(parts[2]) else { return nil }
+            minor = parsedMinor
+        } else {
+            minor = 0
+        }
+
+        self.year = year
+        self.major = major
+        self.minor = minor
+    }
+
+    var description: String {
+        minor == 0 ? "\(year).\(major)" : "\(year).\(major).\(minor)"
+    }
+
+    static func < (lhs: AppReleaseVersion, rhs: AppReleaseVersion) -> Bool {
+        if lhs.year != rhs.year { return lhs.year < rhs.year }
+        if lhs.major != rhs.major { return lhs.major < rhs.major }
+        return lhs.minor < rhs.minor
+    }
+}
+
+struct AppUpdateInfo: Equatable {
+    let currentVersion: AppReleaseVersion
+    let latestVersion: AppReleaseVersion
+    let releasePageURL: URL
+    let downloadURL: URL
+    let assetName: String?
+}
+
+@MainActor
+final class AppUpdateService: ObservableObject {
+    static let shared = AppUpdateService()
+
+    enum Status: Equatable {
+        case idle
+        case checking
+        case upToDate(AppReleaseVersion)
+        case updateAvailable(AppUpdateInfo)
+        case failed(String)
+    }
+
+    @Published private(set) var status: Status = .idle
+
+    private let owner = "christiankaps"
+    private let repo = "docnest"
+
+    private init() {}
+
+    func checkForUpdates(userInitiated: Bool = true) {
+        guard status != .checking else { return }
+
+        status = .checking
+
+        Task {
+            do {
+                let info = try await fetchUpdateInfo()
+                if let info {
+                    status = .updateAvailable(info)
+                    if userInitiated {
+                        presentUpdateAlert(info)
+                    }
+                } else if let currentVersion = currentInstalledVersion() {
+                    status = .upToDate(currentVersion)
+                    if userInitiated {
+                        presentInformationalAlert(
+                            title: "DocNest Is Up to Date",
+                            message: "You already have the latest released version installed."
+                        )
+                    }
+                } else {
+                    status = .idle
+                    if userInitiated {
+                        presentInformationalAlert(
+                            title: "Version Check Finished",
+                            message: "No newer GitHub release was found."
+                        )
+                    }
+                }
+            } catch {
+                let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                status = .failed(message)
+                if userInitiated {
+                    presentInformationalAlert(
+                        title: "Update Check Failed",
+                        message: message
+                    )
+                }
+            }
+        }
+    }
+
+    func openDownload(_ info: AppUpdateInfo) {
+        NSWorkspace.shared.open(info.downloadURL)
+    }
+
+    private func fetchUpdateInfo() async throws -> AppUpdateInfo? {
+        guard let currentVersion = currentInstalledVersion() else {
+            throw UpdateError.invalidInstalledVersion
+        }
+
+        let response = try await fetchLatestRelease()
+        guard let latestVersion = AppReleaseVersion(string: response.tagName) else {
+            throw UpdateError.invalidRemoteVersion(response.tagName)
+        }
+
+        guard latestVersion > currentVersion else {
+            return nil
+        }
+
+        let releasePageURL = URL(string: response.htmlURL) ?? releaseWebURL
+        let dmgAsset = response.assets.first(where: { $0.name.lowercased().hasSuffix(".dmg") })
+        let downloadURL = URL(string: dmgAsset?.browserDownloadURL ?? response.htmlURL) ?? releasePageURL
+
+        return AppUpdateInfo(
+            currentVersion: currentVersion,
+            latestVersion: latestVersion,
+            releasePageURL: releasePageURL,
+            downloadURL: downloadURL,
+            assetName: dmgAsset?.name
+        )
+    }
+
+    private func fetchLatestRelease() async throws -> GitHubReleaseResponse {
+        var request = URLRequest(url: apiURL)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("DocNest", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw UpdateError.invalidResponse
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw UpdateError.httpStatus(httpResponse.statusCode)
+        }
+
+        do {
+            return try JSONDecoder().decode(GitHubReleaseResponse.self, from: data)
+        } catch {
+            throw UpdateError.invalidPayload
+        }
+    }
+
+    private func currentInstalledVersion() -> AppReleaseVersion? {
+        let rawVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        return rawVersion.flatMap(AppReleaseVersion.init(string:))
+    }
+
+    private func presentUpdateAlert(_ info: AppUpdateInfo) {
+        let alert = NSAlert()
+        alert.messageText = "A New Version of DocNest Is Available"
+        alert.informativeText = "Installed: \(info.currentVersion)\nAvailable: \(info.latestVersion)"
+        alert.addButton(withTitle: "Download")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Release Page")
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            openDownload(info)
+        case .alertThirdButtonReturn:
+            NSWorkspace.shared.open(info.releasePageURL)
+        default:
+            break
+        }
+    }
+
+    private func presentInformationalAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private var apiURL: URL {
+        URL(string: "https://api.github.com/repos/\(owner)/\(repo)/releases/latest")!
+    }
+
+    private var releaseWebURL: URL {
+        URL(string: "https://github.com/\(owner)/\(repo)/releases/latest")!
+    }
+
+    private struct GitHubReleaseResponse: Decodable {
+        struct Asset: Decodable {
+            let name: String
+            let browserDownloadURL: String
+
+            enum CodingKeys: String, CodingKey {
+                case name
+                case browserDownloadURL = "browser_download_url"
+            }
+        }
+
+        let tagName: String
+        let htmlURL: String
+        let assets: [Asset]
+
+        enum CodingKeys: String, CodingKey {
+            case tagName = "tag_name"
+            case htmlURL = "html_url"
+            case assets
+        }
+    }
+
+    private enum UpdateError: LocalizedError {
+        case invalidInstalledVersion
+        case invalidRemoteVersion(String)
+        case invalidResponse
+        case httpStatus(Int)
+        case invalidPayload
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidInstalledVersion:
+                return "The installed app version could not be read."
+            case .invalidRemoteVersion(let version):
+                return "The latest GitHub release version '\(version)' could not be understood."
+            case .invalidResponse:
+                return "GitHub returned an invalid response."
+            case .httpStatus(let status):
+                return "GitHub returned HTTP \(status)."
+            case .invalidPayload:
+                return "The latest release payload could not be decoded."
+            }
+        }
+    }
+}
+
 private struct AboutView: View {
     private let releaseVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
     private let buildNumber: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
 
+    @StateObject private var updateService = AppUpdateService.shared
     @State private var statistics: LibrarySessionController.LibraryStatistics?
 
     var body: some View {
@@ -96,6 +350,18 @@ private struct AboutView: View {
                 Text("Build \(buildNumber)")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
+
+                Button("Check for Updates…") {
+                    updateService.checkForUpdates()
+                }
+                .padding(.top, 4)
+
+                if let message = updateStatusMessage {
+                    Text(message)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
             }
             .padding(.top, 24)
             .padding(.bottom, 16)
@@ -178,6 +444,21 @@ private struct AboutView: View {
     private func loadStatistics() {
         Task { @MainActor in
             statistics = await AboutStatisticsProvider.shared.controller?.libraryStatistics()
+        }
+    }
+
+    private var updateStatusMessage: String? {
+        switch updateService.status {
+        case .idle:
+            return nil
+        case .checking:
+            return "Checking GitHub releases…"
+        case .upToDate(let version):
+            return "Installed version \(version) is current."
+        case .updateAvailable(let info):
+            return "Version \(info.latestVersion) is available to download."
+        case .failed(let message):
+            return message
         }
     }
 }
