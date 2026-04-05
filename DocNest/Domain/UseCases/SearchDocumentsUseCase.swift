@@ -19,6 +19,10 @@ enum SearchDocumentsUseCase {
             return true
         }
 
+        guard document.labels.count >= selectedLabelIDs.count else {
+            return false
+        }
+
         for selectedLabelID in selectedLabelIDs {
             let hasLabel = document.labels.contains { $0.persistentModelID == selectedLabelID }
             if !hasLabel {

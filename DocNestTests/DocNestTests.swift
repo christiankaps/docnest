@@ -132,7 +132,7 @@ final class DocNestTests: XCTestCase {
         DocumentLibraryService.persistLibraryURL(createdLibraryURL)
 
         XCTAssertEqual(
-            DocumentLibraryService.restorePersistedLibraryURL(),
+            DocumentLibraryService.restorePersistedLibraryAccess()?.url,
             createdLibraryURL.standardizedFileURL
         )
     }
@@ -152,7 +152,7 @@ final class DocNestTests: XCTestCase {
 
         DocumentLibraryService.persistLibraryURL(nil)
 
-        XCTAssertNil(DocumentLibraryService.restorePersistedLibraryURL())
+        XCTAssertNil(DocumentLibraryService.restorePersistedLibraryAccess())
     }
 
     func testSelectedLibraryURLReadsLaunchArgumentOverride() {
