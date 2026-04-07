@@ -103,6 +103,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             "Writing Tools",
             "Schreibwerkzeuge",
             "AutoFill",
+            "Spelling and Grammar",
+            "Rechtschreibung und Grammatik",
+            "Substitutions",
+            "Ersetzungen",
+            "Transformations",
+            "Umwandlungen",
+            "Speech",
+            "Sprachausgabe",
+            "Start Dictation…",
+            "Diktat starten…",
+            "Emoji & Symbols",
+            "Emoji und Symbole",
             "Toolbar",
             "Show Toolbar",
             "Hide Toolbar",
@@ -195,7 +207,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Removes top-level menus that have no meaningful content.
     private func removeEmptyMenus() {
         guard let mainMenu = NSApplication.shared.mainMenu else { return }
-        let removableMenus: Set<String> = ["File", "Edit", "Format", "View", "Help"]
+        let removableMenus: Set<String> = ["File", "Edit", "Format", "View", "Window", "Help"]
         mainMenu.items.removeAll { item in
             guard removableMenus.contains(item.title) else { return false }
             let realItems = item.submenu?.items.filter { !$0.isSeparatorItem } ?? []
