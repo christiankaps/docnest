@@ -444,6 +444,7 @@ private struct ChangeHandlersNotifications: ViewModifier {
             }
             .onDisappear {
                 coordinator.cancelPendingLabelFilter()
+                coordinator.cancelPendingSelectionRecompute()
                 coordinator.tearDownWatchFolderMonitoring()
                 AppSettingsController.shared.clearActiveLibraryContext()
             }
@@ -459,7 +460,7 @@ private struct ChangeHandlersNotifications: ViewModifier {
                 coordinator.pruneSelectedDocumentIDs()
             }
             .onChange(of: coordinator.selectedDocumentIDs) {
-                coordinator.recomputeSelectedDocuments()
+                coordinator.scheduleSelectionRecompute()
             }
             .onChange(of: coordinator.labelFilterSelection.appliedSelection) {
                 coordinator.recomputeFilteredDocuments()

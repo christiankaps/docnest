@@ -82,7 +82,9 @@ final class LibraryCoordinator {
     private var activeImportTask: Task<Void, Never>?
     private let watchFolderController = WatchFolderController()
     private var pendingLabelFilterApplyTask: Task<Void, Never>?
+    private var pendingSelectionRecomputeTask: Task<Void, Never>?
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
+    private let selectionRecomputeDelay: Duration = .milliseconds(12)
     let recentDocumentLimit = 10
 
     // MARK: - Convenience selection helpers
@@ -288,6 +290,24 @@ final class LibraryCoordinator {
 
     func cancelPendingLabelFilter() {
         pendingLabelFilterApplyTask?.cancel()
+    }
+
+    /// Coalesces selection-side effects so row highlighting can update immediately on click.
+    func scheduleSelectionRecompute() {
+        pendingSelectionRecomputeTask?.cancel()
+        pendingSelectionRecomputeTask = Task { @MainActor in
+            try? await Task.sleep(for: selectionRecomputeDelay)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            recomputeSelectedDocuments()
+        }
+    }
+
+    func cancelPendingSelectionRecompute() {
+        pendingSelectionRecomputeTask?.cancel()
     }
 
     func syncLabelFilterSelections(_ availableIDs: Set<PersistentIdentifier>) {
