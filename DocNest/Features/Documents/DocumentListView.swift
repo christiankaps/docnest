@@ -1155,7 +1155,7 @@ private struct DocumentThumbnailCell: View {
             if let image = thumbnailCache.thumbnail(for: path, libraryURL: libraryURL, size: targetSize) {
                 Image(nsImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: .fit)
             } else {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.secondary.opacity(0.08))
