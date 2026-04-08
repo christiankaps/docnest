@@ -5,6 +5,7 @@ struct LabelManagerSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(LibraryCoordinator.self) private var coordinator
+    var showsDoneButton = true
 
     // MARK: - Selection state
 
@@ -136,10 +137,12 @@ struct LabelManagerSheet: View {
 
             Spacer()
 
-            Button("Done") {
-                dismiss()
+            if showsDoneButton {
+                Button("Done") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
             }
-            .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
@@ -428,20 +431,26 @@ struct LabelManagerSheet: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Menu {
-                Button("New Label") {
-                    beginCreateLabel(inGroup: nil)
-                }
-                Button("New Group") {
-                    newGroupName = ""
-                    isCreatingGroup = true
-                }
+            Button {
+                beginCreateLabel(inGroup: nil)
             } label: {
                 Image(systemName: "plus")
                     .frame(width: 24, height: 24)
             }
-            .menuStyle(.borderlessButton)
+            .buttonStyle(.borderless)
             .fixedSize()
+            .help("New Label")
+
+            Button {
+                newGroupName = ""
+                isCreatingGroup = true
+            } label: {
+                Image(systemName: "folder.badge.plus")
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.borderless)
+            .fixedSize()
+            .help("New Group")
 
             Button {
                 deletionTarget = .labels(selectedLabelIDs)

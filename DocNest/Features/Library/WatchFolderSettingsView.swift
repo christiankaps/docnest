@@ -6,6 +6,7 @@ struct WatchFolderSettingsView: View {
     @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    var showsDoneButton = true
 
     @State private var editorConfig: WatchFolderEditorConfig?
     @State private var errorMessage: String?
@@ -57,10 +58,12 @@ struct WatchFolderSettingsView: View {
 
                 Spacer()
 
-                Button("Done") {
-                    dismiss()
+                if showsDoneButton {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
                 }
-                .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)

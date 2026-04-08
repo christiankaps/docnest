@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import SwiftData
 
 // MARK: - About Window Controller
 
@@ -54,6 +55,89 @@ final class HelpWindowController: NSWindowController {
         super.init(window: window)
 
         let hostingView = NSHostingView(rootView: HelpView())
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        window.contentView = hostingView
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func showWindow(_ sender: Any?) {
+        window?.center()
+        super.showWindow(sender)
+        window?.makeKeyAndOrderFront(nil)
+    }
+}
+
+enum AppSettingsPane: String, CaseIterable, Identifiable {
+    case labels
+    case watchFolders
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .labels: "Labels"
+        case .watchFolders: "Watch Folders"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .labels: "tag"
+        case .watchFolders: "folder.badge.gearshape"
+        }
+    }
+}
+
+@MainActor
+final class AppSettingsController: ObservableObject {
+    static let shared = AppSettingsController()
+
+    @Published var selectedPane: AppSettingsPane = .labels
+    @Published var modelContainer: ModelContainer?
+    @Published var libraryCoordinator: LibraryCoordinator?
+
+    private init() {}
+
+    func show(_ pane: AppSettingsPane? = nil) {
+        if let pane {
+            selectedPane = pane
+        }
+        SettingsWindowController.shared.showWindow(nil)
+    }
+
+    func setActiveLibraryContext(coordinator: LibraryCoordinator, modelContainer: ModelContainer?) {
+        libraryCoordinator = coordinator
+        self.modelContainer = modelContainer
+    }
+
+    func clearActiveLibraryContext() {
+        libraryCoordinator = nil
+        modelContainer = nil
+    }
+}
+
+final class SettingsWindowController: NSWindowController {
+    static let shared = SettingsWindowController()
+
+    private init() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Settings"
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 620, height: 420)
+
+        super.init(window: window)
+
+        let hostingView = NSHostingView(rootView: AppSettingsRootView())
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         window.contentView = hostingView
     }
@@ -463,6 +547,44 @@ private struct AboutView: View {
     }
 }
 
+private struct AppSettingsRootView: View {
+    @ObservedObject private var settings = AppSettingsController.shared
+
+    var body: some View {
+        Group {
+            if let coordinator = settings.libraryCoordinator,
+               let modelContainer = settings.modelContainer {
+                TabView(selection: $settings.selectedPane) {
+                    LabelManagerSheet(showsDoneButton: false)
+                        .environment(coordinator)
+                        .modelContainer(modelContainer)
+                        .tabItem {
+                            Label(AppSettingsPane.labels.title, systemImage: AppSettingsPane.labels.systemImage)
+                        }
+                        .tag(AppSettingsPane.labels)
+
+                    WatchFolderSettingsView(showsDoneButton: false)
+                        .environment(coordinator)
+                        .modelContainer(modelContainer)
+                        .tabItem {
+                            Label(AppSettingsPane.watchFolders.title, systemImage: AppSettingsPane.watchFolders.systemImage)
+                        }
+                        .tag(AppSettingsPane.watchFolders)
+                }
+                .padding(.top, 8)
+            } else {
+                ContentUnavailableView(
+                    "No Library Open",
+                    systemImage: "books.vertical",
+                    description: Text("Open a DocNest library to manage labels and watch folders in Settings.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(minWidth: 620, minHeight: 420)
+    }
+}
+
 private struct HelpView: View {
     private struct HelpSection: Identifiable {
         let id: String
@@ -496,7 +618,7 @@ private struct HelpView: View {
             id: "organize",
             title: "Organizing Documents",
             body: [
-                "Use labels to tag documents across projects, clients, topics, or workflows. Assign labels from Edit > Assign Labels or manage the full label list from Edit > Manage Labels…",
+                "Use labels to tag documents across projects, clients, topics, or workflows. Assign labels from Edit > Assign Labels or manage the full label list from DocNest > Settings… > Labels.",
                 "Smart folders give you saved filtered views. They live in the sidebar and update automatically when matching documents change.",
                 "The inspector is the place to edit document title, notes, detected date, labels, and other metadata for the current selection."
             ]
@@ -514,7 +636,7 @@ private struct HelpView: View {
             title: "Watch Folders",
             body: [
                 "Watch folders monitor selected Finder folders and automatically import new PDFs into the current library.",
-                "Open them from Edit > Watch Folders… to add, edit, pause, resume, or remove a monitored folder.",
+                "Open them from DocNest > Settings… > Watch Folders to add, edit, pause, resume, or remove a monitored folder.",
                 "DocNest blocks unsafe watch folders that point to the open library package or one of its subfolders."
             ]
         ),
@@ -522,9 +644,9 @@ private struct HelpView: View {
             id: "appearance",
             title: "Appearance and App Settings",
             body: [
-                "DocNest keeps settings intentionally small. There is currently no large preferences window.",
+                "DocNest keeps settings intentionally focused. Use DocNest > Settings… or Command-Comma to open the Settings window.",
                 "The main app setting is Appearance. Use the toolbar button with the half-filled circle icon to switch between System, Light, and Dark.",
-                "Most other controls that feel like settings are contextual and live where you use them: label management, watch folders, smart folders, and inspector editing."
+                "Settings currently includes dedicated panes for Labels and Watch Folders, while other controls remain contextual in the sidebar and inspector."
             ]
         ),
         HelpSection(
@@ -545,8 +667,9 @@ private struct HelpView: View {
         ("Export selected documents", "File > Export… or Shift-Command-E"),
         ("Find/search", "Edit > Find or Command-F"),
         ("Assign labels to the selection", "Edit > Assign Labels or Command-L"),
-        ("Open full label management", "Edit > Manage Labels… or Shift-Command-L"),
-        ("Configure watch folders", "Edit > Watch Folders…"),
+        ("Open Settings", "DocNest > Settings… or Command-Comma"),
+        ("Open full label management", "DocNest > Settings… > Labels"),
+        ("Configure watch folders", "DocNest > Settings… > Watch Folders"),
         ("Switch appearance", "Toolbar > Appearance button"),
         ("Open About", "DocNest > About DocNest"),
         ("Open this help guide", "Help > DocNest Help")

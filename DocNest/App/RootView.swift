@@ -65,6 +65,10 @@ struct RootView: View {
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
+            AppSettingsController.shared.setActiveLibraryContext(
+                coordinator: coordinator,
+                modelContainer: librarySession.modelContainer
+            )
             coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders)
             coordinator.runOCRBackfill(documents: allDocuments, libraryURL: libraryURL, modelContext: modelContext)
             coordinator.setupWatchFolderMonitoring()
@@ -325,14 +329,6 @@ private struct RootViewDialogsModifier: ViewModifier {
             .onDeleteCommand {
                 coordinator.deleteSelectedDocumentsFromKeyboard()
             }
-            .sheet(isPresented: Bindable(coordinator).isLabelManagerPresented) {
-                LabelManagerSheet()
-                    .environment(coordinator)
-            }
-            .sheet(isPresented: Bindable(coordinator).isWatchFolderSettingsPresented) {
-                WatchFolderSettingsView()
-                    .environment(coordinator)
-            }
     }
 }
 
@@ -441,14 +437,15 @@ private struct ChangeHandlersNotifications: ViewModifier {
                 coordinator.isQuickLabelPickerPresented = true
             }
             .onReceive(NotificationCenter.default.publisher(for: .docNestLabelManager)) { _ in
-                coordinator.isLabelManagerPresented = true
+                AppSettingsController.shared.show(.labels)
             }
             .onReceive(NotificationCenter.default.publisher(for: .docNestWatchFolderSettings)) { _ in
-                coordinator.isWatchFolderSettingsPresented = true
+                AppSettingsController.shared.show(.watchFolders)
             }
             .onDisappear {
                 coordinator.cancelPendingLabelFilter()
                 coordinator.tearDownWatchFolderMonitoring()
+                AppSettingsController.shared.clearActiveLibraryContext()
             }
             .onChange(of: coordinator.labelFilterSelection.visualSelection) { _, newSelection in
                 coordinator.scheduleLabelFilterApply(immediately: newSelection.isEmpty)

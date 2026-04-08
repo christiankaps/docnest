@@ -195,23 +195,27 @@ struct LibrarySidebarView: View {
                     .help("Clear label filters")
                 }
 
-                Menu {
-                    Button("New Label") {
-                        labelEditorConfig = LabelEditorConfig(mode: .create(groupID: nil))
-                    }
-                    Button("New Group") {
-                        isShowingNewGroupAlert = true
-                    }
+                Button {
+                    labelEditorConfig = LabelEditorConfig(mode: .create(groupID: nil))
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
                 .fixedSize()
                 .foregroundStyle(.secondary)
-                .help("Add Label or Group")
+                .help("Add Label")
+
+                Button {
+                    isShowingNewGroupAlert = true
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+                .foregroundStyle(.secondary)
+                .help("Add Label Group")
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, 16)
@@ -1203,5 +1207,4 @@ struct SmartFolderEditorConfig: Identifiable {
         .environment(LibraryCoordinator())
         .modelContainer(for: DocumentRecord.self, inMemory: true)
 }
-
 

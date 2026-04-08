@@ -312,6 +312,13 @@ struct DocNestMenuCommands: Commands {
             }
             .keyboardShortcut("?", modifiers: [.command, .shift])
         }
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                AppSettingsController.shared.show()
+            }
+            .keyboardShortcut(",", modifiers: [.command])
+        }
         CommandGroup(replacing: .newItem) {
             Button("Create Library") {
                 librarySession?.createLibrary()
@@ -362,17 +369,6 @@ struct DocNestMenuCommands: Commands {
             }
             .keyboardShortcut("a", modifiers: [.command])
             .disabled(selectAllDocumentsAction == nil)
-
-            Divider()
-
-            Button("Manage Labels\u{2026}") {
-                NotificationCenter.default.post(name: .docNestLabelManager, object: nil)
-            }
-            .keyboardShortcut("l", modifiers: [.command, .shift])
-
-            Button("Watch Folders\u{2026}") {
-                NotificationCenter.default.post(name: .docNestWatchFolderSettings, object: nil)
-            }
         }
         CommandGroup(replacing: .help) {
             Button("DocNest Help") {
