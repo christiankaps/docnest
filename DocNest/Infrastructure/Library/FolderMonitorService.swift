@@ -56,7 +56,7 @@ final class FolderMonitorService {
         source.setEventHandler { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, let monitor = self.monitors[folderID] else { return }
-                self.scanFolder(monitor)
+                self.scanFolderAsync(monitor)
             }
         }
 
@@ -68,7 +68,7 @@ final class FolderMonitorService {
         source.resume()
 
         // Initial scan to catch files added while the app was closed
-        scanFolder(entry)
+        scanFolderAsync(entry)
 
         Self.logger.info("Started monitoring: \(path, privacy: .public)")
     }
@@ -107,23 +107,29 @@ final class FolderMonitorService {
 
     // MARK: - Scanning
 
-    private func scanFolder(_ entry: MonitoredFolder) {
-        let folderURL = URL(fileURLWithPath: entry.folderPath, isDirectory: true)
+    private func scanFolderAsync(_ entry: MonitoredFolder) {
+        let folderPath = entry.folderPath
+        let labelIDs = entry.labelIDs
+        let onNewPDFsDetected = self.onNewPDFsDetected
 
-        guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: folderURL,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-        ) else { return }
+        Task.detached(priority: .utility) {
+            let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
+            guard let contents = try? FileManager.default.contentsOfDirectory(
+                at: folderURL,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+            ) else { return }
 
-        let pdfURLs = contents.filter { url in
-            url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
+            let pdfURLs = contents.filter { url in
+                url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
+            }
+
+            guard !pdfURLs.isEmpty else { return }
+
+            await MainActor.run {
+                Self.logger.info("Found \(pdfURLs.count) PDF(s) in \(folderPath, privacy: .public)")
+                onNewPDFsDetected?(pdfURLs, labelIDs)
+            }
         }
-
-        guard !pdfURLs.isEmpty else { return }
-
-        Self.logger.info("Found \(pdfURLs.count) PDF(s) in \(entry.folderPath, privacy: .public)")
-
-        onNewPDFsDetected?(pdfURLs, entry.labelIDs)
     }
 }

@@ -22,13 +22,15 @@ enum DocumentLabelDragPayload {
 
 enum DocumentDragHelper {
     /// Builds the internal payload string for dragging documents.
-    static func internalPayload(for document: DocumentRecord, selectedIDs: Set<PersistentIdentifier>, filteredDocuments: [DocumentRecord]) -> String {
+    static func internalPayload(
+        for document: DocumentRecord,
+        selectedIDs: Set<PersistentIdentifier>,
+        selectedDocumentIDsToDrag: [UUID]
+    ) -> String {
         let documentIDsToDrag: [UUID]
 
         if selectedIDs.contains(document.persistentModelID) {
-            documentIDsToDrag = filteredDocuments
-                .filter { selectedIDs.contains($0.persistentModelID) }
-                .map(\.id)
+            documentIDsToDrag = selectedDocumentIDsToDrag
         } else {
             documentIDsToDrag = [document.id]
         }
@@ -107,6 +109,7 @@ struct DocumentListView: View {
     @AppStorage("docListShowPages") private var showsPagesColumn = true
     @AppStorage("docListShowSize") private var showsSizeColumn = true
     @AppStorage("docListShowLabels") private var showsLabelsColumn = true
+    @State private var cachedSelectedDocumentIDsToDrag: [UUID] = []
 
     private func recomputeSortedDocuments() {
         let column = sortColumn
@@ -124,6 +127,14 @@ struct DocumentListView: View {
             return comparison == .orderedDescending
         }
         cachedGroupedDocuments = groupMode == .none ? [] : groupMode.group(cachedSortedDocuments)
+        rebuildDragSelectionCache()
+    }
+
+    private func rebuildDragSelectionCache() {
+        let selectedIDs = coordinator.selectedDocumentIDs
+        cachedSelectedDocumentIDsToDrag = coordinator.filteredDocuments.compactMap { document in
+            selectedIDs.contains(document.persistentModelID) ? document.id : nil
+        }
     }
 
     private var effectiveOptionalColumns: OptionalColumnVisibility {
@@ -231,6 +242,9 @@ struct DocumentListView: View {
         }
         .onChange(of: groupMode) {
             recomputeSortedDocuments()
+        }
+        .onChange(of: coordinator.selectedDocumentIDs) {
+            rebuildDragSelectionCache()
         }
     }
 
@@ -661,7 +675,7 @@ struct DocumentListView: View {
         DocumentDragHelper.internalPayload(
             for: document,
             selectedIDs: coordinator.selectedDocumentIDs,
-            filteredDocuments: coordinator.filteredDocuments
+            selectedDocumentIDsToDrag: cachedSelectedDocumentIDsToDrag
         )
     }
 

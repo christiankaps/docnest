@@ -76,6 +76,14 @@ enum DocumentStorageService {
         FileManager.default.fileExists(atPath: fileURL(for: path, libraryURL: libraryURL).path)
     }
 
+    static func fileExistsAsync(at path: String, libraryURL: URL) async -> Bool {
+        await Task.detached(priority: .utility) {
+            FileManager.default.fileExists(
+                atPath: fileURL(for: path, libraryURL: libraryURL).path
+            )
+        }.value
+    }
+
     // MARK: - Private helpers
 
     private static func storageDirectory(for importedAt: Date, libraryURL: URL) -> URL {

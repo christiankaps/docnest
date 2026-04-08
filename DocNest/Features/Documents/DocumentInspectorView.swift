@@ -14,6 +14,7 @@ struct DocumentInspectorView: View {
     @State private var editingTitle = ""
     @State private var isEditingTitle = false
     @State private var dateFieldText = ""
+    @State private var selectedFileAvailable: Bool?
 
     private var singleSelectedDocument: DocumentRecord? {
         documents.count == 1 ? documents.first : nil
@@ -74,6 +75,13 @@ struct DocumentInspectorView: View {
         .onChange(of: documents.first?.persistentModelID) {
             isEditingTitle = false
             dateFieldText = formattedDateString(from: singleSelectedDocument?.documentDate)
+            refreshSelectedFileAvailability()
+        }
+        .onAppear {
+            refreshSelectedFileAvailability()
+        }
+        .onChange(of: libraryURL?.path) {
+            refreshSelectedFileAvailability()
         }
         .alert("Inspector Error", isPresented: inspectorErrorBinding) {
             Button("OK", role: .cancel) {
@@ -86,11 +94,29 @@ struct DocumentInspectorView: View {
 
     @ViewBuilder
     private func pdfPreviewSection(for document: DocumentRecord) -> some View {
-        if let path = document.storedFilePath,
-           let libraryURL,
-           DocumentStorageService.fileExists(at: path, libraryURL: libraryURL) {
-            PDFViewRepresentable(url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+        if let path = document.storedFilePath, let libraryURL {
+            if selectedFileAvailable ?? true {
+                PDFViewRepresentable(url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.red.opacity(0.08))
+                    .overlay {
+                        VStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.red.opacity(0.6))
+                            Text("File not found")
+                                .font(AppTypography.sectionTitle)
+                            Text("The stored PDF file for \"\(document.originalFileName)\" could not be located.")
+                                .font(AppTypography.body)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: 360)
+                        }
+                        .padding()
+                    }
+            }
         } else if document.storedFilePath != nil {
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.red.opacity(0.08))
@@ -263,6 +289,11 @@ struct DocumentInspectorView: View {
 
     private func originalFileURL(for document: DocumentRecord) -> URL? {
         guard let path = document.storedFilePath, let libraryURL else {
+            return nil
+        }
+
+        if singleSelectedDocument?.persistentModelID == document.persistentModelID,
+           selectedFileAvailable == false {
             return nil
         }
 
@@ -616,6 +647,22 @@ struct DocumentInspectorView: View {
                 document.documentDate = parsed
                 try? modelContext.save()
             }
+        }
+    }
+
+    private func refreshSelectedFileAvailability() {
+        guard let document = singleSelectedDocument,
+              let path = document.storedFilePath,
+              let libraryURL else {
+            selectedFileAvailable = nil
+            return
+        }
+
+        let targetID = document.persistentModelID
+        Task {
+            let exists = await DocumentStorageService.fileExistsAsync(at: path, libraryURL: libraryURL)
+            guard self.singleSelectedDocument?.persistentModelID == targetID else { return }
+            self.selectedFileAvailable = exists
         }
     }
 

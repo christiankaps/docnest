@@ -445,6 +445,7 @@ private struct ChangeHandlersNotifications: ViewModifier {
             .onDisappear {
                 coordinator.cancelPendingLabelFilter()
                 coordinator.cancelPendingSelectionRecompute()
+                coordinator.cancelPendingSearchRecompute()
                 coordinator.tearDownWatchFolderMonitoring()
                 AppSettingsController.shared.clearActiveLibraryContext()
             }
@@ -452,17 +453,18 @@ private struct ChangeHandlersNotifications: ViewModifier {
                 coordinator.scheduleLabelFilterApply(immediately: newSelection.isEmpty)
             }
             .onChange(of: coordinator.sidebarSelection) {
+                coordinator.cancelPendingSearchRecompute()
                 coordinator.recomputeFilteredDocuments()
                 coordinator.pruneSelectedDocumentIDs()
             }
             .onChange(of: coordinator.searchText) {
-                coordinator.recomputeFilteredDocuments()
-                coordinator.pruneSelectedDocumentIDs()
+                coordinator.scheduleSearchRecompute()
             }
             .onChange(of: coordinator.selectedDocumentIDs) {
                 coordinator.scheduleSelectionRecompute()
             }
             .onChange(of: coordinator.labelFilterSelection.appliedSelection) {
+                coordinator.cancelPendingSearchRecompute()
                 coordinator.recomputeFilteredDocuments()
                 coordinator.pruneSelectedDocumentIDs()
             }
@@ -479,18 +481,27 @@ private struct ChangeHandlersData: ViewModifier {
     let labelGroupFingerprint: Int
     let watchFolderFingerprint: Int
     @State private var pendingRefreshTask: Task<Void, Never>?
+    @State private var pendingNeedsLabelSync = false
+    @State private var pendingNeedsWatchFolderRefresh = false
 
     private func scheduleRefresh(syncLabels: Bool = false, refreshWatchFolders: Bool = false) {
+        pendingNeedsLabelSync = pendingNeedsLabelSync || syncLabels
+        pendingNeedsWatchFolderRefresh = pendingNeedsWatchFolderRefresh || refreshWatchFolders
         pendingRefreshTask?.cancel()
         pendingRefreshTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
 
-            if syncLabels {
+            let needsLabelSync = pendingNeedsLabelSync
+            let needsWatchRefresh = pendingNeedsWatchFolderRefresh
+            pendingNeedsLabelSync = false
+            pendingNeedsWatchFolderRefresh = false
+
+            if needsLabelSync {
                 coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
             }
             reingest()
-            if refreshWatchFolders {
+            if needsWatchRefresh {
                 coordinator.refreshWatchFolderMonitors()
             }
         }
@@ -515,6 +526,8 @@ private struct ChangeHandlersData: ViewModifier {
             }
             .onDisappear {
                 pendingRefreshTask?.cancel()
+                pendingNeedsLabelSync = false
+                pendingNeedsWatchFolderRefresh = false
             }
     }
 }

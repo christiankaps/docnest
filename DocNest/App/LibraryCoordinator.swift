@@ -77,14 +77,17 @@ final class LibraryCoordinator {
     private var labelsByUUID: [UUID: LabelTag] = [:]
     private var labelUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
     private var smartFoldersByPersistentID: [PersistentIdentifier: SmartFolder] = [:]
+    private var smartFolderCountsInputSignature: Int?
 
     // MARK: - Internal
     private var activeImportTask: Task<Void, Never>?
     private let watchFolderController = WatchFolderController()
     private var pendingLabelFilterApplyTask: Task<Void, Never>?
     private var pendingSelectionRecomputeTask: Task<Void, Never>?
+    private var pendingSearchRecomputeTask: Task<Void, Never>?
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
     private let selectionRecomputeDelay: Duration = .milliseconds(12)
+    private let searchRecomputeDelay: Duration = .milliseconds(85)
     let recentDocumentLimit = 10
 
     // MARK: - Convenience selection helpers
@@ -145,7 +148,7 @@ final class LibraryCoordinator {
         activeDocuments = active
         trashedDocuments = trashed
 
-        recomputeSmartFolderCounts()
+        recomputeSmartFolderCountsIfNeeded()
         recomputeFilteredDocuments()
         recomputeSelectedDocuments()
     }
@@ -233,6 +236,31 @@ final class LibraryCoordinator {
         smartFolderCounts = counts
     }
 
+    private func recomputeSmartFolderCountsIfNeeded() {
+        var hasher = Hasher()
+        hasher.combine(allSmartFolders.count)
+        hasher.combine(activeDocuments.count)
+
+        for folder in allSmartFolders {
+            hasher.combine(folder.persistentModelID)
+            hasher.combine(folder.labelIDs)
+            hasher.combine(folder.sortOrder)
+        }
+
+        for document in activeDocuments {
+            hasher.combine(document.persistentModelID)
+            hasher.combine(document.labels.count)
+            for label in document.labels {
+                hasher.combine(label.persistentModelID)
+            }
+        }
+
+        let signature = hasher.finalize()
+        guard signature != smartFolderCountsInputSignature else { return }
+        smartFolderCountsInputSignature = signature
+        recomputeSmartFolderCounts()
+    }
+
     private func recomputeSidebarCounts(sectionDocuments: [DocumentRecord]) {
         sidebarCounts = LibrarySidebarCounts(
             activeDocuments: activeDocuments,
@@ -308,6 +336,25 @@ final class LibraryCoordinator {
 
     func cancelPendingSelectionRecompute() {
         pendingSelectionRecomputeTask?.cancel()
+    }
+
+    /// Debounces text search updates to keep typing and row highlighting responsive.
+    func scheduleSearchRecompute() {
+        pendingSearchRecomputeTask?.cancel()
+        pendingSearchRecomputeTask = Task { @MainActor in
+            try? await Task.sleep(for: searchRecomputeDelay)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            recomputeFilteredDocuments()
+            pruneSelectedDocumentIDs()
+        }
+    }
+
+    func cancelPendingSearchRecompute() {
+        pendingSearchRecomputeTask?.cancel()
     }
 
     func syncLabelFilterSelections(_ availableIDs: Set<PersistentIdentifier>) {
