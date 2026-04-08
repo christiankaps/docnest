@@ -89,6 +89,7 @@ struct DocumentListView: View {
     @State private var selectionAnchor: PersistentIdentifier?
     @State private var renamingDocumentID: PersistentIdentifier?
     @State private var renamingTitle = ""
+    @FocusState private var focusedRenameDocumentID: PersistentIdentifier?
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
     @State private var cachedSortedDocuments: [DocumentRecord] = []
@@ -459,7 +460,8 @@ struct DocumentListView: View {
                             isRenaming: renamingDocumentID == document.persistentModelID,
                             renamingTitle: $renamingTitle,
                             onCommitRename: { commitRename(for: document) },
-                            onCancelRename: { cancelRename() }
+                            onCancelRename: { cancelRename() },
+                            onBeginRename: { beginRename(for: document) }
                         )
                         .id(document.persistentModelID)
                         .onTapGesture(count: 2) {
@@ -497,12 +499,18 @@ struct DocumentListView: View {
                         TextField("Title", text: $renamingTitle)
                             .font(AppTypography.listTitle)
                             .textFieldStyle(.plain)
+                            .focused($focusedRenameDocumentID, equals: document.persistentModelID)
                             .onSubmit { commitRename(for: document) }
                             .onExitCommand { cancelRename() }
                     } else {
                         Text(document.title)
                             .font(AppTypography.listTitle)
                             .lineLimit(1)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                guard shouldBeginRenameFromTitleClick(for: document) else { return }
+                                beginRename(for: document)
+                            }
                     }
                 }
             }
@@ -721,6 +729,9 @@ struct DocumentListView: View {
     private func beginRename(for document: DocumentRecord) {
         renamingTitle = document.title
         renamingDocumentID = document.persistentModelID
+        Task { @MainActor in
+            focusedRenameDocumentID = document.persistentModelID
+        }
     }
 
     private func commitRename(for document: DocumentRecord) {
@@ -754,10 +765,20 @@ struct DocumentListView: View {
         }
 
         renamingDocumentID = nil
+        focusedRenameDocumentID = nil
     }
 
     private func cancelRename() {
         renamingDocumentID = nil
+        focusedRenameDocumentID = nil
+    }
+
+    private func shouldBeginRenameFromTitleClick(for document: DocumentRecord) -> Bool {
+        guard renamingDocumentID == nil else { return false }
+        guard coordinator.selectedDocumentIDs.count == 1,
+              coordinator.selectedDocumentIDs.contains(document.persistentModelID) else { return false }
+        let disallowedModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
+        return NSEvent.modifierFlags.intersection(disallowedModifiers).isEmpty
     }
 
     private func sortButton(_ title: String, column: SortColumn) -> some View {
@@ -982,8 +1003,10 @@ private struct DocumentThumbnailCell: View {
     @Binding var renamingTitle: String
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
+    var onBeginRename: () -> Void
 
     @Environment(ThumbnailCache.self) private var thumbnailCache
+    @FocusState private var isRenameFieldFocused: Bool
 
     private let badgeLabels: [LabelTag]
     private let badgeOverflowCount: Int
@@ -998,7 +1021,8 @@ private struct DocumentThumbnailCell: View {
         isRenaming: Bool,
         renamingTitle: Binding<String>,
         onCommitRename: @escaping () -> Void,
-        onCancelRename: @escaping () -> Void
+        onCancelRename: @escaping () -> Void,
+        onBeginRename: @escaping () -> Void
     ) {
         self.document = document
         self.libraryURL = libraryURL
@@ -1008,6 +1032,7 @@ private struct DocumentThumbnailCell: View {
         self._renamingTitle = renamingTitle
         self.onCommitRename = onCommitRename
         self.onCancelRename = onCancelRename
+        self.onBeginRename = onBeginRename
 
         let labelsBySortOrder = document.labels.sorted { $0.sortOrder < $1.sortOrder }
         self.badgeLabels = Array(labelsBySortOrder.prefix(4))
@@ -1038,16 +1063,27 @@ private struct DocumentThumbnailCell: View {
                 TextField("Title", text: $renamingTitle)
                     .font(AppTypography.labelChip)
                     .textFieldStyle(.plain)
+                    .focused($isRenameFieldFocused)
                     .multilineTextAlignment(.center)
                     .frame(width: size)
                     .onSubmit { onCommitRename() }
                     .onExitCommand { onCancelRename() }
+                    .onAppear {
+                        isRenameFieldFocused = true
+                    }
             } else {
                 Text(document.title)
                     .font(AppTypography.labelChip)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .frame(width: size)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        guard isSelected else { return }
+                        let disallowedModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
+                        guard NSEvent.modifierFlags.intersection(disallowedModifiers).isEmpty else { return }
+                        onBeginRename()
+                    }
             }
 
             if !isRenaming, !document.labels.isEmpty {
