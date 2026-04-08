@@ -55,6 +55,7 @@ final class LibraryCoordinator {
     var isQuickLabelPickerPresented = false
     var isLabelManagerPresented = false
     var isWatchFolderSettingsPresented = false
+    var isInspectorCollapsed = false
     var labelFilterSelection = DeferredSelectionState<PersistentIdentifier>()
 
     // MARK: - OCR state

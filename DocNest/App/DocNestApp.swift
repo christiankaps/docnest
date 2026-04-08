@@ -21,6 +21,14 @@ private struct SelectAllDocumentsActionKey: FocusedValueKey {
     typealias Value = () -> Void
 }
 
+private struct ToggleInspectorActionKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
+private struct InspectorCollapsedStateKey: FocusedValueKey {
+    typealias Value = Bool
+}
+
 extension FocusedValues {
     var librarySession: LibrarySessionController? {
         get { self[LibrarySessionKey.self] }
@@ -40,6 +48,16 @@ extension FocusedValues {
     var selectAllDocumentsAction: (() -> Void)? {
         get { self[SelectAllDocumentsActionKey.self] }
         set { self[SelectAllDocumentsActionKey.self] = newValue }
+    }
+
+    var toggleInspectorAction: (() -> Void)? {
+        get { self[ToggleInspectorActionKey.self] }
+        set { self[ToggleInspectorActionKey.self] = newValue }
+    }
+
+    var isInspectorCollapsed: Bool? {
+        get { self[InspectorCollapsedStateKey.self] }
+        set { self[InspectorCollapsedStateKey.self] = newValue }
     }
 }
 
@@ -224,6 +242,8 @@ struct DocNestApp: App {
     @FocusedValue(\.exportDocumentsAction) private var exportDocumentsAction
     @FocusedValue(\.pasteDocumentsAction) private var pasteDocumentsAction
     @FocusedValue(\.selectAllDocumentsAction) private var selectAllDocumentsAction
+    @FocusedValue(\.toggleInspectorAction) private var toggleInspectorAction
+    @FocusedValue(\.isInspectorCollapsed) private var isInspectorCollapsed
 
     /// Kept alive for the lifetime of the app so macOS can invoke the service.
     private let servicesProvider = ServicesProvider()
@@ -260,7 +280,9 @@ struct DocNestApp: App {
                 librarySession: librarySession,
                 exportDocumentsAction: exportDocumentsAction,
                 pasteDocumentsAction: pasteDocumentsAction,
-                selectAllDocumentsAction: selectAllDocumentsAction
+                selectAllDocumentsAction: selectAllDocumentsAction,
+                toggleInspectorAction: toggleInspectorAction,
+                isInspectorCollapsed: isInspectorCollapsed
             )
         }
     }
@@ -291,6 +313,8 @@ struct DocNestMenuCommands: Commands {
     let exportDocumentsAction: (() -> Void)?
     let pasteDocumentsAction: (() -> Void)?
     let selectAllDocumentsAction: (() -> Void)?
+    let toggleInspectorAction: (() -> Void)?
+    let isInspectorCollapsed: Bool?
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
@@ -376,6 +400,13 @@ struct DocNestMenuCommands: Commands {
                 HelpWindowController.shared.showWindow(nil)
             }
             .keyboardShortcut("?", modifiers: [.command, .shift])
+        }
+        CommandMenu("View") {
+            Button(isInspectorCollapsed == true ? "Show Details" : "Hide Details") {
+                toggleInspectorAction?()
+            }
+            .keyboardShortcut("d", modifiers: [.control])
+            .disabled(toggleInspectorAction == nil)
         }
     }
 }

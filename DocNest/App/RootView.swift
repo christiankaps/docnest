@@ -37,14 +37,18 @@ struct RootView: View {
             documentListPanel
                 .frame(minWidth: AppSplitViewLayout.documentListMinWidth)
 
-            Divider()
+            if !coordinator.isInspectorCollapsed {
+                Divider()
 
-            DocumentInspectorView(
-                documents: coordinator.selectedDocuments,
-                libraryURL: libraryURL
-            )
-            .frame(width: AppSplitViewLayout.inspectorWidth)
+                DocumentInspectorView(
+                    documents: coordinator.selectedDocuments,
+                    libraryURL: libraryURL
+                )
+                .frame(width: AppSplitViewLayout.inspectorWidth)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.16), value: coordinator.isInspectorCollapsed)
         .padding([.top, .bottom, .trailing], AppSplitViewLayout.windowContentInset)
         .environment(coordinator)
         .environment(thumbnailCache)
@@ -62,6 +66,10 @@ struct RootView: View {
         .focusedSceneValue(\.selectAllDocumentsAction) {
             selectAllFilteredDocuments()
         }
+        .focusedSceneValue(\.toggleInspectorAction) {
+            coordinator.isInspectorCollapsed.toggle()
+        }
+        .focusedSceneValue(\.isInspectorCollapsed, coordinator.isInspectorCollapsed)
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
@@ -175,6 +183,18 @@ struct RootView: View {
             }
             .disabled(coordinator.cachedShareURLs.isEmpty)
             .help("Share selected documents")
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                coordinator.isInspectorCollapsed.toggle()
+            } label: {
+                Label(
+                    coordinator.isInspectorCollapsed ? "Show Details" : "Hide Details",
+                    systemImage: "sidebar.right"
+                )
+            }
+            .help("Toggle details column (Control-D)")
         }
     }
 
