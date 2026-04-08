@@ -594,7 +594,8 @@ private struct HelpView: View {
 
     private let overview = [
         "DocNest is a local-first document library for PDFs. A library is stored as a single .docnestlibrary package that contains your indexed metadata, managed files, previews, and diagnostics.",
-        "The main window uses a three-column layout: the sidebar on the left for navigation and filters, the document list or grid in the center, and the inspector on the right for details and editing."
+        "The main window uses a three-column layout: the sidebar on the left for navigation and filters, the document list or grid in the center, and the inspector on the right for details and editing.",
+        "Most commands are intentionally close to where you use them: quick actions live in menus and context menus, while broader management tools now live in Settings."
     ]
 
     private let sections: [HelpSection] = [
@@ -603,7 +604,8 @@ private struct HelpView: View {
             title: "Getting Started",
             body: [
                 "Choose File > Create Library to make a new library package, or File > Open Library to open an existing one.",
-                "After a library is open, drag PDFs or folders into the app, use Open With from Finder, or let watch folders import automatically."
+                "After a library is open, drag PDFs or folders into the app, use Open With from Finder, use Services from other apps, or let watch folders import automatically.",
+                "DocNest ignores attempts to import the open library package itself or one of its internal folders, which helps avoid accidental self-import loops."
             ]
         ),
         HelpSection(
@@ -611,7 +613,8 @@ private struct HelpView: View {
             title: "Working With Libraries",
             body: [
                 "A library package is the container for your complete DocNest collection. You can reveal it in Finder with File > Show in Finder.",
-                "DocNest keeps working data inside the package, runs integrity checks when libraries open, and avoids importing the library into itself."
+                "DocNest keeps working data inside the package, runs integrity checks when libraries open, and writes diagnostics so integrity problems are easier to spot early.",
+                "If library structure or derived metadata can be repaired safely, DocNest performs conservative self-healing and records what it repaired in the diagnostics report."
             ]
         ),
         HelpSection(
@@ -620,6 +623,7 @@ private struct HelpView: View {
             body: [
                 "Use labels to tag documents across projects, clients, topics, or workflows. Assign labels from Edit > Assign Labels or manage the full label list from DocNest > Settings… > Labels.",
                 "Smart folders give you saved filtered views. They live in the sidebar and update automatically when matching documents change.",
+                "The Labels section in the sidebar has a dedicated button for new labels and a separate button for new label groups, so creating groups no longer requires an extra menu step.",
                 "The inspector is the place to edit document title, notes, detected date, labels, and other metadata for the current selection."
             ]
         ),
@@ -628,7 +632,17 @@ private struct HelpView: View {
             title: "Search and Filtering",
             body: [
                 "Use Edit > Find or Command-F to focus the search field.",
-                "Sidebar labels act as filters. You can combine multiple labels to narrow the document list. Smart folders and library sections also change the current result set."
+                "Sidebar labels act as filters. You can combine multiple labels to narrow the document list. Smart folders and library sections also change the current result set.",
+                "Command-A selects the documents in the current filtered result set, not every document in the library."
+            ]
+        ),
+        HelpSection(
+            id: "document-list",
+            title: "Document List and Renaming",
+            body: [
+                "Select a document once to focus it. Click the selected document name again to rename it inline, similar to Finder.",
+                "You can also right-click a document and choose Rename from the context menu.",
+                "Press Return to confirm a rename or Escape to cancel editing."
             ]
         ),
         HelpSection(
@@ -646,7 +660,8 @@ private struct HelpView: View {
             body: [
                 "DocNest keeps settings intentionally focused. Use DocNest > Settings… or Command-Comma to open the Settings window.",
                 "The main app setting is Appearance. Use the toolbar button with the half-filled circle icon to switch between System, Light, and Dark.",
-                "Settings currently includes dedicated panes for Labels and Watch Folders, while other controls remain contextual in the sidebar and inspector."
+                "Settings currently includes dedicated panes for Labels and Watch Folders.",
+                "Use the Labels pane for full label and label-group management. Use the Watch Folders pane to control monitored import locations."
             ]
         ),
         HelpSection(
@@ -665,8 +680,11 @@ private struct HelpView: View {
         ("Reveal the current library in Finder", "File > Show in Finder"),
         ("Close the current library", "File > Close Library"),
         ("Export selected documents", "File > Export… or Shift-Command-E"),
+        ("Import from another app", "Open With DocNest or Services / Share menu for supported files"),
         ("Find/search", "Edit > Find or Command-F"),
         ("Assign labels to the selection", "Edit > Assign Labels or Command-L"),
+        ("Select all visible filtered documents", "Edit > Select All or Command-A"),
+        ("Rename a document", "Click the selected name again, or use the document context menu"),
         ("Open Settings", "DocNest > Settings… or Command-Comma"),
         ("Open full label management", "DocNest > Settings… > Labels"),
         ("Configure watch folders", "DocNest > Settings… > Watch Folders"),
