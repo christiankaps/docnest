@@ -250,17 +250,38 @@ struct LabelManagerSheet: View {
     @ViewBuilder
     private var editorPanel: some View {
         if isCreatingLabel {
-            createLabelEditor
+            editorContainer(
+                title: "New Label",
+                subtitle: "Create a label with a name, color, optional emoji, and group."
+            ) {
+                createLabelEditor
+            }
         } else if selectedLabelIDs.count > 1 {
-            bulkActionsPanel
+            editorContainer(
+                title: "Bulk Actions",
+                subtitle: "Apply group changes or remove multiple labels at once."
+            ) {
+                bulkActionsPanel
+            }
         } else if singleSelectedLabel != nil {
-            singleLabelEditor
+            editorContainer(
+                title: "Label Details",
+                subtitle: "Update the selected label and its grouping immediately."
+            ) {
+                singleLabelEditor
+            }
         } else {
-            ContentUnavailableView(
-                "Select a Label",
-                systemImage: "tag",
-                description: Text("Select a label to edit, or click + to create a new one.")
-            )
+            editorContainer(
+                title: "Select a Label",
+                subtitle: "Choose a label from the list to edit it, or create a new one."
+            ) {
+                ContentUnavailableView(
+                    "Select a Label",
+                    systemImage: "tag",
+                    description: Text("Select a label to edit, or click + to create a new one.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
     }
 
@@ -488,7 +509,29 @@ struct LabelManagerSheet: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
             )
-            .padding(.trailing, 0)
+    }
+
+    private func editorContainer<Content: View>(
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     // MARK: - Actions

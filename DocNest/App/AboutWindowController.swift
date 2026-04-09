@@ -90,6 +90,22 @@ enum AppSettingsPane: String, CaseIterable, Identifiable {
         case .watchFolders: "folder.badge.gearshape"
         }
     }
+
+    var shortDescription: String {
+        switch self {
+        case .labels: "Tags, colors, and groups"
+        case .watchFolders: "Automatic import locations"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .labels:
+            "Organize label names, colors, icons, and groups for the current library."
+        case .watchFolders:
+            "Manage monitored Finder folders that automatically import PDFs."
+        }
+    }
 }
 
 @MainActor
@@ -125,7 +141,7 @@ final class SettingsWindowController: NSWindowController {
 
     private init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -133,7 +149,7 @@ final class SettingsWindowController: NSWindowController {
         window.title = "Settings"
         window.center()
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 620, height: 420)
+        window.minSize = NSSize(width: 760, height: 560)
 
         super.init(window: window)
 
@@ -417,87 +433,75 @@ private struct AboutView: View {
     @State private var statistics: LibrarySessionController.LibraryStatistics?
 
     var body: some View {
-        VStack(spacing: 0) {
-            // App icon and name
-            VStack(spacing: 8) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 96, height: 96)
+        ZStack {
+            Rectangle()
+                .fill(.thinMaterial)
+                .ignoresSafeArea()
 
-                Text("DocNest")
-                    .font(.system(size: 22, weight: .semibold))
+            VStack(spacing: 16) {
+                VStack(spacing: 8) {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 96, height: 96)
 
-                Text("Version \(releaseVersion)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    Text("DocNest")
+                        .font(.system(size: 24, weight: .semibold))
 
-                Text("Build \(buildNumber)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-
-                Button("Check for Updates…") {
-                    updateService.checkForUpdates()
-                }
-                .padding(.top, 4)
-
-                if let message = updateStatusMessage {
-                    Text(message)
-                        .font(.system(size: 11))
+                    Text("Version \(releaseVersion) • Build \(buildNumber)")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+
+                    Button("Check for Updates…") {
+                        updateService.checkForUpdates()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 4)
+
+                    if let message = updateStatusMessage {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                 }
-            }
-            .padding(.top, 24)
-            .padding(.bottom, 16)
 
-            Divider()
-                .padding(.horizontal, 24)
+                aboutCard {
+                    VStack(spacing: 4) {
+                        Text("Developed by")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
 
-            // Credits
-            VStack(spacing: 4) {
-                Text("Developed by")
-                    .font(.system(size: 11))
+                        Text("Christian Kaps")
+                            .font(.body.weight(.medium))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+
+                aboutCard {
+                    if let stats = statistics {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Library")
+                                .font(.headline)
+
+                            statisticRow("Path", value: stats.path, isPath: true)
+                            statisticRow("Documents", value: "\(stats.documentCount)")
+                            statisticRow("Document Size", value: stats.formattedTotalFileSize)
+                            statisticRow("Library Size", value: stats.formattedPackageSize)
+                        }
+                    } else {
+                        Text("No library open")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                Text("© 2025 Christian Kaps. All rights reserved.")
+                    .font(.caption2)
                     .foregroundStyle(.tertiary)
-
-                Text("Christian Kaps")
-                    .font(.system(size: 13, weight: .medium))
+                    .padding(.top, 2)
             }
-            .padding(.vertical, 12)
-
-            // Library statistics
-            if let stats = statistics {
-                Divider()
-                    .padding(.horizontal, 24)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Library")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-
-                    statisticRow("Path", value: stats.path, isPath: true)
-                    statisticRow("Documents", value: "\(stats.documentCount)")
-                    statisticRow("Document Size", value: stats.formattedTotalFileSize)
-                    statisticRow("Library Size", value: stats.formattedPackageSize)
-                }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-            } else {
-                Divider()
-                    .padding(.horizontal, 24)
-
-                Text("No library open")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 12)
-            }
-
-            // Copyright
-            Text("© 2025 Christian Kaps. All rights reserved.")
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
+            .padding(24)
         }
         .frame(width: 360)
         .onAppear {
@@ -508,7 +512,7 @@ private struct AboutView: View {
     private func statisticRow(_ label: String, value: String, isPath: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.system(size: 11))
+                .font(.caption)
                 .foregroundStyle(.tertiary)
 
             if isPath {
@@ -520,9 +524,23 @@ private struct AboutView: View {
                     .help(value)
             } else {
                 Text(value)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.body.weight(.medium))
             }
         }
+    }
+
+    private func aboutCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.regularMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+            )
     }
 
     private func loadStatistics() {
@@ -558,47 +576,42 @@ private struct AppSettingsRootView: View {
 
             if let coordinator = settings.libraryCoordinator,
                let modelContainer = settings.modelContainer {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Settings")
-                            .font(.system(size: 28, weight: .semibold))
+                HStack(spacing: 18) {
+                    settingsSidebar
+                        .frame(width: 220)
 
-                        Text("Manage labels and watch folders for the current DocNest library.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    VStack(alignment: .leading, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(settings.selectedPane.title)
+                                .font(.system(size: 28, weight: .semibold))
 
-                    Picker("Settings Pane", selection: $settings.selectedPane) {
-                        ForEach(AppSettingsPane.allCases) { pane in
-                            Label(pane.title, systemImage: pane.systemImage)
-                                .tag(pane)
+                            Text(settings.selectedPane.subtitle)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(maxWidth: 360)
 
-                    Group {
-                        switch settings.selectedPane {
-                        case .labels:
-                            LabelManagerSheet(showsDoneButton: false)
-                                .environment(coordinator)
-                                .modelContainer(modelContainer)
-                        case .watchFolders:
-                            WatchFolderSettingsView(showsDoneButton: false)
-                                .environment(coordinator)
-                                .modelContainer(modelContainer)
+                        Group {
+                            switch settings.selectedPane {
+                            case .labels:
+                                LabelManagerSheet(showsDoneButton: false)
+                                    .environment(coordinator)
+                                    .modelContainer(modelContainer)
+                            case .watchFolders:
+                                WatchFolderSettingsView(showsDoneButton: false)
+                                    .environment(coordinator)
+                                    .modelContainer(modelContainer)
+                            }
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .fill(.regularMaterial)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+                        )
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(.regularMaterial)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
-                    )
                 }
                 .padding(24)
             } else {
@@ -612,6 +625,64 @@ private struct AppSettingsRootView: View {
             }
         }
         .frame(minWidth: 760, minHeight: 560)
+    }
+
+    private var settingsSidebar: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Settings")
+                    .font(.title2.weight(.semibold))
+
+                Text("Library-specific tools")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 6) {
+                ForEach(AppSettingsPane.allCases) { pane in
+                    Button {
+                        settings.selectedPane = pane
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: pane.systemImage)
+                                .font(.body.weight(.medium))
+                                .frame(width: 18)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(pane.title)
+                                    .font(.body.weight(.medium))
+
+                                Text(pane.shortDescription)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(settings.selectedPane == pane ? Color.accentColor.opacity(0.18) : Color.clear)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
     }
 }
 
@@ -724,21 +795,26 @@ private struct HelpView: View {
     ]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                header
-                sectionBlock(title: "Overview", items: overview)
+        ZStack {
+            Rectangle()
+                .fill(.thinMaterial)
+                .ignoresSafeArea()
 
-                ForEach(sections) { section in
-                    sectionBlock(title: section.title, items: section.body)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
+                    sectionCard(title: "Overview", items: overview)
+
+                    ForEach(sections) { section in
+                        sectionCard(title: section.title, items: section.body)
+                    }
+
+                    locationsBlock
                 }
-
-                locationsBlock
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var header: some View {
@@ -752,7 +828,7 @@ private struct HelpView: View {
         }
     }
 
-    private func sectionBlock(title: String, items: [String]) -> some View {
+    private func sectionCard(title: String, items: [String]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.system(size: 16, weight: .semibold))
@@ -767,6 +843,16 @@ private struct HelpView: View {
                 }
             }
         }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+        )
     }
 
     private var locationsBlock: some View {
@@ -797,6 +883,16 @@ private struct HelpView: View {
                 }
             }
         }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+        )
     }
 }
 
