@@ -188,8 +188,16 @@ struct DocumentListView: View {
         return visibility
     }
 
+    private var visibleDocumentsInOrder: [DocumentRecord] {
+        if groupMode == .none {
+            return cachedSortedDocuments
+        }
+        return cachedGroupedDocuments.flatMap(\.documents)
+    }
+
     var body: some View {
         let documents = cachedSortedDocuments
+        let visibleDocuments = visibleDocumentsInOrder
         VStack(spacing: 0) {
             if documents.isEmpty || coordinator.documentListViewMode != .list {
                 listHeader
@@ -223,7 +231,7 @@ struct DocumentListView: View {
             return .handled
         }
         .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow]) { keyPress in
-            handleArrowKey(keyPress, in: documents)
+            handleArrowKey(keyPress, in: visibleDocuments)
         }
         .background {
             GeometryReader { proxy in
@@ -340,13 +348,15 @@ struct DocumentListView: View {
     }
 
     private func listContent(_ sortedDocs: [DocumentRecord]) -> some View {
-        ScrollViewReader { proxy in
+        let visibleDocs = visibleDocumentsInOrder
+
+        return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                     if groupMode == .none {
                         Section {
                             ForEach(Array(sortedDocs.enumerated()), id: \.element.persistentModelID) { index, document in
-                                documentListRow(document: document, index: index, allDocs: sortedDocs)
+                                documentListRow(document: document, index: index, allDocs: visibleDocs)
                             }
                         } header: {
                             listHeader
@@ -359,7 +369,7 @@ struct DocumentListView: View {
                         ForEach(Array(cachedGroupedDocuments.enumerated()), id: \.element.id) { _, group in
                             Section {
                                 ForEach(Array(group.documents.enumerated()), id: \.element.persistentModelID) { index, document in
-                                    documentListRow(document: document, index: index, allDocs: sortedDocs)
+                                    documentListRow(document: document, index: index, allDocs: visibleDocs)
                                 }
                             } header: {
                                 HStack {
