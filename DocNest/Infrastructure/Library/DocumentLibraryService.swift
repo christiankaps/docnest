@@ -144,6 +144,11 @@ enum DocumentLibraryService {
                     bookmarkDataIsStale: &isStale
                 ).standardizedFileURL
 
+                guard !isURLInTrash(resolvedURL) else {
+                    persistLibraryURL(nil)
+                    return nil
+                }
+
                 let session = accessLibrary(at: resolvedURL)
                 if isStale {
                     persistLibraryURL(resolvedURL)
@@ -158,7 +163,13 @@ enum DocumentLibraryService {
             return nil
         }
 
-        return accessLibrary(at: URL(fileURLWithPath: path))
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        guard !isURLInTrash(url) else {
+            persistLibraryURL(nil)
+            return nil
+        }
+
+        return accessLibrary(at: url)
     }
 
     static func persistLibraryURL(_ url: URL?) {
@@ -680,6 +691,29 @@ enum DocumentLibraryService {
             .deletingPathExtension()
             .appendingPathExtension(packageExtension)
             .standardizedFileURL
+    }
+
+    private static func isURLInTrash(_ url: URL) -> Bool {
+        let standardizedPath = url.standardizedFileURL.resolvingSymlinksInPath().path
+        let pathComponents = URL(fileURLWithPath: standardizedPath).pathComponents
+
+        if pathComponents.contains(".Trash") || pathComponents.contains(".Trashes") {
+            return true
+        }
+
+        if let userTrashURL = try? FileManager.default.url(
+            for: .trashDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: false
+        ) {
+            let trashPath = userTrashURL.standardizedFileURL.resolvingSymlinksInPath().path
+            if standardizedPath == trashPath || standardizedPath.hasPrefix(trashPath + "/") {
+                return true
+            }
+        }
+
+        return false
     }
 
     private static func manifestURL(for libraryURL: URL) -> URL {
