@@ -9,6 +9,7 @@ struct RootView: View {
     @State private var coordinator = LibraryCoordinator()
     @State private var thumbnailCache = ThumbnailCache()
     @State private var quickLook = QuickLookCoordinator()
+    @State private var inspectorVisibilityProgress = 1.0
 
     @Environment(\.modelContext) private var modelContext
 
@@ -37,19 +38,22 @@ struct RootView: View {
             documentListPanel
                 .frame(minWidth: AppSplitViewLayout.documentListMinWidth)
 
-            if !coordinator.isInspectorCollapsed {
-                Divider()
+            Divider()
+                .opacity(inspectorDividerOpacity)
 
-                DocumentInspectorView(
-                    documents: coordinator.displayedSelectedDocuments,
-                    libraryURL: libraryURL,
-                    isTransitioningSelection: coordinator.isInspectorSelectionPending
-                )
-                .frame(width: AppSplitViewLayout.inspectorWidth)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
+            DocumentInspectorView(
+                documents: coordinator.displayedSelectedDocuments,
+                libraryURL: libraryURL,
+                isTransitioningSelection: coordinator.isInspectorSelectionPending
+            )
+            .frame(width: inspectorWidth)
+            .opacity(inspectorContentOpacity)
+            .clipped()
+            .allowsHitTesting(!coordinator.isInspectorCollapsed)
+            .accessibilityHidden(coordinator.isInspectorCollapsed)
+            .compositingGroup()
         }
-        .animation(.easeInOut(duration: 0.16), value: coordinator.isInspectorCollapsed)
+        .animation(.easeInOut(duration: 0.16), value: inspectorVisibilityProgress)
         .background(Color(nsColor: .windowBackgroundColor))
         .environment(coordinator)
         .environment(thumbnailCache)
@@ -74,6 +78,7 @@ struct RootView: View {
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
+            inspectorVisibilityProgress = coordinator.isInspectorCollapsed ? 0 : 1
             AppSettingsController.shared.setActiveLibraryContext(
                 coordinator: coordinator,
                 modelContainer: librarySession.modelContainer
@@ -93,6 +98,21 @@ struct RootView: View {
                 coordinator.importDocuments(from: pending)
             }
         }
+        .onChange(of: coordinator.isInspectorCollapsed) { _, isCollapsed in
+            inspectorVisibilityProgress = isCollapsed ? 0 : 1
+        }
+    }
+
+    private var inspectorWidth: Double {
+        AppSplitViewLayout.inspectorWidth * inspectorVisibilityProgress
+    }
+
+    private var inspectorContentOpacity: Double {
+        max(0, min(1, inspectorVisibilityProgress * 1.2))
+    }
+
+    private var inspectorDividerOpacity: Double {
+        max(0, min(1, inspectorVisibilityProgress))
     }
 
     private var documentListPanel: some View {

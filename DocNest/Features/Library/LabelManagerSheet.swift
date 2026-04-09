@@ -84,25 +84,26 @@ struct LabelManagerSheet: View {
         editorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var isEmbeddedInSettings: Bool {
+        !showsDoneButton
+    }
+
     // MARK: - Body
 
     var body: some View {
-        VStack(spacing: 18) {
-            header
-
-            HStack(spacing: 0) {
-                labelListPanel
-                    .frame(width: 260)
-                    .background(panelSurface)
-
-                editorPanel
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(panelSurface)
+        Group {
+            if isEmbeddedInSettings {
+                contentPanels
+            } else {
+                VStack(spacing: 18) {
+                    header
+                    contentPanels
+                    footer
+                }
+                .padding(20)
+                .frame(minWidth: 660, minHeight: 480)
             }
-            footer
         }
-        .padding(20)
-        .frame(minWidth: 660, minHeight: 480)
         .alert("New Group", isPresented: $isCreatingGroup) {
             TextField("Group name", text: $newGroupName)
             Button("Create") { createGroup() }
@@ -123,6 +124,18 @@ struct LabelManagerSheet: View {
             }
         } message: {
             Text(deletionDialogMessage)
+        }
+    }
+
+    private var contentPanels: some View {
+        HStack(spacing: 0) {
+            labelListPanel
+                .frame(width: 260)
+                .background(panelSurface)
+
+            editorPanel
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(panelSurface)
         }
     }
 
@@ -190,6 +203,7 @@ struct LabelManagerSheet: View {
                 }
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func labelRow(for label: LabelTag) -> some View {
@@ -532,6 +546,7 @@ struct LabelManagerSheet: View {
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     // MARK: - Actions

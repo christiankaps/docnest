@@ -1097,12 +1097,20 @@ struct EmojiPickerButton: NSViewRepresentable {
 final class EmojiInputView: NSView, NSTextInputClient {
     var emoji = ""
     var onEmojiChanged: ((String) -> Void)?
+    private var isPresentingPalette = false
 
     override var acceptsFirstResponder: Bool { true }
 
     override func mouseDown(with event: NSEvent) {
+        guard !isPresentingPalette else { return }
+        isPresentingPalette = true
         window?.makeFirstResponder(self)
-        NSApp.orderFrontCharacterPalette(nil)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self)
+            NSApp.orderFrontCharacterPalette(nil)
+            self.isPresentingPalette = false
+        }
     }
 
     override var intrinsicContentSize: NSSize {
