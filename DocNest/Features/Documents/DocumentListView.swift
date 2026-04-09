@@ -97,6 +97,7 @@ struct DocumentListView: View {
     @State private var sortDirection: SortDirection = .descending
     @State private var cachedSortedDocuments: [DocumentRecord] = []
     @State private var cachedGroupedDocuments: [DocumentGroup] = []
+    @State private var pendingSortedDocumentsRecomputeTask: Task<Void, Never>?
     @AppStorage("docListGroupMode") private var groupMode: DocumentGroupMode = .none
     @State private var availableListWidth = AppSplitViewLayout.documentListIdealWidth
     @AppStorage("docListThumbnailSize") private var thumbnailSize = 160.0
@@ -142,6 +143,16 @@ struct DocumentListView: View {
             return comparison == .orderedDescending
         }
         cachedGroupedDocuments = groupMode == .none ? [] : groupMode.group(cachedSortedDocuments)
+    }
+
+    private func scheduleSortedDocumentsRecompute() {
+        pendingSortedDocumentsRecomputeTask?.cancel()
+        pendingSortedDocumentsRecomputeTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            recomputeSortedDocuments()
+            pendingSortedDocumentsRecomputeTask = nil
+        }
     }
 
     private var effectiveOptionalColumns: OptionalColumnVisibility {
@@ -245,22 +256,26 @@ struct DocumentListView: View {
             }
         }
         .onAppear {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
         }
         .onChange(of: coordinator.filteredDocuments) {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
         }
         .onChange(of: documentListFingerprint) {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
         }
         .onChange(of: sortColumn) {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
         }
         .onChange(of: sortDirection) {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
         }
         .onChange(of: groupMode) {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
+        }
+        .onDisappear {
+            pendingSortedDocumentsRecomputeTask?.cancel()
+            pendingSortedDocumentsRecomputeTask = nil
         }
     }
 

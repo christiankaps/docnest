@@ -17,6 +17,8 @@ struct DocumentInspectorView: View {
     @State private var isEditingTitle = false
     @State private var dateFieldText = ""
     @State private var selectedFileAvailable: Bool?
+    @State private var selectedFileAvailabilitySignature = 0
+    @State private var selectedFileAvailabilityTask: Task<Void, Never>?
     @State private var cachedSelectionSummary = BatchLabelSelectionSummary.empty
     @State private var cachedSelectionSummarySignature = 0
 
@@ -103,6 +105,11 @@ struct DocumentInspectorView: View {
         }
         .task(id: multiSelectionSummarySignature) {
             refreshCachedSelectionSummaryIfNeeded()
+        }
+        .onDisappear {
+            selectedFileAvailabilityTask?.cancel()
+            selectedFileAvailabilityTask = nil
+            selectedFileAvailabilitySignature = 0
         }
         .alert("Inspector Error", isPresented: inspectorErrorBinding) {
             Button("OK", role: .cancel) {
@@ -701,20 +708,39 @@ struct DocumentInspectorView: View {
         guard let document = singleSelectedDocument,
               let path = document.storedFilePath,
               let libraryURL else {
+            selectedFileAvailabilityTask?.cancel()
+            selectedFileAvailabilityTask = nil
+            selectedFileAvailabilitySignature = 0
             selectedFileAvailable = nil
             return
         }
 
+        var hasher = Hasher()
+        hasher.combine(document.persistentModelID)
+        hasher.combine(path)
+        hasher.combine(libraryURL.path)
+        let signature = hasher.finalize()
+
+        guard signature != selectedFileAvailabilitySignature else { return }
+
+        selectedFileAvailabilityTask?.cancel()
+        selectedFileAvailabilitySignature = signature
         let targetID = document.persistentModelID
-        Task {
+        selectedFileAvailabilityTask = Task {
             let exists = await DocumentStorageService.fileExistsAsync(at: path, libraryURL: libraryURL)
+            guard !Task.isCancelled else { return }
             guard self.singleSelectedDocument?.persistentModelID == targetID else { return }
             self.selectedFileAvailable = exists
+            self.selectedFileAvailabilityTask = nil
         }
     }
 
     private func refreshCachedSelectionSummaryIfNeeded() {
-        guard documents.count > 1 else { return }
+        guard documents.count > 1 else {
+            cachedSelectionSummary = .empty
+            cachedSelectionSummarySignature = 0
+            return
+        }
         let signature = multiSelectionSummarySignature
         guard signature != cachedSelectionSummarySignature else { return }
         #if DEBUG
@@ -955,9 +981,11 @@ private struct BatchLabelState {
 
 private enum DocumentInspectorPreviewData {
     @MainActor
-    static func make() -> (container: ModelContainer, document: DocumentRecord) {
+    static func make() -> (container: ModelContainer, document: DocumentRecord)? {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try! ModelContainer(for: DocumentRecord.self, configurations: config)
+        guard let container = try? ModelContainer(for: DocumentRecord.self, configurations: config) else {
+            return nil
+        }
 
         let labels = LabelTag.makeSamples()
         container.mainContext.insert(labels.finance)
@@ -980,9 +1008,11 @@ private enum DocumentInspectorPreviewData {
 }
 
 #Preview {
-    let previewData = DocumentInspectorPreviewData.make()
-
-    DocumentInspectorView(documents: [previewData.document], libraryURL: nil, isTransitioningSelection: false)
-        .environment(LibraryCoordinator())
-        .modelContainer(previewData.container)
+    if let previewData = DocumentInspectorPreviewData.make() {
+        DocumentInspectorView(documents: [previewData.document], libraryURL: nil, isTransitioningSelection: false)
+            .environment(LibraryCoordinator())
+            .modelContainer(previewData.container)
+    } else {
+        ContentUnavailableView("Preview unavailable", systemImage: "exclamationmark.triangle")
+    }
 }

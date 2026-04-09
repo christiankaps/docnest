@@ -173,6 +173,61 @@ final class DocNestTests: XCTestCase {
         )
     }
 
+    func testFolderMonitorDeltaReportsOnlyNewAndChangedPDFs() {
+        let originalDate = Date(timeIntervalSinceReferenceDate: 100)
+        let updatedDate = Date(timeIntervalSinceReferenceDate: 200)
+        let unchangedPath = "/tmp/unchanged.pdf"
+        let changedPath = "/tmp/changed.pdf"
+        let newPath = "/tmp/new.pdf"
+
+        let result = FolderMonitorService.newPDFURLs(
+            from: [
+                .init(path: unchangedPath, modificationDate: originalDate),
+                .init(path: changedPath, modificationDate: updatedDate),
+                .init(path: newPath, modificationDate: updatedDate)
+            ],
+            previousSnapshots: [
+                unchangedPath: originalDate,
+                changedPath: originalDate
+            ]
+        )
+
+        XCTAssertEqual(
+            Set(result.urls.map(\.path)),
+            Set([changedPath, newPath])
+        )
+        XCTAssertEqual(
+            result.updatedSnapshots,
+            [
+                unchangedPath: originalDate,
+                changedPath: updatedDate,
+                newPath: updatedDate
+            ]
+        )
+    }
+
+    func testFolderMonitorDeltaDropsRemovedFilesFromSnapshot() {
+        let originalDate = Date(timeIntervalSinceReferenceDate: 100)
+        let remainingPath = "/tmp/remaining.pdf"
+        let removedPath = "/tmp/removed.pdf"
+
+        let result = FolderMonitorService.newPDFURLs(
+            from: [
+                .init(path: remainingPath, modificationDate: originalDate)
+            ],
+            previousSnapshots: [
+                remainingPath: originalDate,
+                removedPath: originalDate
+            ]
+        )
+
+        XCTAssertTrue(result.urls.isEmpty)
+        XCTAssertEqual(
+            result.updatedSnapshots,
+            [remainingPath: originalDate]
+        )
+    }
+
     func testAcquireLockCreatesLockFile() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

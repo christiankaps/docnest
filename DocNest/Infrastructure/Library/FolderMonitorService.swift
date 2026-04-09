@@ -13,7 +13,13 @@ final class FolderMonitorService {
         let dispatchSource: DispatchSourceFileSystemObject
     }
 
+    struct FileSnapshot: Equatable {
+        let path: String
+        let modificationDate: Date
+    }
+
     private var monitors: [UUID: MonitoredFolder] = [:]
+    private var knownSnapshotsByFolderID: [UUID: [String: Date]] = [:]
     private let monitorQueue = DispatchQueue(
         label: "com.kaps.docnest.foldermonitor",
         qos: .utility
@@ -75,6 +81,7 @@ final class FolderMonitorService {
 
     func stopMonitoring(id: UUID) {
         guard let existing = monitors.removeValue(forKey: id) else { return }
+        knownSnapshotsByFolderID.removeValue(forKey: id)
         existing.dispatchSource.cancel()
         Self.logger.info("Stopped monitoring: \(existing.folderPath, privacy: .public)")
     }
@@ -107,28 +114,66 @@ final class FolderMonitorService {
 
     // MARK: - Scanning
 
+    nonisolated static func newPDFURLs(
+        from snapshots: [FileSnapshot],
+        previousSnapshots: [String: Date]
+    ) -> (urls: [URL], updatedSnapshots: [String: Date]) {
+        let updatedSnapshots = Dictionary(
+            uniqueKeysWithValues: snapshots.map { ($0.path, $0.modificationDate) }
+        )
+
+        let urls = snapshots.compactMap { snapshot -> URL? in
+            guard previousSnapshots[snapshot.path] != snapshot.modificationDate else {
+                return nil
+            }
+            return URL(fileURLWithPath: snapshot.path)
+        }
+
+        return (urls, updatedSnapshots)
+    }
+
     private func scanFolderAsync(_ entry: MonitoredFolder) {
+        let folderID = entry.watchFolderID
         let folderPath = entry.folderPath
-        let labelIDs = entry.labelIDs
-        let onNewPDFsDetected = self.onNewPDFsDetected
 
         Task.detached(priority: .utility) {
             let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
             guard let contents = try? FileManager.default.contentsOfDirectory(
                 at: folderURL,
-                includingPropertiesForKeys: [.isRegularFileKey],
+                includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
                 options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
             ) else { return }
 
-            let pdfURLs = contents.filter { url in
-                url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
+            let snapshots: [FileSnapshot] = contents.compactMap { url in
+                guard url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame else {
+                    return nil
+                }
+
+                let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
+                guard values?.isRegularFile == true else {
+                    return nil
+                }
+
+                return FileSnapshot(
+                    path: url.path,
+                    modificationDate: values?.contentModificationDate ?? .distantPast
+                )
             }
 
-            guard !pdfURLs.isEmpty else { return }
-
             await MainActor.run {
-                Self.logger.info("Found \(pdfURLs.count) PDF(s) in \(folderPath, privacy: .public)")
-                onNewPDFsDetected?(pdfURLs, labelIDs)
+                guard let monitor = self.monitors[folderID] else { return }
+
+                let previousSnapshots = self.knownSnapshotsByFolderID[folderID] ?? [:]
+                let result = Self.newPDFURLs(
+                    from: snapshots,
+                    previousSnapshots: previousSnapshots
+                )
+                self.knownSnapshotsByFolderID[folderID] = result.updatedSnapshots
+
+                guard !result.urls.isEmpty else { return }
+
+                Self.logger.info("Found \(result.urls.count) new or updated PDF(s) in \(folderPath, privacy: .public)")
+                self.onNewPDFsDetected?(result.urls, monitor.labelIDs)
             }
         }
     }
