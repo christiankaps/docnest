@@ -111,6 +111,21 @@ struct DocumentListView: View {
     @AppStorage("docListShowSize") private var showsSizeColumn = true
     @AppStorage("docListShowLabels") private var showsLabelsColumn = true
 
+    private var documentListFingerprint: Int {
+        var hasher = Hasher()
+        for document in coordinator.filteredDocuments {
+            hasher.combine(document.persistentModelID)
+            hasher.combine(document.title)
+            hasher.combine(document.documentDate)
+            hasher.combine(document.importedAt)
+            hasher.combine(document.fileSize)
+            hasher.combine(document.pageCount)
+            hasher.combine(document.labels.count)
+            hasher.combine(document.trashedAt)
+        }
+        return hasher.finalize()
+    }
+
     private func recomputeSortedDocuments() {
         let column = sortColumn
         let direction = sortDirection
@@ -225,6 +240,9 @@ struct DocumentListView: View {
             recomputeSortedDocuments()
         }
         .onChange(of: coordinator.filteredDocuments) {
+            recomputeSortedDocuments()
+        }
+        .onChange(of: documentListFingerprint) {
             recomputeSortedDocuments()
         }
         .onChange(of: sortColumn) {
