@@ -83,6 +83,7 @@ struct DocumentListView: View {
     private let documentColumnMinWidth = 260.0
     private let listColumnSpacing = 10.0
     private let listHorizontalPadding = 24.0
+    private let listPanelBackground = Color(nsColor: .controlBackgroundColor)
 
     @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(QuickLookCoordinator.self) private var quickLook
@@ -201,6 +202,7 @@ struct DocumentListView: View {
         }
         .focusable()
         .focusEffectDisabled()
+        .background(listPanelBackground)
         .onKeyPress(.space) {
             quickLook.togglePreview()
             return .handled
@@ -309,8 +311,13 @@ struct DocumentListView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background {
-            Color(nsColor: .windowBackgroundColor)
-                .overlay(Color.secondary.opacity(0.08))
+            Rectangle()
+                .fill(.thinMaterial)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.08))
+                        .frame(height: 0.5)
+                }
         }
     }
 
@@ -350,8 +357,13 @@ struct DocumentListView: View {
                                 .padding(.vertical, 5)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background {
-                                    Color(nsColor: .windowBackgroundColor)
-                                        .overlay(Color.secondary.opacity(0.05))
+                                    Rectangle()
+                                        .fill(listPanelBackground.opacity(0.96))
+                                        .overlay(alignment: .bottom) {
+                                            Rectangle()
+                                                .fill(Color.primary.opacity(0.05))
+                                                .frame(height: 0.5)
+                                        }
                                 }
                             }
                         }
@@ -443,9 +455,9 @@ struct DocumentListView: View {
 
     private func rowBackground(index: Int, isSelected: Bool) -> Color {
         if isSelected {
-            return Color.accentColor.opacity(0.18)
+            return Color.accentColor.opacity(0.12)
         }
-        return index.isMultiple(of: 2) ? Color.clear : Color.secondary.opacity(0.06)
+        return index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.025)
     }
 
     private func thumbnailContent(_ sortedDocs: [DocumentRecord]) -> some View {
@@ -489,11 +501,11 @@ struct DocumentListView: View {
         HStack(alignment: .center, spacing: 10) {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.accentColor.opacity(0.12))
+                    .fill(isSelectedDocument(document) ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.05))
                     .frame(width: 30, height: 30)
                     .overlay {
                         Image(systemName: "doc.richtext")
-                            .foregroundStyle(.tint)
+                            .foregroundStyle(isSelectedDocument(document) ? Color.accentColor : Color.secondary)
                             .font(AppTypography.listTitle)
                     }
 
@@ -558,7 +570,11 @@ struct DocumentListView: View {
             }
 
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 5)
+    }
+
+    private func isSelectedDocument(_ document: DocumentRecord) -> Bool {
+        coordinator.selectedDocumentIDs.contains(document.persistentModelID)
     }
 
     private func onRemoveLabelFromDocument(_ label: LabelTag, _ document: DocumentRecord) {
@@ -1047,19 +1063,22 @@ private struct DocumentThumbnailCell: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             thumbnailImage
                 .frame(width: size, height: size * 1.3)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(alignment: .bottomTrailing) {
                     if !document.labels.isEmpty {
                         labelBadges
-                            .padding(4)
+                            .padding(6)
                     }
                 }
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(
+                            isSelected ? Color.accentColor.opacity(0.7) : Color.primary.opacity(0.10),
+                            lineWidth: isSelected ? 1.5 : 1
+                        )
                 )
 
             if isRenaming {
@@ -1095,10 +1114,11 @@ private struct DocumentThumbnailCell: View {
                     .clipped()
             }
         }
-        .padding(4)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.08) : Color.clear)
         )
     }
 
@@ -1119,7 +1139,7 @@ private struct DocumentThumbnailCell: View {
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 2)
-        .background(Capsule().fill(.black.opacity(0.5)))
+        .background(Capsule().fill(.regularMaterial))
     }
 
     private var miniLabelBar: some View {
@@ -1145,16 +1165,18 @@ private struct DocumentThumbnailCell: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
+                    .padding(8)
+                    .background(Color(nsColor: .textBackgroundColor))
             } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.secondary.opacity(0.08))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(.thinMaterial)
                     .overlay {
                         ProgressView()
                     }
             }
         } else {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.secondary.opacity(0.08))
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(.thinMaterial)
                 .overlay {
                     Image(systemName: "doc.richtext")
                         .font(.system(size: size * 0.25))
@@ -1192,6 +1214,7 @@ private struct DocumentListStatusBar: View {
         .padding(.horizontal, 12)
         .frame(height: 24)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.92))
     }
 
     private var summaryText: String {

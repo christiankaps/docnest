@@ -59,7 +59,17 @@ struct LibrarySidebarView: View {
 
                 labelSectionContent
             }
-            .padding(.vertical, 4)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+        }
+        .background {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.08))
+                        .frame(width: 0.5)
+                }
         }
         .navigationTitle(coordinator.libraryURL?.deletingPathExtension().lastPathComponent ?? "DocNest")
         .confirmationDialog(
@@ -160,12 +170,9 @@ struct LibrarySidebarView: View {
 
     private func sidebarSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
+            SidebarSectionHeader(title: title)
+                .padding(.horizontal, 6)
+                .padding(.top, 6)
                 .padding(.bottom, 4)
 
             content()
@@ -174,12 +181,11 @@ struct LibrarySidebarView: View {
 
     private func labelSection<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Image(systemName: "tag")
-                    .font(.system(size: 10, weight: .semibold))
-                Text("Labels")
-                    .font(.system(size: 11, weight: .semibold))
-                    .textCase(.uppercase)
+            HStack(spacing: 8) {
+                Label("Labels", systemImage: "tag")
+                    .font(AppTypography.captionStrong)
+                    .foregroundStyle(.secondary)
+                    .labelStyle(.titleAndIcon)
 
                 Spacer()
 
@@ -190,36 +196,35 @@ struct LibrarySidebarView: View {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 12))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
                     .help("Clear label filters")
                 }
 
                 Button {
                     labelEditorConfig = LabelEditorConfig(mode: .create(groupID: nil))
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                .buttonStyle(.borderless)
                 .fixedSize()
                 .foregroundStyle(.secondary)
                 .help("Add Label")
 
                 Button {
                     isShowingNewGroupAlert = true
-                } label: {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
+                    } label: {
+                        Image(systemName: "folder.badge.plus")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                .buttonStyle(.borderless)
                 .fixedSize()
                 .foregroundStyle(.secondary)
                 .help("Add Label Group")
             }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
+            .padding(.horizontal, 6)
+            .padding(.top, 8)
             .padding(.bottom, 4)
 
             content()
@@ -440,10 +445,9 @@ struct LibrarySidebarView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Image(systemName: "folder.badge.gearshape")
-                    .font(.system(size: 10, weight: .semibold))
-                Text("Smart Folders")
                     .font(.system(size: 11, weight: .semibold))
-                    .textCase(.uppercase)
+                Text("Smart Folders")
+                    .font(AppTypography.captionStrong)
 
                 Spacer()
 
@@ -454,15 +458,15 @@ struct LibrarySidebarView: View {
                     )
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("Add Smart Folder")
             }
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
+            .padding(.horizontal, 6)
+            .padding(.top, 8)
             .padding(.bottom, 4)
 
             if folders.isEmpty {
@@ -811,9 +815,19 @@ struct LibrarySidebarView: View {
 private extension View {
     func sidebarRow() -> some View {
         self
-            .padding(.horizontal, 16)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SidebarSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(AppTypography.captionStrong)
+            .foregroundStyle(.secondary)
     }
 }
 
@@ -826,24 +840,24 @@ private struct LibrarySectionRowView: View {
     @State private var isHovered = false
 
     var body: some View {
-        HStack {
+        HStack(spacing: 10) {
             Label(title, systemImage: systemImage)
-                .fontWeight(isSelected ? .semibold : .regular)
+                .font(AppTypography.body.weight(isSelected ? .semibold : .regular))
             Spacer()
             Text("\(count)")
                 .font(AppTypography.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isSelected ? Color.primary.opacity(0.75) : Color.secondary.opacity(0.65))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.accentColor.opacity(isSelected ? 0.30 : (isHovered ? 0.06 : 0)))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(Color.accentColor.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    isSelected
+                    ? Color.accentColor.opacity(0.16)
+                    : (isHovered ? Color.primary.opacity(0.045) : Color.clear)
+                )
         )
         .contentShape(Rectangle())
         .onHover { hovering in
@@ -871,25 +885,25 @@ private struct LibraryLabelRowView: View {
             } else {
                 Image(systemName: "tag.fill")
                     .font(.system(size: 10))
-                    .foregroundStyle(color)
+                    .foregroundStyle(color.opacity(isSelected ? 0.95 : 0.85))
             }
             Text(name)
-                .fontWeight(isSelected ? .semibold : .regular)
+                .font(AppTypography.body.weight(isSelected ? .semibold : .regular))
             Spacer()
             Text("\(count)")
                 .font(AppTypography.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isSelected ? Color.primary.opacity(0.72) : Color.secondary.opacity(0.65))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(color.opacity(isSelected ? 0.30 : (isHovered ? 0.08 : 0.10)))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(color.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    isSelected
+                    ? color.opacity(0.16)
+                    : (isHovered ? Color.primary.opacity(0.045) : Color.clear)
+                )
         )
         .contentShape(Rectangle())
         .onHover { hovering in
@@ -1129,22 +1143,22 @@ private struct SmartFolderRowView: View {
                     .foregroundStyle(.tint)
             }
             Text(name)
-                .fontWeight(isSelected ? .semibold : .regular)
+                .font(AppTypography.body.weight(isSelected ? .semibold : .regular))
             Spacer()
             Text("\(count)")
                 .font(AppTypography.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isSelected ? Color.primary.opacity(0.72) : Color.secondary.opacity(0.65))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.accentColor.opacity(isSelected ? 0.30 : (isHovered ? 0.06 : 0)))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(Color.accentColor.opacity(isSelected ? 0.6 : 0), lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    isSelected
+                    ? Color.accentColor.opacity(0.16)
+                    : (isHovered ? Color.primary.opacity(0.045) : Color.clear)
+                )
         )
         .contentShape(Rectangle())
         .onHover { hovering in
@@ -1207,4 +1221,3 @@ struct SmartFolderEditorConfig: Identifiable {
         .environment(LibraryCoordinator())
         .modelContainer(for: DocumentRecord.self, inMemory: true)
 }
-

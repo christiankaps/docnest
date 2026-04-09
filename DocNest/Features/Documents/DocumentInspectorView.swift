@@ -122,20 +122,21 @@ struct DocumentInspectorView: View {
             )
             .frame(minHeight: 420, idealHeight: 620)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
-            .padding(.bottom, 12)
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 10)
 
             ScrollView {
                 documentMetadataSection(for: document)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 12)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
                     .padding(.bottom, 24)
             }
             .frame(minHeight: 240, idealHeight: 320)
         }
         .navigationTitle("Preview")
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     @ViewBuilder
@@ -229,7 +230,7 @@ struct DocumentInspectorView: View {
                     .foregroundStyle(.secondary)
 
                 Text("Imported \(document.importedAt.formatted(date: .abbreviated, time: .omitted))")
-                    .font(AppTypography.body)
+                    .font(AppTypography.caption)
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -819,7 +820,11 @@ private struct DocumentPreviewPane: View {
             if let path = document.storedFilePath, let libraryURL {
                 if selectedFileAvailable ?? true {
                     PDFViewRepresentable(url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        }
                         .id(document.persistentModelID)
                 } else {
                     missingFileContent
@@ -827,42 +832,46 @@ private struct DocumentPreviewPane: View {
             } else if document.storedFilePath != nil {
                 missingFileContent
             } else {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.secondary.opacity(0.12))
-                    .overlay {
-                        VStack(spacing: 12) {
-                            Image(systemName: "doc.text.magnifyingglass")
-                                .font(.system(size: 48))
-                                .foregroundStyle(.secondary)
-                            Text("No PDF file")
-                                .font(AppTypography.sectionTitle)
-                            Text("Import a PDF to see its preview.")
-                                .font(AppTypography.body)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding()
-                    }
+                placeholderCard(
+                    icon: "doc.text.magnifyingglass",
+                    iconColor: .secondary,
+                    title: "No PDF file",
+                    message: "Import a PDF to see its preview."
+                )
             }
         }
     }
 
     private var missingFileContent: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .fill(Color.red.opacity(0.08))
+        placeholderCard(
+            icon: "exclamationmark.triangle",
+            iconColor: .red.opacity(0.7),
+            title: "File not found",
+            message: "The stored PDF file for \"\(document.originalFileName)\" could not be located."
+        )
+    }
+
+    private func placeholderCard(icon: String, iconColor: Color, title: String, message: String) -> some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(.thinMaterial)
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            }
             .overlay {
                 VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.red.opacity(0.6))
-                    Text("File not found")
+                    Image(systemName: icon)
+                        .font(.system(size: 44))
+                        .foregroundStyle(iconColor)
+                    Text(title)
                         .font(AppTypography.sectionTitle)
-                    Text("The stored PDF file for \"\(document.originalFileName)\" could not be located.")
+                    Text(message)
                         .font(AppTypography.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 360)
                 }
-                .padding()
+                .padding(28)
             }
     }
 }

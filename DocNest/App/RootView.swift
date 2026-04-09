@@ -50,7 +50,7 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.16), value: coordinator.isInspectorCollapsed)
-        .padding([.top, .bottom, .trailing], AppSplitViewLayout.windowContentInset)
+        .background(Color(nsColor: .windowBackgroundColor))
         .environment(coordinator)
         .environment(thumbnailCache)
         .environment(quickLook)
@@ -164,7 +164,7 @@ struct RootView: View {
             }
         }
 
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItem(placement: .secondaryAction) {
             Picker("View", selection: Bindable(coordinator).documentListViewMode) {
                 Image(systemName: "list.bullet")
                     .accessibilityLabel("List view")
@@ -178,7 +178,7 @@ struct RootView: View {
             .help("Switch between list and thumbnail view")
         }
 
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItem(placement: .secondaryAction) {
             ShareLink(items: coordinator.displayedShareURLs) {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
@@ -186,7 +186,7 @@ struct RootView: View {
             .help("Share selected documents")
         }
 
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItem(placement: .secondaryAction) {
             Button {
                 coordinator.isInspectorCollapsed.toggle()
             } label: {
