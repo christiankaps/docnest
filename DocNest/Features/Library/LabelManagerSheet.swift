@@ -87,24 +87,22 @@ struct LabelManagerSheet: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 18) {
             header
-            Divider()
 
             HStack(spacing: 0) {
                 labelListPanel
                     .frame(width: 260)
-
-                Divider()
+                    .background(panelSurface)
 
                 editorPanel
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(panelSurface)
             }
-
-            Divider()
             footer
         }
-        .frame(width: 660, height: 480)
+        .padding(20)
+        .frame(minWidth: 660, minHeight: 480)
         .alert("New Group", isPresented: $isCreatingGroup) {
             TextField("Group name", text: $newGroupName)
             Button("Create") { createGroup() }
@@ -131,10 +129,15 @@ struct LabelManagerSheet: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
-            Text("Label Manager")
-                .font(.headline)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Labels")
+                    .font(.title2.weight(.semibold))
 
+                Text("Organize labels and groups for the current library. Changes here update the sidebar and document workflows immediately.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
 
             if showsDoneButton {
@@ -154,6 +157,7 @@ struct LabelManagerSheet: View {
         Group {
             if ungroupedLabels.isEmpty && sortedGroups.isEmpty {
                 ContentUnavailableView("No Labels", systemImage: "tag", description: Text("Click + to create a label."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: $selectedLabelIDs) {
                     if !ungroupedLabels.isEmpty {
@@ -161,6 +165,7 @@ struct LabelManagerSheet: View {
                             ForEach(ungroupedLabels) { label in
                                 labelRow(for: label)
                                     .tag(label.id)
+                                    .listRowBackground(Color.clear)
                             }
                         }
                     }
@@ -170,6 +175,7 @@ struct LabelManagerSheet: View {
                             ForEach(labelsInGroup(group)) { label in
                                 labelRow(for: label)
                                     .tag(label.id)
+                                    .listRowBackground(Color.clear)
                             }
                         } header: {
                             groupHeader(for: group)
@@ -177,6 +183,7 @@ struct LabelManagerSheet: View {
                     }
                 }
                 .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
                 .onChange(of: selectedLabelIDs) { _, newIDs in
                     if isCreatingLabel { return }
                     loadEditorFromSelection()
@@ -190,16 +197,17 @@ struct LabelManagerSheet: View {
             if let icon = label.icon, !icon.isEmpty {
                 Text(icon)
                     .font(.system(size: 12))
-                    .frame(width: 14, alignment: .center)
+                    .frame(width: 18, alignment: .center)
             } else {
                 Circle()
                     .fill(label.labelColor.color)
                     .frame(width: 10, height: 10)
-                    .frame(width: 14)
+                    .frame(width: 18)
             }
             Text(label.name)
                 .lineLimit(1)
         }
+        .padding(.vertical, 4)
         .contextMenu {
             Button("Delete", role: .destructive) {
                 deletionTarget = .labels([label.id])
@@ -217,6 +225,8 @@ struct LabelManagerSheet: View {
                     .onExitCommand { cancelGroupRename() }
             } else {
                 Text(group.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
         }
         .contextMenu {
@@ -285,6 +295,7 @@ struct LabelManagerSheet: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        .padding(12)
     }
 
     // MARK: - Create label editor
@@ -332,6 +343,7 @@ struct LabelManagerSheet: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        .padding(12)
     }
 
     // MARK: - Bulk actions panel
@@ -384,6 +396,7 @@ struct LabelManagerSheet: View {
         .onAppear {
             bulkGroupID = nil
         }
+        .padding(20)
     }
 
     // MARK: - Shared editor components
@@ -465,8 +478,17 @@ struct LabelManagerSheet: View {
 
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+    }
+
+    private var panelSurface: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+            )
+            .padding(.trailing, 0)
     }
 
     // MARK: - Actions

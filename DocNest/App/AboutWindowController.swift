@@ -551,27 +551,56 @@ private struct AppSettingsRootView: View {
     @ObservedObject private var settings = AppSettingsController.shared
 
     var body: some View {
-        Group {
+        ZStack {
+            Rectangle()
+                .fill(.thinMaterial)
+                .ignoresSafeArea()
+
             if let coordinator = settings.libraryCoordinator,
                let modelContainer = settings.modelContainer {
-                TabView(selection: $settings.selectedPane) {
-                    LabelManagerSheet(showsDoneButton: false)
-                        .environment(coordinator)
-                        .modelContainer(modelContainer)
-                        .tabItem {
-                            Label(AppSettingsPane.labels.title, systemImage: AppSettingsPane.labels.systemImage)
-                        }
-                        .tag(AppSettingsPane.labels)
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Settings")
+                            .font(.system(size: 28, weight: .semibold))
 
-                    WatchFolderSettingsView(showsDoneButton: false)
-                        .environment(coordinator)
-                        .modelContainer(modelContainer)
-                        .tabItem {
-                            Label(AppSettingsPane.watchFolders.title, systemImage: AppSettingsPane.watchFolders.systemImage)
+                        Text("Manage labels and watch folders for the current DocNest library.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Picker("Settings Pane", selection: $settings.selectedPane) {
+                        ForEach(AppSettingsPane.allCases) { pane in
+                            Label(pane.title, systemImage: pane.systemImage)
+                                .tag(pane)
                         }
-                        .tag(AppSettingsPane.watchFolders)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: 360)
+
+                    Group {
+                        switch settings.selectedPane {
+                        case .labels:
+                            LabelManagerSheet(showsDoneButton: false)
+                                .environment(coordinator)
+                                .modelContainer(modelContainer)
+                        case .watchFolders:
+                            WatchFolderSettingsView(showsDoneButton: false)
+                                .environment(coordinator)
+                                .modelContainer(modelContainer)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(.regularMaterial)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+                    )
                 }
-                .padding(.top, 8)
+                .padding(24)
             } else {
                 ContentUnavailableView(
                     "No Library Open",
@@ -579,9 +608,10 @@ private struct AppSettingsRootView: View {
                     description: Text("Open a DocNest library to manage labels and watch folders in Settings.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(32)
             }
         }
-        .frame(minWidth: 620, minHeight: 420)
+        .frame(minWidth: 760, minHeight: 560)
     }
 }
 
