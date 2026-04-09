@@ -826,7 +826,7 @@ private struct SidebarSectionHeader: View {
 
     var body: some View {
         Text(title)
-            .font(AppTypography.captionStrong)
+            .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(.secondary)
     }
 }
