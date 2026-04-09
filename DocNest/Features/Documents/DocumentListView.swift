@@ -409,7 +409,7 @@ struct DocumentListView: View {
     private func documentListRow(document: DocumentRecord, index: Int, allDocs: [DocumentRecord]) -> some View {
         let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
 
-        documentRow(for: document)
+        documentRow(for: document, dragPayload: dragPayload(for: document))
             .padding(.horizontal, 12)
             .background(rowBackground(index: index, isSelected: isSelected))
             .contentShape(Rectangle())
@@ -418,7 +418,6 @@ struct DocumentListView: View {
                 handleRowTap(document: document, in: allDocs)
             }
             .contextMenu { documentContextMenu(for: document) }
-            .draggable(dragPayload(for: document))
             .dropDestination(for: String.self) { items, _ in
                 guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
                     return false
@@ -501,14 +500,14 @@ struct DocumentListView: View {
                             renamingTitle: $renamingTitle,
                             onCommitRename: { commitRename(for: document) },
                             onCancelRename: { cancelRename() },
-                            onBeginRename: { beginRename(for: document) }
+                            onBeginRename: { beginRename(for: document) },
+                            dragPayload: dragPayload(for: document)
                         )
                         .id(document.persistentModelID)
                         .onTapGesture {
                             handleRowTap(document: document, in: sortedDocs)
                         }
                         .contextMenu { documentContextMenu(for: document) }
-                        .draggable(dragPayload(for: document))
                         .accessibilityLabel("\(document.title), PDF document")
                     }
                 }
@@ -519,7 +518,7 @@ struct DocumentListView: View {
     }
 
     @ViewBuilder
-    private func documentRow(for document: DocumentRecord) -> some View {
+    private func documentRow(for document: DocumentRecord, dragPayload: String) -> some View {
         HStack(alignment: .center, spacing: 10) {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 8)
@@ -593,8 +592,20 @@ struct DocumentListView: View {
                 .frame(width: labelsColumnWidth, alignment: .leading)
             }
 
+            dragHandle(payload: dragPayload)
+
         }
         .padding(.vertical, 5)
+    }
+
+    private func dragHandle(payload: String) -> some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.tertiary)
+            .frame(width: 16, height: 20)
+            .contentShape(Rectangle())
+            .help("Drag document")
+            .draggable(payload)
     }
 
     private func isSelectedDocument(_ document: DocumentRecord) -> Bool {
@@ -1047,6 +1058,7 @@ private struct DocumentThumbnailCell: View {
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
     var onBeginRename: () -> Void
+    let dragPayload: String
 
     @Environment(ThumbnailCache.self) private var thumbnailCache
     @FocusState private var isRenameFieldFocused: Bool
@@ -1065,7 +1077,8 @@ private struct DocumentThumbnailCell: View {
         renamingTitle: Binding<String>,
         onCommitRename: @escaping () -> Void,
         onCancelRename: @escaping () -> Void,
-        onBeginRename: @escaping () -> Void
+        onBeginRename: @escaping () -> Void,
+        dragPayload: String
     ) {
         self.document = document
         self.libraryURL = libraryURL
@@ -1076,6 +1089,7 @@ private struct DocumentThumbnailCell: View {
         self.onCommitRename = onCommitRename
         self.onCancelRename = onCancelRename
         self.onBeginRename = onBeginRename
+        self.dragPayload = dragPayload
 
         let labelsBySortOrder = document.labels.sorted { $0.sortOrder < $1.sortOrder }
         self.badgeLabels = Array(labelsBySortOrder.prefix(4))
@@ -1139,6 +1153,14 @@ private struct DocumentThumbnailCell: View {
                     .frame(width: size)
                     .clipped()
             }
+
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 22, height: 18)
+                .contentShape(Rectangle())
+                .help("Drag document")
+                .draggable(dragPayload)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 8)
