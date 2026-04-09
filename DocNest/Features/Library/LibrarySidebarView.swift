@@ -183,7 +183,7 @@ struct LibrarySidebarView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 8) {
                 Label("Labels", systemImage: "tag")
-                    .font(AppTypography.captionStrong)
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .labelStyle(.titleAndIcon)
 
@@ -445,9 +445,9 @@ struct LibrarySidebarView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Image(systemName: "folder.badge.gearshape")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 Text("Smart Folders")
-                    .font(AppTypography.captionStrong)
+                    .font(.system(size: 13, weight: .semibold))
 
                 Spacer()
 
