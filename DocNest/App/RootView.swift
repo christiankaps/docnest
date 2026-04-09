@@ -41,8 +41,9 @@ struct RootView: View {
                 Divider()
 
                 DocumentInspectorView(
-                    documents: coordinator.selectedDocuments,
-                    libraryURL: libraryURL
+                    documents: coordinator.displayedSelectedDocuments,
+                    libraryURL: libraryURL,
+                    isTransitioningSelection: coordinator.isInspectorSelectionPending
                 )
                 .frame(width: AppSplitViewLayout.inspectorWidth)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -58,7 +59,7 @@ struct RootView: View {
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
         .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders))
         .focusedSceneValue(\.exportDocumentsAction) {
-            coordinator.exportDocuments(coordinator.selectedDocuments)
+            coordinator.exportDocuments(coordinator.displayedSelectedDocuments)
         }
         .focusedSceneValue(\.pasteDocumentsAction) {
             pasteDocumentsFromPasteboard()
@@ -123,8 +124,8 @@ struct RootView: View {
         .animation(.easeOut(duration: 0.15), value: coordinator.isQuickLabelPickerPresented)
         .background { QuickLookPanelResponder(coordinator: quickLook) }
         .onDrop(of: [.fileURL], delegate: FileImportDropDelegate(coordinator: coordinator))
-        .onChange(of: coordinator.cachedShareURLs) {
-            quickLook.previewURLs = coordinator.cachedShareURLs
+        .onChange(of: coordinator.displayedShareURLs) {
+            quickLook.previewURLs = coordinator.displayedShareURLs
             quickLook.reloadIfVisible()
         }
     }
@@ -178,10 +179,10 @@ struct RootView: View {
         }
 
         ToolbarItem(placement: .primaryAction) {
-            ShareLink(items: coordinator.cachedShareURLs) {
+            ShareLink(items: coordinator.displayedShareURLs) {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
-            .disabled(coordinator.cachedShareURLs.isEmpty)
+            .disabled(coordinator.displayedShareURLs.isEmpty)
             .help("Share selected documents")
         }
 
@@ -224,6 +225,7 @@ struct RootView: View {
     }
 
     private func selectAllFilteredDocuments() {
+        coordinator.beginSelectionInteraction()
         let documents = coordinator.filteredDocuments
         coordinator.selectedDocumentIDs = Set(documents.map(\.persistentModelID))
     }
@@ -464,7 +466,7 @@ private struct ChangeHandlersNotifications: ViewModifier {
             }
             .onDisappear {
                 coordinator.cancelPendingLabelFilter()
-                coordinator.cancelPendingSelectionRecompute()
+                coordinator.cancelPendingDisplayedSelectionUpdate()
                 coordinator.cancelPendingSearchRecompute()
                 coordinator.tearDownWatchFolderMonitoring()
                 AppSettingsController.shared.clearActiveLibraryContext()
@@ -481,7 +483,9 @@ private struct ChangeHandlersNotifications: ViewModifier {
                 coordinator.scheduleSearchRecompute()
             }
             .onChange(of: coordinator.selectedDocumentIDs) {
-                coordinator.scheduleSelectionRecompute()
+                coordinator.recomputeSelectedDocuments()
+                coordinator.scheduleSelectionVisualResponseLog()
+                coordinator.scheduleDisplayedSelectionUpdate()
             }
             .onChange(of: coordinator.labelFilterSelection.appliedSelection) {
                 coordinator.cancelPendingSearchRecompute()

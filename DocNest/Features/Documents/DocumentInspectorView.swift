@@ -1,10 +1,12 @@
 import AppKit
+import OSLog
 import SwiftUI
 import SwiftData
 
 struct DocumentInspectorView: View {
     let documents: [DocumentRecord]
     let libraryURL: URL?
+    let isTransitioningSelection: Bool
 
     @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(\.modelContext) private var modelContext
@@ -15,6 +17,8 @@ struct DocumentInspectorView: View {
     @State private var isEditingTitle = false
     @State private var dateFieldText = ""
     @State private var selectedFileAvailable: Bool?
+    @State private var cachedSelectionSummary = BatchLabelSelectionSummary.empty
+    @State private var cachedSelectionSummarySignature = 0
 
     private var singleSelectedDocument: DocumentRecord? {
         documents.count == 1 ? documents.first : nil
@@ -24,27 +28,25 @@ struct DocumentInspectorView: View {
         !documents.isEmpty && documents.allSatisfy { $0.trashedAt != nil }
     }
 
+    private var multiSelectionSummarySignature: Int {
+        var hasher = Hasher()
+        for document in documents {
+            hasher.combine(document.persistentModelID)
+            hasher.combine(document.labels.count)
+            hasher.combine(document.trashedAt)
+        }
+        for label in coordinator.allLabels {
+            hasher.combine(label.persistentModelID)
+            hasher.combine(label.name)
+            hasher.combine(label.groupID)
+        }
+        return hasher.finalize()
+    }
+
     var body: some View {
         Group {
             if let document = singleSelectedDocument {
-                VSplitView {
-                    pdfPreviewSection(for: document)
-                        .frame(minHeight: 420, idealHeight: 620)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 24)
-                        .padding(.bottom, 12)
-
-                    ScrollView {
-                        documentMetadataSection(for: document)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 24)
-                            .padding(.top, 12)
-                            .padding(.bottom, 24)
-                    }
-                    .frame(minHeight: 240, idealHeight: 320)
-                }
-                .navigationTitle("Preview")
+                singleDocumentInspector(for: document)
             } else if !documents.isEmpty {
                 multiSelectionInspector
                     .padding(24)
@@ -55,6 +57,22 @@ struct DocumentInspectorView: View {
                     systemImage: "doc.text",
                     description: Text("Choose a document from the list to inspect its metadata, labels, and preview.")
                 )
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if isTransitioningSelection {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Updating")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .padding(12)
+                .transition(.opacity)
             }
         }
         .confirmationDialog(
@@ -83,6 +101,9 @@ struct DocumentInspectorView: View {
         .onChange(of: libraryURL?.path) {
             refreshSelectedFileAvailability()
         }
+        .task(id: multiSelectionSummarySignature) {
+            refreshCachedSelectionSummaryIfNeeded()
+        }
         .alert("Inspector Error", isPresented: inspectorErrorBinding) {
             Button("OK", role: .cancel) {
                 inspectorErrorMessage = nil
@@ -90,6 +111,31 @@ struct DocumentInspectorView: View {
         } message: {
             Text(inspectorErrorMessage ?? "Unknown inspector error.")
         }
+    }
+
+    private func singleDocumentInspector(for document: DocumentRecord) -> some View {
+        VSplitView {
+            DocumentPreviewPane(
+                document: document,
+                libraryURL: libraryURL,
+                selectedFileAvailable: selectedFileAvailable
+            )
+            .frame(minHeight: 420, idealHeight: 620)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
+
+            ScrollView {
+                documentMetadataSection(for: document)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+                    .padding(.bottom, 24)
+            }
+            .frame(minHeight: 240, idealHeight: 320)
+        }
+        .navigationTitle("Preview")
     }
 
     @ViewBuilder
@@ -413,7 +459,7 @@ struct DocumentInspectorView: View {
 
     private var multiSelectionInspector: some View {
         let availableLabels = coordinator.allLabels
-        let selectionSummary = BatchLabelSelectionSummary(documents: documents, availableLabels: availableLabels)
+        let selectionSummary = cachedSelectionSummary
 
         return VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
@@ -666,6 +712,26 @@ struct DocumentInspectorView: View {
         }
     }
 
+    private func refreshCachedSelectionSummaryIfNeeded() {
+        guard documents.count > 1 else { return }
+        let signature = multiSelectionSummarySignature
+        guard signature != cachedSelectionSummarySignature else { return }
+        #if DEBUG
+        let startTime = Date().timeIntervalSinceReferenceDate
+        #endif
+        cachedSelectionSummary = BatchLabelSelectionSummary(
+            documents: documents,
+            availableLabels: coordinator.allLabels
+        )
+        cachedSelectionSummarySignature = signature
+        #if DEBUG
+        let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
+        Logger(subsystem: "com.kaps.docnest", category: "performance").log(
+            "[Performance][SelectionSummary] documents=\(documents.count) labels=\(coordinator.allLabels.count) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
+        )
+        #endif
+    }
+
     private func promptDeletionAction(for documents: [DocumentRecord]) {
         pendingDeletion = documents
     }
@@ -743,10 +809,84 @@ struct DocumentInspectorView: View {
     }
 }
 
+private struct DocumentPreviewPane: View {
+    let document: DocumentRecord
+    let libraryURL: URL?
+    let selectedFileAvailable: Bool?
+
+    var body: some View {
+        Group {
+            if let path = document.storedFilePath, let libraryURL {
+                if selectedFileAvailable ?? true {
+                    PDFViewRepresentable(url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .id(document.persistentModelID)
+                } else {
+                    missingFileContent
+                }
+            } else if document.storedFilePath != nil {
+                missingFileContent
+            } else {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.secondary.opacity(0.12))
+                    .overlay {
+                        VStack(spacing: 12) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.secondary)
+                            Text("No PDF file")
+                                .font(AppTypography.sectionTitle)
+                            Text("Import a PDF to see its preview.")
+                                .font(AppTypography.body)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                    }
+            }
+        }
+    }
+
+    private var missingFileContent: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(Color.red.opacity(0.08))
+            .overlay {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.red.opacity(0.6))
+                    Text("File not found")
+                        .font(AppTypography.sectionTitle)
+                    Text("The stored PDF file for \"\(document.originalFileName)\" could not be located.")
+                        .font(AppTypography.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 360)
+                }
+                .padding()
+            }
+    }
+}
+
 private struct BatchLabelSelectionSummary {
     let labelsOnAllSelectedDocuments: [LabelTag]
     let partiallyAssignedLabels: [LabelTag]
     private let labelStatesByID: [PersistentIdentifier: BatchLabelState]
+
+    static let empty = BatchLabelSelectionSummary(
+        labelsOnAllSelectedDocuments: [],
+        partiallyAssignedLabels: [],
+        labelStatesByID: [:]
+    )
+
+    private init(
+        labelsOnAllSelectedDocuments: [LabelTag],
+        partiallyAssignedLabels: [LabelTag],
+        labelStatesByID: [PersistentIdentifier: BatchLabelState]
+    ) {
+        self.labelsOnAllSelectedDocuments = labelsOnAllSelectedDocuments
+        self.partiallyAssignedLabels = partiallyAssignedLabels
+        self.labelStatesByID = labelStatesByID
+    }
 
     init(documents: [DocumentRecord], availableLabels: [LabelTag]) {
         let states: [BatchLabelState] = availableLabels.compactMap { label in
@@ -833,7 +973,7 @@ private enum DocumentInspectorPreviewData {
 #Preview {
     let previewData = DocumentInspectorPreviewData.make()
 
-    DocumentInspectorView(documents: [previewData.document], libraryURL: nil)
+    DocumentInspectorView(documents: [previewData.document], libraryURL: nil, isTransitioningSelection: false)
         .environment(LibraryCoordinator())
         .modelContainer(previewData.container)
 }

@@ -73,22 +73,26 @@ final class LibraryCoordinator {
     private(set) var trashedDocuments: [DocumentRecord] = []
     private(set) var filteredDocuments: [DocumentRecord] = []
     private(set) var selectedDocuments: [DocumentRecord] = []
-    private(set) var cachedShareURLs: [URL] = []
+    private(set) var displayedSelectedDocuments: [DocumentRecord] = []
+    private(set) var displayedShareURLs: [URL] = []
+    private(set) var selectedDocumentIDsToDrag: [UUID] = []
     private(set) var sidebarCounts = LibrarySidebarCounts.empty
     private var labelsByUUID: [UUID: LabelTag] = [:]
     private var labelUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
     private var smartFoldersByPersistentID: [PersistentIdentifier: SmartFolder] = [:]
+    private var documentUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
     private var smartFolderCountsInputSignature: Int?
 
     // MARK: - Internal
     private var activeImportTask: Task<Void, Never>?
     private let watchFolderController = WatchFolderController()
     private var pendingLabelFilterApplyTask: Task<Void, Never>?
-    private var pendingSelectionRecomputeTask: Task<Void, Never>?
+    private var pendingDisplayedSelectionTask: Task<Void, Never>?
     private var pendingSearchRecomputeTask: Task<Void, Never>?
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
-    private let selectionRecomputeDelay: Duration = .milliseconds(12)
+    private let displayedSelectionDelay: Duration = .milliseconds(65)
     private let searchRecomputeDelay: Duration = .milliseconds(85)
+    private var lastSelectionInteractionStart: TimeInterval?
     let recentDocumentLimit = 10
 
     // MARK: - Convenience selection helpers
@@ -105,6 +109,10 @@ final class LibraryCoordinator {
 
     var isBinSelected: Bool {
         sidebarSelection == .section(.bin)
+    }
+
+    var isInspectorSelectionPending: Bool {
+        selectedDocumentIDs != Set(displayedSelectedDocuments.map(\.persistentModelID))
     }
 
     /// Whether the current interactive label filter selection exactly matches a smart folder's labels.
@@ -136,6 +144,7 @@ final class LibraryCoordinator {
         labelsByUUID = Dictionary(uniqueKeysWithValues: allLabels.map { ($0.id, $0) })
         labelUUIDByPersistentID = Dictionary(uniqueKeysWithValues: allLabels.map { ($0.persistentModelID, $0.id) })
         smartFoldersByPersistentID = Dictionary(uniqueKeysWithValues: allSmartFolders.map { ($0.persistentModelID, $0) })
+        documentUUIDByPersistentID = Dictionary(uniqueKeysWithValues: allDocuments.map { ($0.persistentModelID, $0.id) })
 
         var active: [DocumentRecord] = []
         var trashed: [DocumentRecord] = []
@@ -152,6 +161,7 @@ final class LibraryCoordinator {
         recomputeSmartFolderCountsIfNeeded()
         recomputeFilteredDocuments()
         recomputeSelectedDocuments()
+        syncDisplayedSelectionImmediately()
     }
 
     // MARK: - Recomputation
@@ -287,7 +297,7 @@ final class LibraryCoordinator {
                 selectedDocumentIDs = []
             }
         }
-        cachedShareURLs = shareableFileURLs(from: selectedDocuments)
+        selectedDocumentIDsToDrag = selectedDocuments.compactMap { documentUUIDByPersistentID[$0.persistentModelID] }
     }
 
     func pruneSelectedDocumentIDs() {
@@ -321,22 +331,22 @@ final class LibraryCoordinator {
         pendingLabelFilterApplyTask?.cancel()
     }
 
-    /// Coalesces selection-side effects so row highlighting can update immediately on click.
-    func scheduleSelectionRecompute() {
-        pendingSelectionRecomputeTask?.cancel()
-        pendingSelectionRecomputeTask = Task { @MainActor in
-            try? await Task.sleep(for: selectionRecomputeDelay)
+    /// Coalesces inspector and passive share updates so row highlighting can update immediately on click.
+    func scheduleDisplayedSelectionUpdate() {
+        pendingDisplayedSelectionTask?.cancel()
+        pendingDisplayedSelectionTask = Task { @MainActor in
+            try? await Task.sleep(for: displayedSelectionDelay)
 
             guard !Task.isCancelled else {
                 return
             }
 
-            recomputeSelectedDocuments()
+            syncDisplayedSelectionImmediately()
         }
     }
 
-    func cancelPendingSelectionRecompute() {
-        pendingSelectionRecomputeTask?.cancel()
+    func cancelPendingDisplayedSelectionUpdate() {
+        pendingDisplayedSelectionTask?.cancel()
     }
 
     /// Debounces text search updates to keep typing and row highlighting responsive.
@@ -356,6 +366,28 @@ final class LibraryCoordinator {
 
     func cancelPendingSearchRecompute() {
         pendingSearchRecomputeTask?.cancel()
+    }
+
+    func syncDisplayedSelectionImmediately() {
+        displayedSelectedDocuments = selectedDocuments
+        displayedShareURLs = shareableFileURLs(from: displayedSelectedDocuments)
+        logDisplayedSelectionCommit()
+    }
+
+    func beginSelectionInteraction() {
+        lastSelectionInteractionStart = Date().timeIntervalSinceReferenceDate
+    }
+
+    func scheduleSelectionVisualResponseLog() {
+        let startTime = lastSelectionInteractionStart
+        Task { @MainActor in
+            await Task.yield()
+            guard let startTime else { return }
+            let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
+            Self.performanceLogger.log(
+                "[Performance][SelectionVisual] count=\(self.selectedDocumentIDs.count) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
+            )
+        }
     }
 
     func syncLabelFilterSelections(_ availableIDs: Set<PersistentIdentifier>) {
@@ -837,6 +869,20 @@ final class LibraryCoordinator {
         let selectionLabel = self.selectedSection?.rawValue ?? "smartFolder"
         Self.performanceLogger.log(
             "[Performance][Filter] selection=\(selectionLabel, privacy: .public) source=\(sourceCount) filtered=\(filteredCount) query=\(queryLength) labels=\(activeLabelFilters) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
+        )
+        #endif
+    }
+
+    private func logDisplayedSelectionCommit() {
+        #if DEBUG
+        let elapsedMs: Double
+        if let startTime = lastSelectionInteractionStart {
+            elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
+        } else {
+            elapsedMs = 0
+        }
+        Self.performanceLogger.log(
+            "[Performance][SelectionDeferred] displayed=\(self.displayedSelectedDocuments.count) shareURLs=\(self.displayedShareURLs.count) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
         )
         #endif
     }

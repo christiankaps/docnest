@@ -109,7 +109,6 @@ struct DocumentListView: View {
     @AppStorage("docListShowPages") private var showsPagesColumn = true
     @AppStorage("docListShowSize") private var showsSizeColumn = true
     @AppStorage("docListShowLabels") private var showsLabelsColumn = true
-    @State private var cachedSelectedDocumentIDsToDrag: [UUID] = []
 
     private func recomputeSortedDocuments() {
         let column = sortColumn
@@ -127,14 +126,6 @@ struct DocumentListView: View {
             return comparison == .orderedDescending
         }
         cachedGroupedDocuments = groupMode == .none ? [] : groupMode.group(cachedSortedDocuments)
-        rebuildDragSelectionCache()
-    }
-
-    private func rebuildDragSelectionCache() {
-        let selectedIDs = coordinator.selectedDocumentIDs
-        cachedSelectedDocumentIDsToDrag = coordinator.filteredDocuments.compactMap { document in
-            selectedIDs.contains(document.persistentModelID) ? document.id : nil
-        }
     }
 
     private var effectiveOptionalColumns: OptionalColumnVisibility {
@@ -242,9 +233,6 @@ struct DocumentListView: View {
         }
         .onChange(of: groupMode) {
             recomputeSortedDocuments()
-        }
-        .onChange(of: coordinator.selectedDocumentIDs) {
-            rebuildDragSelectionCache()
         }
     }
 
@@ -424,6 +412,7 @@ struct DocumentListView: View {
     }
 
     private func handleRowTap(document: DocumentRecord, in sortedDocs: [DocumentRecord]) {
+        coordinator.beginSelectionInteraction()
         let id = document.persistentModelID
         let modifiers = NSEvent.modifierFlags
 
@@ -675,7 +664,7 @@ struct DocumentListView: View {
         DocumentDragHelper.internalPayload(
             for: document,
             selectedIDs: coordinator.selectedDocumentIDs,
-            selectedDocumentIDsToDrag: cachedSelectedDocumentIDsToDrag
+            selectedDocumentIDsToDrag: coordinator.selectedDocumentIDsToDrag
         )
     }
 
@@ -713,6 +702,7 @@ struct DocumentListView: View {
         }
 
         let nextID = ids[nextIndex]
+        coordinator.beginSelectionInteraction()
 
         if isShift {
             // Extend selection to include the next item
@@ -733,6 +723,7 @@ struct DocumentListView: View {
     }
 
     private func openQuickLook(for document: DocumentRecord) {
+        coordinator.beginSelectionInteraction()
         coordinator.selectedDocumentIDs = [document.persistentModelID]
         if let url = originalFileURL(for: document) {
             quickLook.previewURLs = [url]
