@@ -522,10 +522,12 @@ struct DocumentListView: View {
                             .font(AppTypography.listTitle)
                             .lineLimit(1)
                             .contentShape(Rectangle())
-                            .onTapGesture {
-                                guard shouldBeginRenameFromTitleClick(for: document) else { return }
-                                beginRename(for: document)
-                            }
+                            .simultaneousGesture(
+                                TapGesture().onEnded {
+                                    guard shouldBeginRenameFromTitleClick(for: document) else { return }
+                                    beginRename(for: document)
+                                }
+                            )
                     }
                 }
             }
@@ -1100,12 +1102,14 @@ private struct DocumentThumbnailCell: View {
                     .multilineTextAlignment(.center)
                     .frame(width: size)
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        guard isSelected else { return }
-                        let disallowedModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
-                        guard NSEvent.modifierFlags.intersection(disallowedModifiers).isEmpty else { return }
-                        onBeginRename()
-                    }
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            guard isSelected else { return }
+                            let disallowedModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
+                            guard NSEvent.modifierFlags.intersection(disallowedModifiers).isEmpty else { return }
+                            onBeginRename()
+                        }
+                    )
             }
 
             if !isRenaming, !document.labels.isEmpty {
