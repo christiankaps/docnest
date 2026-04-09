@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SwiftData
 import OSLog
@@ -63,13 +64,16 @@ struct LibrarySidebarView: View {
             .padding(.vertical, 10)
         }
         .background {
-            Rectangle()
-                .fill(.regularMaterial)
-                .overlay(alignment: .trailing) {
-                    Rectangle()
-                        .fill(Color.primary.opacity(0.12))
-                        .frame(width: 0.5)
-                }
+            ZStack {
+                SidebarBlurBackground()
+                Rectangle()
+                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.20))
+            }
+            .overlay(alignment: .trailing) {
+                Rectangle()
+                    .fill(Color.primary.opacity(0.12))
+                    .frame(width: 0.5)
+            }
         }
         .navigationTitle(coordinator.libraryURL?.deletingPathExtension().lastPathComponent ?? "DocNest")
         .confirmationDialog(
@@ -809,6 +813,24 @@ struct LibrarySidebarView: View {
         }
     }
 
+}
+
+private struct SidebarBlurBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.isEmphasized = false
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = .sidebar
+        nsView.blendingMode = .behindWindow
+        nsView.state = .active
+        nsView.isEmphasized = false
+    }
 }
 
 private extension View {
