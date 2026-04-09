@@ -371,7 +371,12 @@ struct LibrarySidebarView: View {
             color: label.labelColor.color,
             icon: label.icon,
             count: coordinator.sidebarCounts.count(for: label),
-            isSelected: coordinator.effectiveHighlightedLabelIDs.contains(label.persistentModelID)
+            isSelected: coordinator.effectiveHighlightedLabelIDs.contains(label.persistentModelID),
+            dragPayload: DocumentLabelDragPayload.payload(for: label.id),
+            dragPreview: AnyView(
+                LabelDragPreview(name: label.name, color: label.labelColor.color, icon: label.icon)
+                    .onAppear { draggingLabelID = label.id }
+            )
         )
         .sidebarRow()
         .background(
@@ -401,10 +406,6 @@ struct LibrarySidebarView: View {
             }
             toggleLabelSelection(label)
         }
-        .draggable(DocumentLabelDragPayload.payload(for: label.id)) {
-            LabelDragPreview(name: label.name, color: label.labelColor.color, icon: label.icon)
-                .onAppear { draggingLabelID = label.id }
-        }
         .dropDestination(for: String.self) { items, _ in
             draggingLabelID = nil
             reorderInsertionEdge = nil
@@ -433,9 +434,6 @@ struct LibrarySidebarView: View {
             Button("Delete", role: .destructive) {
                 deleteLabel(label)
             }
-        }
-        .onTapGesture(count: 2) {
-            labelEditorConfig = LabelEditorConfig(mode: .edit(label))
         }
     }
 
@@ -491,7 +489,12 @@ struct LibrarySidebarView: View {
                         name: folder.name,
                         icon: folder.icon,
                         count: coordinator.smartFolderCounts[folder.persistentModelID] ?? 0,
-                        isSelected: isSelected
+                        isSelected: isSelected,
+                        dragPayload: SmartFolderDragPayload.payload(for: folder.id),
+                        dragPreview: AnyView(
+                            SmartFolderDragPreview(name: folder.name, icon: folder.icon)
+                                .onAppear { draggingSmartFolderID = folder.id }
+                        )
                     )
                     .sidebarRow()
                     .overlay(alignment: .top) {
@@ -515,10 +518,6 @@ struct LibrarySidebarView: View {
                         } else {
                             coordinator.sidebarSelection = .smartFolder(folder.persistentModelID)
                         }
-                    }
-                    .draggable(SmartFolderDragPayload.payload(for: folder.id)) {
-                        SmartFolderDragPreview(name: folder.name, icon: folder.icon)
-                            .onAppear { draggingSmartFolderID = folder.id }
                     }
                     .dropDestination(for: String.self) { items, _ in
                         draggingSmartFolderID = nil
@@ -874,6 +873,8 @@ private struct LibraryLabelRowView: View {
     var icon: String? = nil
     let count: Int
     let isSelected: Bool
+    let dragPayload: String
+    let dragPreview: AnyView
 
     @State private var isHovered = false
 
@@ -893,6 +894,7 @@ private struct LibraryLabelRowView: View {
             Text("\(count)")
                 .font(AppTypography.caption.monospacedDigit())
                 .foregroundStyle(isSelected ? Color.primary.opacity(0.72) : Color.secondary.opacity(0.65))
+            dragHandle
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -911,6 +913,16 @@ private struct LibraryLabelRowView: View {
                 isHovered = hovering
             }
         }
+    }
+
+    private var dragHandle: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(isHovered ? .secondary : .tertiary)
+            .frame(width: 16, height: 16)
+            .contentShape(Rectangle())
+            .draggable(dragPayload) { dragPreview }
+            .help("Drag label")
     }
 }
 
@@ -1129,6 +1141,8 @@ private struct SmartFolderRowView: View {
     let icon: String?
     let count: Int
     let isSelected: Bool
+    let dragPayload: String
+    let dragPreview: AnyView
 
     @State private var isHovered = false
 
@@ -1148,6 +1162,7 @@ private struct SmartFolderRowView: View {
             Text("\(count)")
                 .font(AppTypography.caption.monospacedDigit())
                 .foregroundStyle(isSelected ? Color.primary.opacity(0.72) : Color.secondary.opacity(0.65))
+            dragHandle
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
@@ -1166,6 +1181,16 @@ private struct SmartFolderRowView: View {
                 isHovered = hovering
             }
         }
+    }
+
+    private var dragHandle: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(isHovered ? .secondary : .tertiary)
+            .frame(width: 16, height: 16)
+            .contentShape(Rectangle())
+            .draggable(dragPayload) { dragPreview }
+            .help("Drag smart folder")
     }
 }
 
