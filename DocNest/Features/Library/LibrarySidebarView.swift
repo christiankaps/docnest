@@ -64,10 +64,10 @@ struct LibrarySidebarView: View {
         }
         .background {
             Rectangle()
-                .fill(.ultraThinMaterial)
+                .fill(.regularMaterial)
                 .overlay(alignment: .trailing) {
                     Rectangle()
-                        .fill(Color.primary.opacity(0.08))
+                        .fill(Color.primary.opacity(0.12))
                         .frame(width: 0.5)
                 }
         }
@@ -855,8 +855,8 @@ private struct LibrarySectionRowView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(
                     isSelected
-                    ? Color.accentColor.opacity(0.16)
-                    : (isHovered ? Color.primary.opacity(0.045) : Color.clear)
+                    ? Color.accentColor.opacity(0.20)
+                    : (isHovered ? Color.primary.opacity(0.06) : Color.clear)
                 )
         )
         .contentShape(Rectangle())
@@ -901,8 +901,8 @@ private struct LibraryLabelRowView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(
                     isSelected
-                    ? color.opacity(0.16)
-                    : (isHovered ? Color.primary.opacity(0.045) : Color.clear)
+                    ? color.opacity(0.20)
+                    : (isHovered ? Color.primary.opacity(0.06) : Color.clear)
                 )
         )
         .contentShape(Rectangle())
@@ -1156,8 +1156,8 @@ private struct SmartFolderRowView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(
                     isSelected
-                    ? Color.accentColor.opacity(0.16)
-                    : (isHovered ? Color.primary.opacity(0.045) : Color.clear)
+                    ? Color.accentColor.opacity(0.20)
+                    : (isHovered ? Color.primary.opacity(0.06) : Color.clear)
                 )
         )
         .contentShape(Rectangle())
