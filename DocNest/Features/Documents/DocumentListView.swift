@@ -567,7 +567,7 @@ struct DocumentListView: View {
 
     private func contextMenuDocuments(for document: DocumentRecord) -> [DocumentRecord] {
         if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
-            return coordinator.filteredDocuments.filter { coordinator.selectedDocumentIDs.contains($0.persistentModelID) }
+            return coordinator.immediateSelectionDocuments
         }
         return [document]
     }
@@ -653,9 +653,7 @@ struct DocumentListView: View {
 
     private func dropTargetDocuments(for document: DocumentRecord) -> [DocumentRecord] {
         if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
-            return coordinator.filteredDocuments.filter {
-                coordinator.selectedDocumentIDs.contains($0.persistentModelID)
-            }
+            return coordinator.immediateSelectionDocuments
         }
         return [document]
     }

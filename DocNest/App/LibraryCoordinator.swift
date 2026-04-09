@@ -81,6 +81,8 @@ final class LibraryCoordinator {
     private var labelUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
     private var smartFoldersByPersistentID: [PersistentIdentifier: SmartFolder] = [:]
     private var documentUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
+    private var filteredDocumentByPersistentID: [PersistentIdentifier: DocumentRecord] = [:]
+    private var filteredDocumentOrderByPersistentID: [PersistentIdentifier: Int] = [:]
     private var smartFolderCountsInputSignature: Int?
 
     // MARK: - Internal
@@ -113,6 +115,10 @@ final class LibraryCoordinator {
 
     var isInspectorSelectionPending: Bool {
         selectedDocumentIDs != Set(displayedSelectedDocuments.map(\.persistentModelID))
+    }
+
+    var immediateSelectionDocuments: [DocumentRecord] {
+        selectedDocuments
     }
 
     /// Whether the current interactive label filter selection exactly matches a smart folder's labels.
@@ -185,6 +191,7 @@ final class LibraryCoordinator {
         }
 
         recomputeSidebarCounts(sectionDocuments: sectionDocuments)
+        rebuildFilteredDocumentLookups()
 
         #if DEBUG
         debugLogFilterTiming(
@@ -283,8 +290,22 @@ final class LibraryCoordinator {
         )
     }
 
+    private func rebuildFilteredDocumentLookups() {
+        filteredDocumentByPersistentID = Dictionary(
+            uniqueKeysWithValues: filteredDocuments.map { ($0.persistentModelID, $0) }
+        )
+        filteredDocumentOrderByPersistentID = Dictionary(
+            uniqueKeysWithValues: filteredDocuments.enumerated().map { ($0.element.persistentModelID, $0.offset) }
+        )
+    }
+
     func recomputeSelectedDocuments() {
-        let explicitSelection = filteredDocuments.filter { selectedDocumentIDs.contains($0.persistentModelID) }
+        let explicitSelection = selectedDocumentIDs.compactMap { filteredDocumentByPersistentID[$0] }
+            .sorted {
+                let leftIndex = filteredDocumentOrderByPersistentID[$0.persistentModelID] ?? .max
+                let rightIndex = filteredDocumentOrderByPersistentID[$1.persistentModelID] ?? .max
+                return leftIndex < rightIndex
+            }
 
         if !explicitSelection.isEmpty {
             selectedDocuments = explicitSelection

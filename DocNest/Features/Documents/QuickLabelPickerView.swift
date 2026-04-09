@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct QuickLabelPickerView: View {
     @Environment(LibraryCoordinator.self) private var coordinator
@@ -20,6 +21,16 @@ struct QuickLabelPickerView: View {
 
     private var allGroups: [LabelGroup] {
         coordinator.allLabelGroups
+    }
+
+    private var selectedAssignmentCounts: [PersistentIdentifier: Int] {
+        var counts: [PersistentIdentifier: Int] = [:]
+        for document in selectedDocuments {
+            for label in document.labels {
+                counts[label.persistentModelID, default: 0] += 1
+            }
+        }
+        return counts
     }
 
     /// When filtering, return a flat list of matching labels.
@@ -69,9 +80,7 @@ struct QuickLabelPickerView: View {
 
     private func assignmentState(for label: LabelTag) -> LabelAssignmentState {
         guard !selectedDocuments.isEmpty else { return .none }
-        let assignedCount = selectedDocuments.filter { doc in
-            doc.labels.contains { $0.persistentModelID == label.persistentModelID }
-        }.count
+        let assignedCount = selectedAssignmentCounts[label.persistentModelID, default: 0]
         if assignedCount == selectedDocuments.count { return .all }
         if assignedCount > 0 { return .partial }
         return .none
