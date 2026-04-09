@@ -537,6 +537,20 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testImportUseCaseImportsTwoHundredDistinctPDFs() async throws {
+        try await assertImportOfDistinctPDFs(count: 200)
+    }
+
+    @MainActor
+    func testImportUseCaseImportsTenThousandDistinctPDFsStress() async throws {
+        guard ProcessInfo.processInfo.environment["DOCNEST_RUN_STRESS_TESTS"] == "1" else {
+            throw XCTSkip("Stress test disabled by default. Set DOCNEST_RUN_STRESS_TESTS=1 to run the 10,000-document import.")
+        }
+
+        try await assertImportOfDistinctPDFs(count: 10_000)
+    }
+
+    @MainActor
     func testImportUseCaseContinuesAfterPerFileFailure() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -650,6 +664,72 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(importResult.unsupportedFiles.first?.fileName, "notes.txt")
         XCTAssertTrue(importResult.summaryMessage.contains("unsupported"))
         XCTAssertEqual(documents.count, 1)
+    }
+
+    private static func writeUniqueTestPDF(at url: URL, identifier: Int) throws {
+        let pdfDocument = PDFDocument()
+        pdfDocument.insert(PDFPage(), at: 0)
+        pdfDocument.documentAttributes = [
+            PDFDocumentAttribute.titleAttribute: "Fixture \(identifier)",
+            PDFDocumentAttribute.subjectAttribute: "Large Import Test \(identifier)",
+            PDFDocumentAttribute.authorAttribute: "DocNestTests"
+        ]
+
+        guard pdfDocument.write(to: url) else {
+            throw NSError(
+                domain: "DocNestTests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to write PDF fixture \(identifier)."]
+            )
+        }
+    }
+
+    @MainActor
+    private func assertImportOfDistinctPDFs(count documentCount: Int) async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sourceDirectory = tempRoot.appendingPathComponent("Source PDFs", isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Large Import Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
+
+        var pdfURLs: [URL] = []
+        pdfURLs.reserveCapacity(documentCount)
+
+        for index in 0..<documentCount {
+            let pdfURL = sourceDirectory.appendingPathComponent(
+                String(format: "document-%05d.pdf", index)
+            )
+            try Self.writeUniqueTestPDF(at: pdfURL, identifier: index)
+            pdfURLs.append(pdfURL)
+        }
+
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let importResult = await ImportPDFDocumentsUseCase.execute(
+            urls: pdfURLs,
+            into: libraryURL,
+            using: context
+        )
+
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+
+        XCTAssertEqual(importResult.importedCount, documentCount)
+        XCTAssertTrue(importResult.duplicates.isEmpty)
+        XCTAssertTrue(importResult.unsupportedFiles.isEmpty)
+        XCTAssertTrue(importResult.failures.isEmpty)
+        XCTAssertEqual(documents.count, documentCount)
+        XCTAssertEqual(Set(documents.map(\.contentHash)).count, documentCount)
+        XCTAssertTrue(documents.allSatisfy { $0.pageCount == 1 })
+        XCTAssertTrue(documents.allSatisfy { ($0.storedFilePath ?? "").hasPrefix("Originals/") })
     }
 
     @MainActor

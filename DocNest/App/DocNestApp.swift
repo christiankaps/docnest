@@ -641,6 +641,7 @@ private struct AppRootView: View {
 @MainActor
 final class LibrarySessionController: ObservableObject {
     private static let logger = Logger(subsystem: "com.kaps.docnest", category: "LibrarySession")
+    private static let isRunningUnderTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     @Published private(set) var selectedLibraryURL: URL?
     @Published private(set) var modelContainer: ModelContainer?
     @Published var libraryErrorMessage: String?
@@ -664,6 +665,10 @@ final class LibrarySessionController: ObservableObject {
     }
 
     func restorePersistedLibrary() {
+        guard !Self.isRunningUnderTests else {
+            return
+        }
+
         guard selectedLibraryURL == nil,
               let accessSession = DocumentLibraryService.restorePersistedLibraryAccess() else {
             return
