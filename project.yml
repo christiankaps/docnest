@@ -5,6 +5,7 @@ options:
     macOS: "14.0"
 settings:
   base:
+    ARCHS: arm64
     SWIFT_VERSION: "5.10"
     GENERATE_INFOPLIST_FILE: YES
     PRODUCT_NAME: $(TARGET_NAME)
@@ -14,6 +15,12 @@ settings:
     CODE_SIGN_IDENTITY: "-"
     DEVELOPMENT_TEAM: ""
     ENABLE_HARDENED_RUNTIME: YES
+  configs:
+    Release:
+      COPY_PHASE_STRIP: YES
+      DEAD_CODE_STRIPPING: YES
+      STRIP_INSTALLED_PRODUCT: YES
+      LLVM_LTO: YES
 targets:
   DocNest:
     type: application
