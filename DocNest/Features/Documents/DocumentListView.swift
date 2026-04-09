@@ -404,9 +404,6 @@ struct DocumentListView: View {
             .background(rowBackground(index: index, isSelected: isSelected))
             .contentShape(Rectangle())
             .id(document.persistentModelID)
-            .onTapGesture(count: 2) {
-                openQuickLook(for: document)
-            }
             .onTapGesture {
                 handleRowTap(document: document, in: allDocs)
             }
@@ -497,9 +494,6 @@ struct DocumentListView: View {
                             onBeginRename: { beginRename(for: document) }
                         )
                         .id(document.persistentModelID)
-                        .onTapGesture(count: 2) {
-                            openQuickLook(for: document)
-                        }
                         .onTapGesture {
                             handleRowTap(document: document, in: sortedDocs)
                         }
