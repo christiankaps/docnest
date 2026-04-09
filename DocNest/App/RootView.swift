@@ -186,7 +186,7 @@ struct RootView: View {
             .help("Share selected documents")
         }
 
-        ToolbarItem(placement: .secondaryAction) {
+        ToolbarItem(placement: .primaryAction) {
             Button {
                 coordinator.isInspectorCollapsed.toggle()
             } label: {
