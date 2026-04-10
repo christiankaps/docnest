@@ -90,6 +90,7 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - User can create a new library.
 - User can open an existing library.
 - App remembers the last successfully opened library and tries to reopen it automatically on next launch.
+- App must not automatically reopen a remembered library when that library has been moved to Trash. In that case the remembered library reference is cleared or ignored and the app starts in its normal no-library state.
 - If no last-opened library is known, or the stored library can no longer be validated, the app must not show a modal popup. Instead, it shows a welcome state directly in normal window content with actions to open or create a library.
 - The save dialog for library creation shows only the library name without the internal extension (.docnestlibrary); the app appends the extension automatically.
 - App validates structure and metadata consistency when opening a library.
@@ -105,6 +106,7 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - App provides a "Show in Finder" action for libraries and individual documents.
 - The library manifest includes a format version number. When opening a library created by an older app version, the app detects the version mismatch and runs any necessary migration steps before loading the library. After migration, the manifest is updated to the current version.
 - The SwiftData schema uses `VersionedSchema` and `SchemaMigrationPlan` to manage database evolution across app versions. Each schema version is captured as a full model snapshot. The `ModelContainer` is opened with the migration plan so that older databases are migrated forward automatically. Lightweight migrations (new columns with defaults) use `MigrationStage.lightweight`; breaking changes use `MigrationStage.custom`.
+- Release builds bake the marketing version and build number into the app bundle, and the app surfaces that information in About/App Info UI.
 
 ### 6.2 Document Import
 
@@ -122,6 +124,7 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - User can cancel an in-progress import; already-imported files are kept.
 - PDFs and folders can be imported by dropping them onto the app's dock icon. URLs received before a library is loaded are queued and processed once the library becomes available.
 - The app registers as a macOS Services provider ("Import into DocNest") for PDFs and folders, allowing import from Finder's Services and Share menus.
+- The import pipeline must reject self-import attempts. If the open library package itself, one of its internal folders, or a watched folder that resolves into the active library package is selected as import source, the app must skip that source and explain why.
 
 #### Must (Storage Naming)
 - Stored files inside the library package use the document title as filename (sanitized for filesystem safety), not a random UUID.
@@ -184,6 +187,8 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - Toolbar includes a Share button that opens native macOS share sheet for the selected document(s). Printing is reachable via share sheet.
 - Right-clicking a document opens a context menu with quick actions: assign labels, show in Finder, move to Bin, and other context actions.
 - In the list, each label badge shows an "x" on hover; clicking it removes the label immediately without confirmation dialog.
+- The right inspector is a collapsible details column. It is toggleable from the toolbar and via the keyboard shortcut `Control-D`.
+- Document rename is available inline in both list and thumbnail modes, from the document context menu, and by Finder-like interaction on the currently selected document name.
 
 #### Should
 - Quick Look-like preview behavior.
@@ -204,6 +209,7 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - If a label is assigned to one or more documents, app shows a native confirmation dialog before deletion with the affected document count. Labels with no assignments can be deleted without extra confirmation.
 - Label management (create, rename, delete, color selection) is integrated directly in left sidebar, not in a separate modal dialog.
 - Label order in sidebar is user-reorderable via drag-and-drop and persisted.
+- Full label management is available from `DocNest > Settings… > Labels`. The sidebar remains the quick-access surface for filtering, selection, creation shortcuts, and drag-and-drop organization.
 
 #### Should
 - Colored labels.
@@ -234,6 +240,7 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - When label filters are enabled or disabled, sidebar selection highlight must update immediately, even if document list refresh takes slightly longer.
 - Sorting by import date, document date, name, and file size.
 - Needs Labels filter shows only documents without labels. When active, active label filters are automatically cleared to avoid logical conflict.
+- Keyboard navigation through the document list must follow the currently visible sort and grouping order, not a separate hidden order.
 
 #### Should
 - Saved smart folders (label-only collections shown in sidebar).
@@ -320,6 +327,7 @@ The Document Date represents the semantic content date of a document (e.g. the i
 - Bin provides Remove All for permanent removal of all currently binned documents.
 - If a document is already in Bin, deleting it means permanent removal from library.
 - App can detect missing files or inconsistent metadata.
+- Library open and maintenance flows include integrity reporting and conservative self-healing for repairable package or metadata issues. Repairs must be recorded in diagnostics output instead of happening silently.
 
 #### Should
 - Repair or reindex functionality for a library.
@@ -328,7 +336,7 @@ The Document Date represents the semantic content date of a document (e.g. the i
 ### 6.8 Watch Folders
 
 #### Must
-- User can add, edit, pause/resume, and delete watch folders from a dedicated settings sheet accessible via the Edit menu ("Watch Folders…").
+- User can add, edit, pause/resume, and delete watch folders from `DocNest > Settings… > Watch Folders` and via `Command-,`.
 - Each watch folder points to a local directory and monitors it for new PDF files using `DispatchSource.makeFileSystemObjectSource` with `O_EVTONLY` file descriptors.
 - When new PDFs appear in a watched directory, they are automatically imported through the standard import pipeline (same hash-based deduplication, file storage, and metadata capture).
 - Each watch folder can optionally auto-assign a set of labels to imported documents.
@@ -337,6 +345,8 @@ The Document Date represents the semantic content date of a document (e.g. the i
 - Watch folder monitoring performs an initial scan on startup to catch files added while the app was closed.
 - Monitoring is shallow (top-level directory only), filtering for `.pdf` file extension.
 - Watch folder monitoring starts automatically when a library is opened and tears down when the library is closed or the app exits.
+- Watch folder scanning must be incremental. Repeated filesystem events must not cause the app to rescan and reattempt import for every already-seen PDF in the watched folder.
+- Watch folders must not re-import the active DocNest library package or its internal contents.
 
 #### Should
 - Context menu on each watch folder row offers Edit, Pause/Resume, Reveal in Finder, and Delete.
@@ -352,6 +362,9 @@ The Document Date represents the semantic content date of a document (e.g. the i
 - Library with at least 20,000 documents should remain usable.
 - List filtering and label filtering should feel instant for typical user interactions.
 - Preview of an average PDF should appear without noticeable delay.
+- Selection highlight and keyboard navigation in the document list must update immediately, even when preview rendering, file-availability checks, OCR status updates, or multi-selection summary work are still catching up.
+- Heavy inspector work must be deferred or cancellable so passive detail rendering does not block visible row selection feedback.
+- Grouped document lists must preserve visible-order navigation and refresh correctly when document metadata changes move an item between groups.
 
 ### 7.3 Robustness
 - Library consistency has higher priority than aggressive optimization.
@@ -372,7 +385,7 @@ The Document Date represents the semantic content date of a document (e.g. the i
 
 ### 7.6 Privacy
 - All data is processed locally.
-- Network access is not required in v1.
+- Network access is optional and only used for explicit update-check functionality against the project's GitHub releases.
 - User must be able to understand where files are stored and what happens during import.
 
 ## 8. Library Structure
@@ -466,7 +479,7 @@ My Documents.docnestlibrary/
 ## 10. UX Requirements
 
 ### 10.1 Information Architecture
-- Sidebar for library, smart folders, and labels. Watch folders are a library-level setting and are not shown in the sidebar; they are managed via the Edit menu.
+- Sidebar for library, smart folders, and labels. Watch folders are a library-level setting and are not shown in the sidebar; they are managed via `DocNest > Settings… > Watch Folders`.
 - Main area for document list.
 - Detail/preview area for selected document.
 - Layout must scale meaningfully in normal window mode and fullscreen.
@@ -476,7 +489,7 @@ My Documents.docnestlibrary/
 
 ### 10.2 Core Interactions
 - Drag files onto window to import.
-- Select a document in list and instantly see preview.
+- Select a document in list and instantly see clear selection feedback; preview and inspector content may update asynchronously but must not delay the visible selection change.
 - Assign labels via shortcuts or inspector.
 - Command+L opens a quick label picker overlay for fast keyboard-driven label assignment to selected documents.
 - Live filter result list while typing.
@@ -494,9 +507,9 @@ My Documents.docnestlibrary/
 - Main content area shows welcoming view with actions to create or open a library, embedded in normal window flow.
 - Sidebar and inspector remain visible but empty or with placeholder content.
 
-### 10.6 Sidebar-Integrated Label Management
-- Labels are managed directly in left sidebar, not in separate modal dialog.
-- The sidebar "+" button opens a menu with "New Label" and "New Group" options.
+### 10.6 Settings-Based Label Management
+- Full label management lives in `DocNest > Settings… > Labels`, not in an older standalone modal dialog.
+- The sidebar "+" button creates new labels directly. Group creation has its own dedicated button.
 - Label create and edit use a dedicated editor sheet (not inline editing). The sheet provides a spacious name field with emoji picker, a visual color swatch grid, and a group picker.
 - Editing a label (double-click or context menu "Edit") opens the same editor sheet pre-filled with the label's current values.
 - Label groups appear as collapsible sections in the sidebar with disclosure chevron, group name, and label count. Groups can be renamed inline, deleted, or have labels added via context menu.
@@ -517,6 +530,7 @@ My Documents.docnestlibrary/
 - Destructive actions require clear wording and undo where feasible.
 - Light and Dark mode must not only function technically but also be visually coherent for lists, sidebars, PDF preview, and label rendering.
 - Menu bar entries should show only actions actually supported by current product; generic document-template commands like new document, save, import, export, or print are hidden in v1 while matching workflows are not provided.
+- Primary click targets in document rows and sidebar rows must favor reliable single-click behavior. Dragging, double-click actions, and contextual editing affordances must not make normal selection feel unreliable.
 
 ## 11. Prioritized Implementation Sequence
 
@@ -627,7 +641,7 @@ Current state:
 - Deleting a label removes only associations. Documents and original files remain unchanged.
 - Document list supports multi-selection. Inspector can add/remove labels for entire selection.
 - For mixed label states, inspector separates shared labels from partially assigned labels and offers actions such as add to remaining documents.
-- Label management is integrated in left sidebar (create, edit, delete). The "+" button opens a menu with "New Label" and "New Group".
+- Sidebar offers lightweight label actions for filtering, creation, drag-and-drop organization, and contextual editing, while full management lives in Settings.
 - Labels are reorderable in sidebar, persisted via sortOrder field.
 - Label groups allow organizing labels into collapsible categories in the sidebar (e.g. "Finance" containing "Invoices", "Tax", "Receipts").
 - Groups display as collapsible headers with disclosure chevron, group name, and label count. Grouped labels appear indented beneath their group header; ungrouped labels appear at the top level.
@@ -635,7 +649,7 @@ Current state:
 - Labels can be moved into a group by dragging onto the group header or via the group picker in the label editor sheet.
 - Group order is reorderable and persisted via sortOrder field.
 - Quick label picker (Cmd+L) provides a floating overlay for fast keyboard-driven label assignment. The picker includes a type-ahead search field that filters labels, arrow key navigation, and Enter to toggle labels on selected documents. Labels show assignment state indicators (checkmark for all, dash for partial). When not filtering, labels display grouped; when typing, the list is flat. The picker only opens when documents are selected and not in Bin.
-- Label Manager (Cmd+Shift+L, also accessible via Edit menu "Manage Labels…") provides a two-panel master-detail sheet for centralized label and group management. Left panel shows all labels organized by groups with native multi-select (Cmd+Click, Shift+Click). Right panel is context-sensitive: single-label editor, multi-selection bulk actions, create-new-label form, or empty state. Footer has +/- buttons for creating labels/groups and deleting selected items. Edits auto-save on change (color, icon, group) or on Enter (name).
+- The Labels pane in `DocNest > Settings…` provides a two-panel master-detail management view for centralized label and group management. Left panel shows all labels organized by groups with native multi-select (Cmd+Click, Shift+Click). Right panel is context-sensitive: single-label editor, multi-selection bulk actions, create-new-label form, or empty state. Footer has +/- buttons for creating labels/groups and deleting selected items. Edits auto-save on change (color, icon, group) or on Enter (name).
 
 ### Phase 5: Search and Retrieval
 Goal: users find documents quickly.
@@ -660,7 +674,7 @@ Current state:
 - Creating a smart folder pre-fills from the currently active label filters.
 - Dragging documents onto a smart folder row assigns the folder's labels to those documents.
 - Importing files while a smart folder is selected auto-assigns the folder's labels to imported documents.
-- Watch folders are implemented as a library-level setting accessible via "Watch Folders…" in the Edit menu.
+- Watch folders are implemented as a library-level setting accessible via `DocNest > Settings… > Watch Folders`.
 - Each watch folder monitors a local directory for new PDFs using `DispatchSource.makeFileSystemObjectSource` with `O_EVTONLY` file descriptors and `.write` event masks.
 - New PDFs are imported through the standard `ImportPDFDocumentsUseCase` pipeline with hash-based deduplication.
 - Watch folders support optional label auto-assignment to imported documents.
