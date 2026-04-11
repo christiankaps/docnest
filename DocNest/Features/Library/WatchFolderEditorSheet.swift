@@ -223,6 +223,7 @@ struct WatchFolderEditorSheet: View {
                     icon: icon.isEmpty ? nil : String(icon.prefix(1)),
                     folderPath: folderPath,
                     libraryURL: coordinator.libraryURL,
+                    libraryPackageURL: coordinator.libraryPackageURL,
                     isEnabled: isEnabled,
                     labelIDs: labelIDArray,
                     using: modelContext
@@ -233,6 +234,7 @@ struct WatchFolderEditorSheet: View {
                     icon: icon.isEmpty ? nil : String(icon.prefix(1)),
                     folderPath: folderPath,
                     libraryURL: coordinator.libraryURL,
+                    libraryPackageURL: coordinator.libraryPackageURL,
                     labelIDs: labelIDArray,
                     using: modelContext
                 )

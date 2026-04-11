@@ -75,7 +75,7 @@ struct LibrarySidebarView: View {
                     .frame(width: 0.5)
             }
         }
-        .navigationTitle(coordinator.libraryURL?.deletingPathExtension().lastPathComponent ?? "DocNest")
+        .navigationTitle(coordinator.libraryPackageURL?.deletingPathExtension().lastPathComponent ?? "DocNest")
         .confirmationDialog(
             pendingLabelDeletion?.title ?? "Delete Label",
             isPresented: pendingLabelDeletionBinding,

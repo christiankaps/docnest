@@ -98,6 +98,7 @@ enum ImportPDFDocumentsUseCase {
     static func execute(
         urls: [URL],
         into libraryURL: URL,
+        libraryPackageURL: URL? = nil,
         autoAssignLabels: [LabelTag] = [],
         using modelContext: ModelContext,
         onProgress: (@MainActor (_ completed: Int, _ total: Int) -> Void)? = nil
@@ -108,7 +109,7 @@ enum ImportPDFDocumentsUseCase {
         var failures: [ImportPDFDocumentsResult.Failure] = []
         for url in urls {
             if url.isFileURL {
-                if shouldRejectSelfImport(of: url, into: libraryURL) {
+                if shouldRejectSelfImport(of: url, into: libraryURL, libraryPackageURL: libraryPackageURL) {
                     failures.append(
                         .init(
                             fileName: url.lastPathComponent.isEmpty ? nil : url.lastPathComponent,
@@ -155,7 +156,7 @@ enum ImportPDFDocumentsUseCase {
 
             if Task.isCancelled { break }
 
-            guard !shouldRejectSelfImport(of: url, into: libraryURL) else {
+            guard !shouldRejectSelfImport(of: url, into: libraryURL, libraryPackageURL: libraryPackageURL) else {
                 failures.append(
                     .init(
                         fileName: url.lastPathComponent.isEmpty ? nil : url.lastPathComponent,
@@ -533,12 +534,20 @@ enum ImportPDFDocumentsUseCase {
         return pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
     }
 
-    private static func shouldRejectSelfImport(of url: URL, into libraryURL: URL) -> Bool {
+    private static func shouldRejectSelfImport(
+        of url: URL,
+        into libraryURL: URL,
+        libraryPackageURL: URL?
+    ) -> Bool {
         guard url.isFileURL else {
             return false
         }
 
-        return DocumentLibraryService.contains(url, inLibrary: libraryURL)
+        return DocumentLibraryService.contains(
+            url,
+            inLibraryPackage: libraryPackageURL,
+            dataRootURL: libraryURL
+        )
     }
 
     private static func normalizedTitle(for url: URL) -> String {

@@ -347,9 +347,21 @@ struct DocNestMenuCommands: Commands {
             Button("Create Library") {
                 librarySession?.createLibrary()
             }
+            Button("Create Encrypted Library…") {
+                librarySession?.createEncryptedLibrary()
+            }
             Button("Open Library") {
                 librarySession?.openLibrary()
             }
+            Divider()
+            Button("Convert Library to Encrypted…") {
+                librarySession?.convertOpenLibraryToEncrypted()
+            }
+            .disabled(librarySession?.selectedLibraryURL == nil || librarySession?.isEncryptedLibraryOpen == true)
+            Button("Lock Library") {
+                librarySession?.lockLibrary()
+            }
+            .disabled(librarySession?.isEncryptedLibraryOpen != true)
             Divider()
             Button("Show in Finder") {
                 if let url = librarySession?.selectedLibraryURL {
@@ -455,9 +467,14 @@ private struct AppRootView: View {
 
     var body: some View {
         Group {
-            if let libraryURL = librarySession.selectedLibraryURL,
+            if let libraryURL = librarySession.activeLibraryDataURL,
+               let libraryPackageURL = librarySession.selectedLibraryURL,
                let modelContainer = librarySession.modelContainer {
-                RootView(libraryURL: libraryURL, librarySession: librarySession)
+                RootView(
+                    libraryURL: libraryURL,
+                    libraryPackageURL: libraryPackageURL,
+                    librarySession: librarySession
+                )
                     .modelContainer(modelContainer)
                     .accessibilityIdentifier("library-open-root")
             } else {
@@ -566,6 +583,7 @@ private struct AppRootView: View {
                 } actions: {
                     HStack(spacing: 12) {
                         Button("Create Library", action: librarySession.createLibrary)
+                        Button("Create Encrypted Library", action: librarySession.createEncryptedLibrary)
                         Button("Open Library", action: librarySession.openLibrary)
                     }
                 }
@@ -643,6 +661,8 @@ final class LibrarySessionController: ObservableObject {
     private static let logger = Logger(subsystem: "com.kaps.docnest", category: "LibrarySession")
     private static let isRunningUnderTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     @Published private(set) var selectedLibraryURL: URL?
+    @Published private(set) var activeLibraryDataURL: URL?
+    @Published private(set) var selectedLibraryManifest: DocumentLibraryManifest?
     @Published private(set) var modelContainer: ModelContainer?
     @Published var libraryErrorMessage: String?
     @Published var pendingImportURLs: [URL] = []
@@ -653,6 +673,10 @@ final class LibrarySessionController: ObservableObject {
     private var terminationObserver: Any?
     private var activeLibraryAccessSession: DocumentLibraryService.LibraryAccessSession?
     private var integrityRefreshTask: Task<Void, Never>?
+
+    var isEncryptedLibraryOpen: Bool {
+        selectedLibraryManifest?.storageMode == .encryptedSparsebundle
+    }
 
     func queueImportURLs(_ urls: [URL]) {
         pendingImportURLs.append(contentsOf: urls)
@@ -690,6 +714,29 @@ final class LibrarySessionController: ObservableObject {
         }
     }
 
+    func createEncryptedLibrary() {
+        guard let url = DocumentLibraryService.promptForNewLibraryURL() else {
+            return
+        }
+
+        guard let configuration = LibraryDiskImageService.promptForEncryptionConfiguration(
+            libraryName: url.deletingPathExtension().lastPathComponent
+        ) else {
+            return
+        }
+
+        do {
+            let libraryURL = try DocumentLibraryService.createEncryptedLibrary(
+                at: url,
+                password: configuration.password,
+                savePasswordInKeychain: configuration.savePasswordInKeychain
+            )
+            openValidatedLibrary(DocumentLibraryService.accessLibrary(at: libraryURL))
+        } catch {
+            libraryErrorMessage = error.localizedDescription
+        }
+    }
+
     func openLibrary() {
         guard let url = DocumentLibraryService.promptForExistingLibrary() else {
             return
@@ -709,36 +756,90 @@ final class LibrarySessionController: ObservableObject {
         if let url = selectedLibraryURL {
             DocumentLibraryService.releaseLock(for: url)
         }
+        if let mountedVolume = activeLibraryAccessSession?.mountedVolume {
+            try? LibraryDiskImageService.detach(
+                .init(
+                    imageURL: mountedVolume.imageURL,
+                    mountPointURL: mountedVolume.mountPointURL,
+                    deviceEntry: mountedVolume.deviceEntry
+                )
+            )
+        }
         if let accessSession = activeLibraryAccessSession,
            accessSession.startedAccessingSecurityScope {
-            accessSession.url.stopAccessingSecurityScopedResource()
+            accessSession.packageURL.stopAccessingSecurityScopedResource()
         }
         activeLibraryAccessSession = nil
         selectedLibraryURL = nil
+        activeLibraryDataURL = nil
+        selectedLibraryManifest = nil
         modelContainer = nil
+    }
+
+    func lockLibrary() {
+        closeLibrary()
+    }
+
+    func convertOpenLibraryToEncrypted() {
+        guard let packageURL = selectedLibraryURL,
+              let manifest = selectedLibraryManifest,
+              manifest.storageMode == .plainPackage else {
+            return
+        }
+
+        guard let configuration = LibraryDiskImageService.promptForEncryptionConfiguration(
+            libraryName: packageURL.deletingPathExtension().lastPathComponent
+        ) else {
+            return
+        }
+
+        do {
+            try modelContainer?.mainContext.save()
+        } catch {
+            libraryErrorMessage = error.localizedDescription
+            return
+        }
+
+        closeLibrary()
+
+        do {
+            try DocumentLibraryService.convertLibraryToEncrypted(
+                at: packageURL,
+                password: configuration.password,
+                savePasswordInKeychain: configuration.savePasswordInKeychain
+            )
+            openValidatedLibrary(DocumentLibraryService.accessLibrary(at: packageURL))
+        } catch {
+            libraryErrorMessage = error.localizedDescription
+        }
     }
 
     private func openValidatedLibrary(_ accessSession: DocumentLibraryService.LibraryAccessSession) {
         do {
-            let packageRepair = try DocumentLibraryService.repairLibraryPackageIfNeeded(at: accessSession.url)
-            let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: accessSession.url)
+            let packageRepair = try DocumentLibraryService.repairLibraryPackageIfNeeded(at: accessSession.packageURL)
+            let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: accessSession.packageURL)
             let migration = try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
             try DocumentLibraryService.acquireLock(for: validatedURL)
+            let migratedManifest = DocumentLibraryManifest(
+                formatVersion: migration.toFormatVersion,
+                createdAt: manifest.createdAt,
+                libraryID: manifest.libraryID,
+                storageMode: manifest.storageMode,
+                sparsebundleRelativePath: manifest.sparsebundleRelativePath ?? (manifest.storageMode == .encryptedSparsebundle ? DocumentLibraryService.defaultSparsebundleRelativePath : nil),
+                mountedVolumeName: manifest.mountedVolumeName,
+                imageFileSystem: manifest.imageFileSystem,
+                imageFormatVersion: manifest.imageFormatVersion
+            )
+            let openedSession = try createOpenedSession(accessSession: accessSession, validatedURL: validatedURL, manifest: migratedManifest)
             try openLibrary(
-                DocumentLibraryService.LibraryAccessSession(
-                    url: validatedURL,
-                    startedAccessingSecurityScope: accessSession.startedAccessingSecurityScope
-                ),
-                manifest: DocumentLibraryManifest(
-                    formatVersion: migration.toFormatVersion,
-                    createdAt: manifest.createdAt
-                ),
+                openedSession,
+                manifest: migratedManifest,
                 migration: migration,
                 packageRepair: packageRepair
             )
         } catch {
             if accessSession.startedAccessingSecurityScope {
-                accessSession.url.stopAccessingSecurityScopedResource()
+                accessSession.packageURL.stopAccessingSecurityScopedResource()
             }
             closeLibrary()
             DocumentLibraryService.persistLibraryURL(nil)
@@ -753,22 +854,25 @@ final class LibrarySessionController: ObservableObject {
         packageRepair: LibraryRepairResult
     ) throws {
         if let currentURL = selectedLibraryURL,
-           currentURL != accessSession.url {
+           currentURL != accessSession.packageURL {
             closeLibrary()
         }
-        let container = try DocumentLibraryService.openModelContainer(for: accessSession.url)
+        let container = try DocumentLibraryService.openModelContainer(for: accessSession.dataRootURL)
         modelContainer = container
-        selectedLibraryURL = accessSession.url
+        selectedLibraryURL = accessSession.packageURL
+        activeLibraryDataURL = accessSession.dataRootURL
+        selectedLibraryManifest = manifest
         activeLibraryAccessSession = accessSession
-        DocumentLibraryService.persistLibraryURL(accessSession.url)
+        DocumentLibraryService.persistLibraryURL(accessSession.packageURL)
         libraryErrorMessage = nil
-        startLockHeartbeat(for: accessSession.url)
-        observeAppTermination(for: accessSession.url)
+        startLockHeartbeat(for: accessSession.packageURL)
+        observeAppTermination(for: accessSession.packageURL)
         integrityRefreshTask?.cancel()
-        integrityRefreshTask = Task { [libraryURL = accessSession.url, manifest, migration, packageRepair] in
+        integrityRefreshTask = Task { [packageURL = accessSession.packageURL, dataRootURL = accessSession.dataRootURL, manifest, migration, packageRepair] in
             do {
                 _ = try await DocumentLibraryService.refreshIntegrityArtifacts(
-                    for: libraryURL,
+                    packageURL: packageURL,
+                    dataRootURL: dataRootURL,
                     manifest: manifest,
                     migration: migration,
                     packageRepair: packageRepair
@@ -868,5 +972,54 @@ final class LibrarySessionController: ObservableObject {
         ) { _ in
             DocumentLibraryService.releaseLock(for: libraryURL)
         }
+    }
+
+    private func createOpenedSession(
+        accessSession: DocumentLibraryService.LibraryAccessSession,
+        validatedURL: URL,
+        manifest: DocumentLibraryManifest
+    ) throws -> DocumentLibraryService.LibraryAccessSession {
+        guard manifest.storageMode == .encryptedSparsebundle else {
+            return DocumentLibraryService.LibraryAccessSession(
+                packageURL: validatedURL,
+                dataRootURL: validatedURL,
+                startedAccessingSecurityScope: accessSession.startedAccessingSecurityScope,
+                mountedVolume: nil
+            )
+        }
+
+        if let password = try? LibraryDiskImageService.passwordFromKeychain(
+            libraryID: manifest.libraryID,
+            prompt: "Unlock \(validatedURL.deletingPathExtension().lastPathComponent)"
+        ) {
+            if let opened = try? DocumentLibraryService.createOpenedSession(
+                from: accessSession,
+                manifest: manifest,
+                password: password
+            ) {
+                return opened
+            }
+        }
+
+        guard let configuration = LibraryDiskImageService.promptForUnlockPassword(
+            libraryName: validatedURL.deletingPathExtension().lastPathComponent
+        ) else {
+            throw LibraryDiskImageService.Error.cancelled
+        }
+
+        let opened = try DocumentLibraryService.createOpenedSession(
+            from: accessSession,
+            manifest: manifest,
+            password: configuration.password
+        )
+
+        if configuration.savePasswordInKeychain {
+            try? LibraryDiskImageService.savePasswordInKeychain(
+                configuration.password,
+                libraryID: manifest.libraryID
+            )
+        }
+
+        return opened
     }
 }

@@ -97,7 +97,119 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(createdLibraryURL.pathExtension, DocumentLibraryService.packageExtension)
         XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("Metadata", isDirectory: true).path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("Originals", isDirectory: true).path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("Metadata/library.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("library.json").path))
+    }
+
+    func testCreateEncryptedLibraryCreatesSparsebundleBackedStructure() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Encrypted Library")
+        let password = "DocNest-Test-Password-123"
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryURL = try DocumentLibraryService.createEncryptedLibrary(
+            at: libraryURL,
+            password: password,
+            savePasswordInKeychain: false
+        )
+        let (_, manifest) = try DocumentLibraryService.validateLibrary(at: createdLibraryURL)
+
+        XCTAssertEqual(manifest.storageMode, .encryptedSparsebundle)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("library.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("Mount/Library.sparsebundle").path))
+
+        let baseSession = DocumentLibraryService.accessLibrary(at: createdLibraryURL)
+        let openedSession = try DocumentLibraryService.createOpenedSession(
+            from: baseSession,
+            manifest: manifest,
+            password: password
+        )
+
+        defer {
+            if let mounted = openedSession.mountedVolume {
+                try? LibraryDiskImageService.detach(
+                    .init(
+                        imageURL: mounted.imageURL,
+                        mountPointURL: mounted.mountPointURL,
+                        deviceEntry: mounted.deviceEntry
+                    )
+                )
+            }
+            if baseSession.startedAccessingSecurityScope {
+                baseSession.packageURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: DocumentLibraryService.metadataDirectory(for: openedSession.dataRootURL).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: DocumentLibraryService.originalsDirectory(for: openedSession.dataRootURL).path))
+    }
+
+    @MainActor
+    func testConvertLibraryToEncryptedPreservesDocumentStore() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Convertible Library")
+        )
+        let container = try DocumentLibraryService.openModelContainer(for: libraryURL)
+        let context = container.mainContext
+
+        let document = DocumentRecord(
+            originalFileName: "sample.pdf",
+            title: "Sample",
+            documentDate: .now,
+            importedAt: .now,
+            pageCount: 1,
+            fileSize: 128,
+            contentHash: "hash",
+            storedFilePath: nil
+        )
+        context.insert(document)
+        try context.save()
+
+        let password = "DocNest-Convert-Password-123"
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try DocumentLibraryService.convertLibraryToEncrypted(
+            at: libraryURL,
+            password: password,
+            savePasswordInKeychain: false
+        )
+
+        let (_, manifest) = try DocumentLibraryService.validateLibrary(at: libraryURL)
+        XCTAssertEqual(manifest.storageMode, .encryptedSparsebundle)
+
+        let accessSession = DocumentLibraryService.accessLibrary(at: libraryURL)
+        let openedSession = try DocumentLibraryService.createOpenedSession(
+            from: accessSession,
+            manifest: manifest,
+            password: password
+        )
+        defer {
+            if let mounted = openedSession.mountedVolume {
+                try? LibraryDiskImageService.detach(
+                    .init(
+                        imageURL: mounted.imageURL,
+                        mountPointURL: mounted.mountPointURL,
+                        deviceEntry: mounted.deviceEntry
+                    )
+                )
+            }
+            if accessSession.startedAccessingSecurityScope {
+                accessSession.packageURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let reopenedContainer = try DocumentLibraryService.openModelContainer(for: openedSession.dataRootURL)
+        let reopenedContext = reopenedContainer.mainContext
+        let count = try reopenedContext.fetchCount(FetchDescriptor<DocumentRecord>())
+        XCTAssertEqual(count, 1)
     }
 
     func testValidateLibraryRejectsMissingManifest() throws {
@@ -299,7 +411,7 @@ final class DocNestTests: XCTestCase {
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(foreignLock)
         let lockURL = libraryURL
-            .appendingPathComponent("Metadata", isDirectory: true)
+            .appendingPathComponent("Diagnostics", isDirectory: true)
             .appendingPathComponent(".lock")
         try data.write(to: lockURL, options: .atomic)
 
@@ -332,7 +444,7 @@ final class DocNestTests: XCTestCase {
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(staleLock)
         let lockURL = libraryURL
-            .appendingPathComponent("Metadata", isDirectory: true)
+            .appendingPathComponent("Diagnostics", isDirectory: true)
             .appendingPathComponent(".lock")
         try data.write(to: lockURL, options: .atomic)
 

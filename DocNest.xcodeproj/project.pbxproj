@@ -25,6 +25,7 @@
 		3FA039F52F709CCA0005D532 /* WatchFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039F42F709CCA0005D532 /* WatchFolder.swift */; };
 		3FA039F72F709CF60005D532 /* ManageWatchFoldersUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039F62F709CF60005D532 /* ManageWatchFoldersUseCase.swift */; };
 		3FA039F92F709D0C0005D532 /* FolderMonitorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039F82F709D0C0005D532 /* FolderMonitorService.swift */; };
+		3FAF10C12F80A0010005D532 /* LibraryDiskImageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FAF10C02F80A0010005D532 /* LibraryDiskImageService.swift */; };
 		3FA039FB2F709D530005D532 /* WatchFolderEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039FA2F709D530005D532 /* WatchFolderEditorSheet.swift */; };
 		3FA039FD2F709FAB0005D532 /* WatchFolderSettingsCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039FC2F709FAB0005D532 /* WatchFolderSettingsCommand.swift */; };
 		3FA039FF2F709FC00005D532 /* WatchFolderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA039FE2F709FC00005D532 /* WatchFolderSettingsView.swift */; };
@@ -100,6 +101,7 @@
 		3FA039F42F709CCA0005D532 /* WatchFolder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolder.swift; sourceTree = "<group>"; };
 		3FA039F62F709CF60005D532 /* ManageWatchFoldersUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageWatchFoldersUseCase.swift; sourceTree = "<group>"; };
 		3FA039F82F709D0C0005D532 /* FolderMonitorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderMonitorService.swift; sourceTree = "<group>"; };
+		3FAF10C02F80A0010005D532 /* LibraryDiskImageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDiskImageService.swift; sourceTree = "<group>"; };
 		3FA039FA2F709D530005D532 /* WatchFolderEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderEditorSheet.swift; sourceTree = "<group>"; };
 		3FA039FC2F709FAB0005D532 /* WatchFolderSettingsCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderSettingsCommand.swift; sourceTree = "<group>"; };
 		3FA039FE2F709FC00005D532 /* WatchFolderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderSettingsView.swift; sourceTree = "<group>"; };
@@ -340,6 +342,7 @@
 				F35D29609AD07395CE3098C2 /* DocumentStorageService.swift */,
 				3FFBC75A2F704EDC00FA359D /* DocNestSchemaVersioning.swift */,
 				3FA039F82F709D0C0005D532 /* FolderMonitorService.swift */,
+				3FAF10C02F80A0010005D532 /* LibraryDiskImageService.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -488,6 +491,7 @@
 				BAD3422FCC9D99B891471458 /* DocumentLibraryService.swift in Sources */,
 				2423CFECF69765FB09B4592A /* DocumentListView.swift in Sources */,
 				3FA039F92F709D0C0005D532 /* FolderMonitorService.swift in Sources */,
+				3FAF10C12F80A0010005D532 /* LibraryDiskImageService.swift in Sources */,
 				3FDFEB8B2F6F4EC800425275 /* LabelManagerSheet.swift in Sources */,
 				3FA039FF2F709FC00005D532 /* WatchFolderSettingsView.swift in Sources */,
 				0C0958A98ED0BC8389BBA0C9 /* DocumentRecord.swift in Sources */,
