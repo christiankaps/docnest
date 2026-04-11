@@ -28,6 +28,12 @@ enum LibraryDiskImageService {
         let savePasswordInKeychain: Bool
     }
 
+    struct PasswordChangeConfiguration {
+        let currentPassword: String
+        let newPassword: String
+        let savePasswordInKeychain: Bool
+    }
+
     enum Error: LocalizedError {
         case commandFailed(String)
         case invalidAttachResponse
@@ -35,6 +41,8 @@ enum LibraryDiskImageService {
         case invalidPassword
         case passwordMismatch
         case cancelled
+        case newPasswordMatchesCurrent
+        case mountedElsewhere
 
         var errorDescription: String? {
             switch self {
@@ -50,6 +58,10 @@ enum LibraryDiskImageService {
                 return "The two passwords did not match."
             case .cancelled:
                 return "The encrypted library action was cancelled."
+            case .newPasswordMatchesCurrent:
+                return "Choose a new password that is different from the current password."
+            case .mountedElsewhere:
+                return "The encrypted library is still mounted elsewhere. Eject it and try again."
             }
         }
     }
@@ -57,6 +69,7 @@ enum LibraryDiskImageService {
     private static let defaultMaximumImageSize = "256g"
     private static let keychainService = "com.kaps.docnest.library"
 
+    @MainActor
     static func promptForEncryptionConfiguration(libraryName: String) -> EncryptionConfiguration? {
         let passwordField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         let confirmField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
@@ -102,6 +115,7 @@ enum LibraryDiskImageService {
         )
     }
 
+    @MainActor
     static func promptForUnlockPassword(libraryName: String) -> EncryptionConfiguration? {
         let passwordField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         let saveCheckbox = NSButton(checkboxWithTitle: "Save password in Keychain for Touch ID unlock on this Mac", target: nil, action: nil)
@@ -134,6 +148,73 @@ enum LibraryDiskImageService {
 
         return EncryptionConfiguration(
             password: password,
+            savePasswordInKeychain: saveCheckbox.state == .on
+        )
+    }
+
+    @MainActor
+    static func promptForPasswordChange(
+        libraryName: String,
+        savePasswordInitially: Bool = true
+    ) -> PasswordChangeConfiguration? {
+        let currentPasswordField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        let newPasswordField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        let confirmField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        let saveCheckbox = NSButton(checkboxWithTitle: "Save new password in Keychain for Touch ID unlock on this Mac", target: nil, action: nil)
+        saveCheckbox.state = savePasswordInitially ? .on : .off
+
+        let stack = NSStackView(views: [
+            labelField("Change the password for \(libraryName)."),
+            fieldRow(label: "Current", field: currentPasswordField),
+            fieldRow(label: "New", field: newPasswordField),
+            fieldRow(label: "Confirm", field: confirmField),
+            saveCheckbox
+        ])
+        stack.orientation = .vertical
+        stack.spacing = 10
+        stack.alignment = .leading
+
+        guard runFormPanel(
+            title: "Change Library Password",
+            message: "DocNest will update the encrypted sparsebundle password for this library.",
+            confirmTitle: "Change Password",
+            content: stack,
+            initialFirstResponder: currentPasswordField
+        ) else {
+            return nil
+        }
+
+        let currentPassword = currentPasswordField.stringValue
+        let newPassword = newPasswordField.stringValue
+        let confirmation = confirmField.stringValue
+
+        guard !currentPassword.isEmpty, !newPassword.isEmpty else {
+            NSAlert(error: Error.invalidPassword).runModal()
+            return promptForPasswordChange(
+                libraryName: libraryName,
+                savePasswordInitially: saveCheckbox.state == .on
+            )
+        }
+
+        guard newPassword == confirmation else {
+            NSAlert(error: Error.passwordMismatch).runModal()
+            return promptForPasswordChange(
+                libraryName: libraryName,
+                savePasswordInitially: saveCheckbox.state == .on
+            )
+        }
+
+        guard currentPassword != newPassword else {
+            NSAlert(error: Error.newPasswordMatchesCurrent).runModal()
+            return promptForPasswordChange(
+                libraryName: libraryName,
+                savePasswordInitially: saveCheckbox.state == .on
+            )
+        }
+
+        return PasswordChangeConfiguration(
+            currentPassword: currentPassword,
+            newPassword: newPassword,
             savePasswordInKeychain: saveCheckbox.state == .on
         )
     }
@@ -203,6 +284,22 @@ enum LibraryDiskImageService {
 
     static func detach(_ mountedVolume: MountedVolume) throws {
         _ = try runHdiutil(arguments: ["detach", mountedVolume.deviceEntry, "-force"])
+    }
+
+    static func changePassword(
+        forSparsebundle imageURL: URL,
+        currentPassword: String,
+        newPassword: String
+    ) throws {
+        _ = try runHdiutil(
+            arguments: [
+                "chpass",
+                imageURL.path,
+                "-oldstdinpass",
+                "-newstdinpass"
+            ],
+            stdin: currentPassword + "\n" + newPassword + "\n"
+        )
     }
 
     static func findMountedVolume(for imageURL: URL) throws -> MountedVolume? {

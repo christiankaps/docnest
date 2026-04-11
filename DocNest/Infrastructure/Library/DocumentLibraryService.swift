@@ -151,6 +151,10 @@ struct LibraryLockFile: Codable {
 }
 
 enum DocumentLibraryService {
+    struct PasswordChangeResult {
+        let keychainWarning: String?
+    }
+
     static let packageExtension = "docnestlibrary"
     static let currentFormatVersion = 2
     static let currentImageFormatVersion = 1
@@ -409,6 +413,43 @@ enum DocumentLibraryService {
         try LibraryDiskImageService.detach(mounted)
     }
 
+    static func changeEncryptedLibraryPassword(
+        at url: URL,
+        currentPassword: String,
+        newPassword: String,
+        savePasswordInKeychain: Bool
+    ) throws -> PasswordChangeResult {
+        let libraryURL = normalizedLibraryURL(from: url)
+        let manifest = try readManifest(for: libraryURL)
+        guard manifest.storageMode == .encryptedSparsebundle else {
+            return PasswordChangeResult(keychainWarning: nil)
+        }
+
+        let imageURL = sparsebundleURL(for: libraryURL, manifest: manifest)
+        if try LibraryDiskImageService.findMountedVolume(for: imageURL) != nil {
+            throw LibraryDiskImageService.Error.mountedElsewhere
+        }
+
+        try LibraryDiskImageService.changePassword(
+            forSparsebundle: imageURL,
+            currentPassword: currentPassword,
+            newPassword: newPassword
+        )
+
+        do {
+            if savePasswordInKeychain {
+                try LibraryDiskImageService.savePasswordInKeychain(newPassword, libraryID: manifest.libraryID)
+            } else {
+                try LibraryDiskImageService.deletePasswordFromKeychain(libraryID: manifest.libraryID)
+            }
+            return PasswordChangeResult(keychainWarning: nil)
+        } catch {
+            return PasswordChangeResult(
+                keychainWarning: "The library password was changed, but the Keychain entry could not be updated automatically."
+            )
+        }
+    }
+
     static func repairLibraryPackageIfNeeded(at url: URL) throws -> LibraryRepairResult {
         let libraryURL = normalizedLibraryURL(from: url)
         var actions: [LibraryRepairAction] = []
@@ -525,13 +566,21 @@ enum DocumentLibraryService {
             guard let password else {
                 throw ValidationError.passwordRequired
             }
+            let existingMountedVolume = try LibraryDiskImageService.findMountedVolume(for: imageURL)
             let mounted = try LibraryDiskImageService.attachSparsebundle(at: imageURL, password: password)
             let wrapped = MountedLibraryVolume(
                 imageURL: mounted.imageURL,
                 mountPointURL: mounted.mountPointURL,
                 deviceEntry: mounted.deviceEntry
             )
-            try validateMountedDataRoot(at: wrapped.mountPointURL)
+            do {
+                try validateMountedDataRoot(at: wrapped.mountPointURL)
+            } catch {
+                if existingMountedVolume == nil {
+                    try? LibraryDiskImageService.detach(mounted)
+                }
+                throw error
+            }
             return LibraryAccessSession(
                 packageURL: accessSession.packageURL,
                 dataRootURL: wrapped.mountPointURL,
