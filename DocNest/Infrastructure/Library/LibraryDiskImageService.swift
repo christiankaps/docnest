@@ -1,7 +1,20 @@
 import AppKit
 import Foundation
 import LocalAuthentication
+import ObjectiveC
 import Security
+
+private final class ModalActionTarget: NSObject {
+    let handler: () -> Void
+
+    init(handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    @objc func performAction(_ sender: Any?) {
+        handler()
+    }
+}
 
 enum LibraryDiskImageService {
     struct MountedVolume: Equatable {
@@ -60,14 +73,13 @@ enum LibraryDiskImageService {
         stack.spacing = 10
         stack.alignment = .leading
 
-        let alert = NSAlert()
-        alert.messageText = "Create Encrypted Library"
-        alert.informativeText = "The library will use a macOS-encrypted sparsebundle."
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
-        alert.accessoryView = accessoryContainer(for: stack)
-
-        guard alert.runModal() == .alertFirstButtonReturn else {
+        guard runFormPanel(
+            title: "Create Encrypted Library",
+            message: "The library will use a macOS-encrypted sparsebundle.",
+            confirmTitle: "Create",
+            content: stack,
+            initialFirstResponder: passwordField
+        ) else {
             return nil
         }
 
@@ -104,14 +116,13 @@ enum LibraryDiskImageService {
         stack.spacing = 10
         stack.alignment = .leading
 
-        let alert = NSAlert()
-        alert.messageText = "Unlock Encrypted Library"
-        alert.informativeText = "DocNest needs the library password to mount the encrypted sparsebundle."
-        alert.addButton(withTitle: "Unlock")
-        alert.addButton(withTitle: "Cancel")
-        alert.accessoryView = accessoryContainer(for: stack)
-
-        guard alert.runModal() == .alertFirstButtonReturn else {
+        guard runFormPanel(
+            title: "Unlock Encrypted Library",
+            message: "DocNest needs the library password to mount the encrypted sparsebundle.",
+            confirmTitle: "Unlock",
+            content: stack,
+            initialFirstResponder: passwordField
+        ) else {
             return nil
         }
 
@@ -358,18 +369,115 @@ enum LibraryDiskImageService {
     private static func accessoryContainer(for content: NSStackView) -> NSView {
         content.translatesAutoresizingMaskIntoConstraints = false
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: 1))
-        container.translatesAutoresizingMaskIntoConstraints = false
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: 160))
         container.addSubview(content)
 
         NSLayoutConstraint.activate([
-            container.widthAnchor.constraint(equalToConstant: 380),
             content.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             content.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             content.topAnchor.constraint(equalTo: container.topAnchor),
             content.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
 
+        container.layoutSubtreeIfNeeded()
+        let fittingSize = container.fittingSize
+        container.frame = NSRect(origin: .zero, size: fittingSize)
+
         return container
+    }
+
+    @MainActor
+    private static func runFormPanel(
+        title: String,
+        message: String,
+        confirmTitle: String,
+        content: NSStackView,
+        initialFirstResponder: NSView?
+    ) -> Bool {
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = .systemFont(ofSize: 20, weight: .semibold)
+
+        let messageLabel = NSTextField(labelWithString: message)
+        messageLabel.lineBreakMode = .byWordWrapping
+        messageLabel.maximumNumberOfLines = 0
+        messageLabel.textColor = .secondaryLabelColor
+        messageLabel.preferredMaxLayoutWidth = 420
+
+        let cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
+        cancelButton.keyEquivalent = "\u{1b}"
+        cancelButton.bezelStyle = .rounded
+
+        let confirmButton = NSButton(title: confirmTitle, target: nil, action: nil)
+        confirmButton.keyEquivalent = "\r"
+        confirmButton.bezelStyle = .rounded
+
+        let buttonRow = NSStackView(views: [cancelButton, confirmButton])
+        buttonRow.orientation = .horizontal
+        buttonRow.spacing = 8
+        buttonRow.alignment = .centerY
+        buttonRow.distribution = .gravityAreas
+        buttonRow.setHuggingPriority(.required, for: .vertical)
+
+        let rootStack = NSStackView(views: [titleLabel, messageLabel, content, buttonRow])
+        rootStack.orientation = .vertical
+        rootStack.spacing = 14
+        rootStack.alignment = .leading
+        rootStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 220))
+        container.addSubview(rootStack)
+
+        NSLayoutConstraint.activate([
+            rootStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 24),
+            rootStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -24),
+            rootStack.topAnchor.constraint(equalTo: container.topAnchor, constant: 24),
+            rootStack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -20),
+            content.widthAnchor.constraint(equalToConstant: 412)
+        ])
+
+        container.layoutSubtreeIfNeeded()
+        let fittingSize = container.fittingSize
+        container.frame = NSRect(origin: .zero, size: fittingSize)
+
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: fittingSize),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = title
+        panel.isReleasedWhenClosed = false
+        panel.contentView = container
+        panel.standardWindowButton(.zoomButton)?.isHidden = true
+        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.center()
+
+        var result = false
+        let confirmTarget = ModalActionTarget {
+            result = true
+            NSApp.stopModal(withCode: .OK)
+            panel.orderOut(nil)
+        }
+        let cancelTarget = ModalActionTarget {
+            result = false
+            NSApp.stopModal(withCode: .cancel)
+            panel.orderOut(nil)
+        }
+
+        confirmButton.target = confirmTarget
+        confirmButton.action = #selector(ModalActionTarget.performAction(_:))
+        cancelButton.target = cancelTarget
+        cancelButton.action = #selector(ModalActionTarget.performAction(_:))
+
+        objc_setAssociatedObject(panel, "confirmTarget", confirmTarget, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        objc_setAssociatedObject(panel, "cancelTarget", cancelTarget, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+        if let initialFirstResponder {
+            panel.makeFirstResponder(initialFirstResponder)
+        }
+        _ = NSApp.runModal(for: panel)
+        return result
     }
 }
