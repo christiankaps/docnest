@@ -4,7 +4,7 @@ import PDFKit
 @MainActor
 @Observable
 final class ThumbnailCache {
-    private(set) var loadedThumbnails: [String: NSImage] = [:]
+    private(set) var readyThumbnailKeys: Set<String> = []
     private let backingCache = NSCache<NSString, NSImage>()
     private var inFlightTasks: [String: Task<Void, Never>] = [:]
     private let countLimit: Int
@@ -15,18 +15,17 @@ final class ThumbnailCache {
     }
 
     /// Returns a cached thumbnail immediately, or `nil` while kicking off an
-    /// asynchronous load. The `loadedThumbnails` dictionary is `@Observable`-tracked,
+    /// asynchronous load. The `readyThumbnailKeys` set is `@Observable`-tracked,
     /// so the calling view will re-render once the thumbnail becomes available.
     func thumbnail(for storedFilePath: String, libraryURL: URL, size: CGSize) -> NSImage? {
         let key = cacheKey(storedFilePath: storedFilePath, size: size)
 
-        if let image = loadedThumbnails[key] {
+        if let image = backingCache.object(forKey: key as NSString) {
             return image
         }
 
-        if let image = backingCache.object(forKey: key as NSString) {
-            loadedThumbnails[key] = image
-            return image
+        if readyThumbnailKeys.contains(key) {
+            readyThumbnailKeys.remove(key)
         }
 
         loadThumbnailAsync(storedFilePath: storedFilePath, libraryURL: libraryURL, size: size, key: key)
@@ -38,16 +37,6 @@ final class ThumbnailCache {
             task.cancel()
         }
         inFlightTasks.removeAll()
-    }
-
-    private func pruneStaleEntries() {
-        guard loadedThumbnails.count > countLimit else { return }
-        let keysToRemove = loadedThumbnails.keys.filter { key in
-            backingCache.object(forKey: key as NSString) == nil
-        }
-        for key in keysToRemove {
-            loadedThumbnails.removeValue(forKey: key)
-        }
     }
 
     private func loadThumbnailAsync(storedFilePath: String, libraryURL: URL, size: CGSize, key: String) {
@@ -74,8 +63,7 @@ final class ThumbnailCache {
                 guard let self else { return }
                 guard let cachedImage = NSImage(data: imageData) else { return }
                 self.backingCache.setObject(cachedImage, forKey: key as NSString)
-                self.loadedThumbnails[key] = cachedImage
-                self.pruneStaleEntries()
+                self.readyThumbnailKeys.insert(key)
             }
         }
     }

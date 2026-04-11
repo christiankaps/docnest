@@ -110,11 +110,12 @@ final class DocNestTests: XCTestCase {
             try? FileManager.default.removeItem(at: tempRoot)
         }
 
-        let createdLibraryURL = try DocumentLibraryService.createEncryptedLibrary(
+        let createdLibrary = try DocumentLibraryService.createEncryptedLibrary(
             at: libraryURL,
             password: password,
             savePasswordInKeychain: false
         )
+        let createdLibraryURL = createdLibrary.libraryURL
         let (_, manifest) = try DocumentLibraryService.validateLibrary(at: createdLibraryURL)
 
         XCTAssertEqual(manifest.storageMode, .encryptedSparsebundle)

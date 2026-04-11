@@ -149,7 +149,9 @@ enum ImportPDFDocumentsUseCase {
         var importedStoredPaths: [String] = []
         var duplicates: [ImportPDFDocumentsResult.Duplicate] = []
         var unsupportedFiles: [ImportPDFDocumentsResult.Unsupported] = []
-        var batchHashes: Set<String> = []
+        let knownContentHashesSeed = await existingContentHashes(in: libraryURL)
+            .union(pendingContentHashes(using: modelContext))
+        var knownContentHashes = knownContentHashesSeed
 
         for (index, url) in resolvedURLs.enumerated() {
             defer { onProgress?(index + 1, resolvedURLs.count) }
@@ -182,7 +184,7 @@ enum ImportPDFDocumentsUseCase {
                 let importedAt = Date.now
                 let metadata = try await importMetadata(for: url)
 
-                if batchHashes.contains(metadata.contentHash) || documentExists(withContentHash: metadata.contentHash, using: modelContext) {
+                if knownContentHashes.contains(metadata.contentHash) {
                     duplicates.append(.init(fileName: url.lastPathComponent))
                     continue
                 }
@@ -199,7 +201,7 @@ enum ImportPDFDocumentsUseCase {
                 if let storedFilePath = record.storedFilePath {
                     importedStoredPaths.append(storedFilePath)
                 }
-                batchHashes.insert(metadata.contentHash)
+                knownContentHashes.insert(metadata.contentHash)
             } catch {
                 failures.append(
                     .init(
@@ -357,12 +359,20 @@ enum ImportPDFDocumentsUseCase {
         return record
     }
 
-    private static func documentExists(withContentHash contentHash: String, using modelContext: ModelContext) -> Bool {
-        let predicate = #Predicate<DocumentRecord> { document in
-            document.contentHash == contentHash
-        }
-        let descriptor = FetchDescriptor<DocumentRecord>(predicate: predicate)
-        return (try? modelContext.fetchCount(descriptor)) ?? 0 > 0
+    private static func existingContentHashes(in libraryURL: URL) async -> Set<String> {
+        await (try? Task.detached(priority: .utility) {
+            let modelContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
+            let modelContext = ModelContext(modelContainer)
+            let documents = try modelContext.fetch(FetchDescriptor<DocumentRecord>())
+            return Set(documents.lazy.map(\.contentHash))
+        }.value) ?? Set<String>()
+    }
+
+    @MainActor
+    private static func pendingContentHashes(using modelContext: ModelContext) -> Set<String> {
+        let stagedDocuments = (modelContext.insertedModelsArray + modelContext.changedModelsArray)
+            .compactMap { $0 as? DocumentRecord }
+        return Set(stagedDocuments.lazy.map(\.contentHash))
     }
 
     private static func importMetadata(for url: URL) async throws -> ImportMetadata {

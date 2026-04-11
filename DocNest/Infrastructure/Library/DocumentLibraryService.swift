@@ -155,6 +155,15 @@ enum DocumentLibraryService {
         let keychainWarning: String?
     }
 
+    struct EncryptedLibraryCreationResult {
+        let libraryURL: URL
+        let keychainWarning: String?
+    }
+
+    struct EncryptionConversionResult {
+        let warning: String?
+    }
+
     static let packageExtension = "docnestlibrary"
     static let currentFormatVersion = 2
     static let currentImageFormatVersion = 1
@@ -163,6 +172,7 @@ enum DocumentLibraryService {
         let imageURL: URL
         let mountPointURL: URL
         let deviceEntry: String
+        let ownedByCurrentSession: Bool
     }
 
     struct RuntimeLocations: Equatable {
@@ -327,7 +337,7 @@ enum DocumentLibraryService {
         at url: URL,
         password: String,
         savePasswordInKeychain: Bool
-    ) throws -> URL {
+    ) throws -> EncryptedLibraryCreationResult {
         let libraryURL = normalizedLibraryURL(from: url)
         let volumeName = libraryURL.deletingPathExtension().lastPathComponent
         let manifest = DocumentLibraryManifest(
@@ -340,40 +350,53 @@ enum DocumentLibraryService {
             imageFormatVersion: currentImageFormatVersion
         )
 
-        try FileManager.default.createDirectory(at: libraryURL, withIntermediateDirectories: true)
-        try createDirectories(encryptedOuterDirectories, in: libraryURL)
-        try writeManifest(manifest, for: libraryURL)
+        do {
+            try FileManager.default.createDirectory(at: libraryURL, withIntermediateDirectories: true)
+            try createDirectories(encryptedOuterDirectories, in: libraryURL)
 
-        let imageURL = sparsebundleURL(for: libraryURL, manifest: manifest)
-        try LibraryDiskImageService.createEncryptedSparsebundle(
-            at: imageURL,
-            volumeName: volumeName,
-            password: password
-        )
+            let imageURL = sparsebundleURL(for: libraryURL, manifest: manifest)
+            try LibraryDiskImageService.createEncryptedSparsebundle(
+                at: imageURL,
+                volumeName: volumeName,
+                password: password
+            )
 
-        let attached = try LibraryDiskImageService.attachSparsebundle(at: imageURL, password: password)
-        defer {
-            try? LibraryDiskImageService.detach(attached)
+            let attached = try LibraryDiskImageService.attachSparsebundle(at: imageURL, password: password)
+            defer {
+                try? LibraryDiskImageService.detach(attached)
+            }
+
+            try createDirectories(encryptedInnerDirectories, in: attached.mountPointURL)
+            try writeManifest(manifest, for: libraryURL)
+        } catch {
+            try? FileManager.default.removeItem(at: libraryURL)
+            throw error
         }
 
-        try createDirectories(encryptedInnerDirectories, in: attached.mountPointURL)
-
-        if savePasswordInKeychain {
-            try LibraryDiskImageService.savePasswordInKeychain(password, libraryID: manifest.libraryID)
+        do {
+            if savePasswordInKeychain {
+                try LibraryDiskImageService.savePasswordInKeychain(password, libraryID: manifest.libraryID)
+            } else {
+                try LibraryDiskImageService.deletePasswordFromKeychain(libraryID: manifest.libraryID)
+            }
+            return EncryptedLibraryCreationResult(libraryURL: libraryURL, keychainWarning: nil)
+        } catch {
+            return EncryptedLibraryCreationResult(
+                libraryURL: libraryURL,
+                keychainWarning: "The encrypted library was created successfully, but the Keychain entry could not be updated automatically."
+            )
         }
-
-        return libraryURL
     }
 
     static func convertLibraryToEncrypted(
         at url: URL,
         password: String,
         savePasswordInKeychain: Bool
-    ) throws {
+    ) throws -> EncryptionConversionResult {
         let libraryURL = normalizedLibraryURL(from: url)
         let manifest = try readManifest(for: libraryURL)
         guard manifest.storageMode == .plainPackage else {
-            return
+            return EncryptionConversionResult(warning: nil)
         }
 
         let updatedManifest = DocumentLibraryManifest(
@@ -396,21 +419,53 @@ enum DocumentLibraryService {
         )
 
         let mounted = try LibraryDiskImageService.attachSparsebundle(at: imageURL, password: password)
+        var cleanupWarning: String?
         do {
             try createDirectories(encryptedInnerDirectories, in: mounted.mountPointURL)
             try copyPlainLibraryContents(from: libraryURL, to: mounted.mountPointURL)
             try validateMountedDataRoot(at: mounted.mountPointURL)
-            try writeManifest(updatedManifest, for: libraryURL)
-            try removePlaintextPayloads(from: libraryURL)
-            if savePasswordInKeychain {
-                try LibraryDiskImageService.savePasswordInKeychain(password, libraryID: updatedManifest.libraryID)
+            let stagedPayloads = try stagePlaintextPayloadsForRemoval(from: libraryURL)
+            do {
+                try writeManifest(updatedManifest, for: libraryURL)
+            } catch {
+                try restoreStagedPlaintextPayloads(stagedPayloads, to: libraryURL)
+                throw error
+            }
+            do {
+                try discardStagedPlaintextPayloads(stagedPayloads)
+            } catch {
+                cleanupWarning = "The library was converted successfully, but a temporary plaintext backup could not be deleted automatically."
             }
         } catch {
-            try? LibraryDiskImageService.detach(mounted)
+            try? LibraryDiskImageService.detach(mounted, force: true)
+            try? FileManager.default.removeItem(at: imageURL)
             throw error
         }
 
-        try LibraryDiskImageService.detach(mounted)
+        do {
+            try LibraryDiskImageService.detach(mounted)
+        } catch {
+            cleanupWarning = combineWarnings(
+                cleanupWarning,
+                "The library was converted successfully, but DocNest could not detach the temporary encrypted volume cleanly."
+            )
+        }
+
+        do {
+            if savePasswordInKeychain {
+                try LibraryDiskImageService.savePasswordInKeychain(password, libraryID: updatedManifest.libraryID)
+            } else {
+                try LibraryDiskImageService.deletePasswordFromKeychain(libraryID: updatedManifest.libraryID)
+            }
+            return EncryptionConversionResult(warning: cleanupWarning)
+        } catch {
+            return EncryptionConversionResult(
+                warning: combineWarnings(
+                    cleanupWarning,
+                    "The library was converted successfully, but the Keychain entry could not be updated automatically."
+                )
+            )
+        }
     }
 
     static func changeEncryptedLibraryPassword(
@@ -571,13 +626,14 @@ enum DocumentLibraryService {
             let wrapped = MountedLibraryVolume(
                 imageURL: mounted.imageURL,
                 mountPointURL: mounted.mountPointURL,
-                deviceEntry: mounted.deviceEntry
+                deviceEntry: mounted.deviceEntry,
+                ownedByCurrentSession: existingMountedVolume == nil
             )
             do {
                 try validateMountedDataRoot(at: wrapped.mountPointURL)
             } catch {
-                if existingMountedVolume == nil {
-                    try? LibraryDiskImageService.detach(mounted)
+                if wrapped.ownedByCurrentSession {
+                    try? LibraryDiskImageService.detach(mounted, force: true)
                 }
                 throw error
             }
@@ -975,14 +1031,85 @@ enum DocumentLibraryService {
         }
     }
 
-    private static func removePlaintextPayloads(from packageURL: URL) throws {
+    private static func stagePlaintextPayloadsForRemoval(from packageURL: URL) throws -> URL {
         let fileManager = FileManager.default
+        let backupRoot = packageURL.deletingLastPathComponent()
+            .appendingPathComponent(".DocNestConversionBackup-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: backupRoot, withIntermediateDirectories: true)
+        var movedDirectories: [String] = []
+
+        do {
+            for directory in ["Metadata", "Originals", "Previews"] {
+                let source = packageURL.appendingPathComponent(directory, isDirectory: true)
+                let backup = backupRoot.appendingPathComponent(directory, isDirectory: true)
+                if fileManager.fileExists(atPath: source.path) {
+                    try fileManager.moveItem(at: source, to: backup)
+                    movedDirectories.append(directory)
+                }
+            }
+            return backupRoot
+        } catch {
+            for directory in movedDirectories.reversed() {
+                let backup = backupRoot.appendingPathComponent(directory, isDirectory: true)
+                let source = packageURL.appendingPathComponent(directory, isDirectory: true)
+                if fileManager.fileExists(atPath: source.path) {
+                    try? fileManager.removeItem(at: source)
+                }
+                if fileManager.fileExists(atPath: backup.path) {
+                    try fileManager.moveItem(at: backup, to: source)
+                }
+            }
+            if fileManager.fileExists(atPath: backupRoot.path) {
+                try? fileManager.removeItem(at: backupRoot)
+            }
+            throw error
+        }
+    }
+
+    private static func restoreStagedPlaintextPayloads(_ backupRoot: URL, to packageURL: URL) throws {
+        let fileManager = FileManager.default
+        var restoredDirectories: [String] = []
         for directory in ["Metadata", "Originals", "Previews"] {
-            let target = packageURL.appendingPathComponent(directory, isDirectory: true)
-            if fileManager.fileExists(atPath: target.path) {
-                try fileManager.removeItem(at: target)
+            let source = backupRoot.appendingPathComponent(directory, isDirectory: true)
+            let destination = packageURL.appendingPathComponent(directory, isDirectory: true)
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            if fileManager.fileExists(atPath: source.path) {
+                do {
+                    try fileManager.moveItem(at: source, to: destination)
+                    restoredDirectories.append(directory)
+                } catch {
+                    for restoredDirectory in restoredDirectories.reversed() {
+                        let restoredSource = packageURL.appendingPathComponent(restoredDirectory, isDirectory: true)
+                        let restoredBackup = backupRoot.appendingPathComponent(restoredDirectory, isDirectory: true)
+                        if fileManager.fileExists(atPath: restoredBackup.path) {
+                            try? fileManager.removeItem(at: restoredBackup)
+                        }
+                        if fileManager.fileExists(atPath: restoredSource.path) {
+                            try? fileManager.moveItem(at: restoredSource, to: restoredBackup)
+                        }
+                    }
+                    throw error
+                }
             }
         }
+        if fileManager.fileExists(atPath: backupRoot.path) {
+            try fileManager.removeItem(at: backupRoot)
+        }
+    }
+
+    private static func discardStagedPlaintextPayloads(_ backupRoot: URL) throws {
+        if FileManager.default.fileExists(atPath: backupRoot.path) {
+            try FileManager.default.removeItem(at: backupRoot)
+        }
+    }
+
+    private static func combineWarnings(_ first: String?, _ second: String?) -> String? {
+        let combined = [first, second]
+            .compactMap { $0 }
+            .joined(separator: "\n\n")
+        return combined.isEmpty ? nil : combined
     }
 
     private static func hashFile(at url: URL) throws -> String {

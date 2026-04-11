@@ -282,8 +282,12 @@ enum LibraryDiskImageService {
         throw Error.missingMountPoint
     }
 
-    static func detach(_ mountedVolume: MountedVolume) throws {
-        _ = try runHdiutil(arguments: ["detach", mountedVolume.deviceEntry, "-force"])
+    static func detach(_ mountedVolume: MountedVolume, force: Bool = false) throws {
+        var arguments = ["detach", mountedVolume.deviceEntry]
+        if force {
+            arguments.append("-force")
+        }
+        _ = try runHdiutil(arguments: arguments)
     }
 
     static func changePassword(
@@ -299,6 +303,25 @@ enum LibraryDiskImageService {
                 "-newstdinpass"
             ],
             stdin: currentPassword + "\n" + newPassword + "\n"
+        )
+    }
+
+    static func validatePasswordChange(
+        forSparsebundle imageURL: URL,
+        currentPassword: String,
+        newPassword: String
+    ) throws {
+        let clonedImageURL = imageURL.deletingLastPathComponent()
+            .appendingPathComponent(".PasswordValidation-\(UUID().uuidString).sparsebundle", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: clonedImageURL)
+        }
+
+        try FileManager.default.copyItem(at: imageURL, to: clonedImageURL)
+        try changePassword(
+            forSparsebundle: clonedImageURL,
+            currentPassword: currentPassword,
+            newPassword: newPassword
         )
     }
 

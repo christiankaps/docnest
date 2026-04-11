@@ -678,6 +678,17 @@ final class LibrarySessionController: ObservableObject {
     private var activeLibraryAccessSession: DocumentLibraryService.LibraryAccessSession?
     private var integrityRefreshTask: Task<Void, Never>?
 
+    private enum SessionCloseError: LocalizedError {
+        case encryptedLibraryBusy
+
+        var errorDescription: String? {
+            switch self {
+            case .encryptedLibraryBusy:
+                return "The encrypted library is still in use by another app or Finder window. Close external access and try again."
+            }
+        }
+    }
+
     var isEncryptedLibraryOpen: Bool {
         selectedLibraryManifest?.storageMode == .encryptedSparsebundle
     }
@@ -730,12 +741,25 @@ final class LibrarySessionController: ObservableObject {
         }
 
         do {
-            let libraryURL = try DocumentLibraryService.createEncryptedLibrary(
+            let result = try DocumentLibraryService.createEncryptedLibrary(
                 at: url,
                 password: configuration.password,
                 savePasswordInKeychain: configuration.savePasswordInKeychain
             )
-            _ = openValidatedLibrary(DocumentLibraryService.accessLibrary(at: libraryURL))
+            let opened = openValidatedLibrary(
+                DocumentLibraryService.accessLibrary(at: result.libraryURL),
+                preferredPassword: configuration.password
+            )
+            guard opened else {
+                return
+            }
+            if let warning = result.keychainWarning {
+                let alert = NSAlert()
+                alert.messageText = "Encrypted Library Created"
+                alert.informativeText = warning
+                alert.alertStyle = .informational
+                alert.runModal()
+            }
         } catch {
             libraryErrorMessage = error.localizedDescription
         }
@@ -753,21 +777,37 @@ final class LibrarySessionController: ObservableObject {
         _ = openValidatedLibrary(DocumentLibraryService.accessLibrary(at: url))
     }
 
-    func closeLibrary() {
+    @discardableResult
+    func closeLibrary() -> Bool {
+        do {
+            try closeLibraryOrThrow()
+            return true
+        } catch {
+            libraryErrorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    private func closeLibraryOrThrow() throws {
+        if let mountedVolume = activeLibraryAccessSession?.mountedVolume,
+           mountedVolume.ownedByCurrentSession {
+            do {
+                try LibraryDiskImageService.detach(
+                    .init(
+                        imageURL: mountedVolume.imageURL,
+                        mountPointURL: mountedVolume.mountPointURL,
+                        deviceEntry: mountedVolume.deviceEntry
+                    )
+                )
+            } catch {
+                throw SessionCloseError.encryptedLibraryBusy
+            }
+        }
         integrityRefreshTask?.cancel()
         integrityRefreshTask = nil
         stopLockHeartbeat()
         if let url = selectedLibraryURL {
             DocumentLibraryService.releaseLock(for: url)
-        }
-        if let mountedVolume = activeLibraryAccessSession?.mountedVolume {
-            try? LibraryDiskImageService.detach(
-                .init(
-                    imageURL: mountedVolume.imageURL,
-                    mountPointURL: mountedVolume.mountPointURL,
-                    deviceEntry: mountedVolume.deviceEntry
-                )
-            )
         }
         if let accessSession = activeLibraryAccessSession,
            accessSession.startedAccessingSecurityScope {
@@ -781,7 +821,7 @@ final class LibrarySessionController: ObservableObject {
     }
 
     func lockLibrary() {
-        closeLibrary()
+        _ = closeLibrary()
     }
 
     func changeLibraryPassword() {
@@ -798,13 +838,30 @@ final class LibrarySessionController: ObservableObject {
         }
 
         do {
+            try LibraryDiskImageService.validatePasswordChange(
+                forSparsebundle: packageURL
+                    .appendingPathComponent(
+                        manifest.sparsebundleRelativePath ?? DocumentLibraryService.defaultSparsebundleRelativePath,
+                        isDirectory: true
+                    ),
+                currentPassword: configuration.currentPassword,
+                newPassword: configuration.newPassword
+            )
+        } catch {
+            libraryErrorMessage = error.localizedDescription
+            return
+        }
+
+        do {
             try modelContainer?.mainContext.save()
         } catch {
             libraryErrorMessage = error.localizedDescription
             return
         }
 
-        closeLibrary()
+        guard closeLibrary() else {
+            return
+        }
 
         do {
             let result = try DocumentLibraryService.changeEncryptedLibraryPassword(
@@ -829,6 +886,14 @@ final class LibrarySessionController: ObservableObject {
                 alert.runModal()
             }
         } catch {
+            let restored = openValidatedLibrary(
+                DocumentLibraryService.accessLibrary(at: packageURL),
+                preferredPassword: configuration.currentPassword
+            )
+            if !restored {
+                libraryErrorMessage = "DocNest could not change the library password and could not reopen the library automatically. Reopen it manually and verify the current password."
+                return
+            }
             libraryErrorMessage = error.localizedDescription
         }
     }
@@ -853,15 +918,30 @@ final class LibrarySessionController: ObservableObject {
             return
         }
 
-        closeLibrary()
-
         do {
-            try DocumentLibraryService.convertLibraryToEncrypted(
+            let result = try DocumentLibraryService.convertLibraryToEncrypted(
                 at: packageURL,
                 password: configuration.password,
                 savePasswordInKeychain: configuration.savePasswordInKeychain
             )
-            _ = openValidatedLibrary(DocumentLibraryService.accessLibrary(at: packageURL))
+            guard closeLibrary() else {
+                return
+            }
+            let reopened = openValidatedLibrary(
+                DocumentLibraryService.accessLibrary(at: packageURL),
+                preferredPassword: configuration.password
+            )
+            guard reopened else {
+                libraryErrorMessage = "The library was converted to encrypted storage, but DocNest could not reopen it automatically. Reopen it with the new password."
+                return
+            }
+            if let warning = result.warning {
+                let alert = NSAlert()
+                alert.messageText = "Library Converted"
+                alert.informativeText = warning
+                alert.alertStyle = .informational
+                alert.runModal()
+            }
         } catch {
             libraryErrorMessage = error.localizedDescription
         }
@@ -872,11 +952,13 @@ final class LibrarySessionController: ObservableObject {
         preferredPassword: String? = nil
     ) -> Bool {
         var openedSession: DocumentLibraryService.LibraryAccessSession?
+        var lockedLibraryURL: URL?
         do {
             let packageRepair = try DocumentLibraryService.repairLibraryPackageIfNeeded(at: accessSession.packageURL)
             let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: accessSession.packageURL)
             let migration = try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
             try DocumentLibraryService.acquireLock(for: validatedURL)
+            lockedLibraryURL = validatedURL
             let migratedManifest = DocumentLibraryManifest(
                 formatVersion: migration.toFormatVersion,
                 createdAt: manifest.createdAt,
@@ -904,14 +986,19 @@ final class LibrarySessionController: ObservableObject {
             )
             return true
         } catch {
-            if let mountedVolume = openedSession?.mountedVolume {
+            if let mountedVolume = openedSession?.mountedVolume,
+               mountedVolume.ownedByCurrentSession {
                 try? LibraryDiskImageService.detach(
                     .init(
                         imageURL: mountedVolume.imageURL,
                         mountPointURL: mountedVolume.mountPointURL,
                         deviceEntry: mountedVolume.deviceEntry
-                    )
+                    ),
+                    force: true
                 )
+            }
+            if let lockedLibraryURL {
+                DocumentLibraryService.releaseLock(for: lockedLibraryURL)
             }
             if openedSession?.startedAccessingSecurityScope == true {
                 openedSession?.packageURL.stopAccessingSecurityScopedResource()
@@ -919,8 +1006,6 @@ final class LibrarySessionController: ObservableObject {
             if accessSession.startedAccessingSecurityScope {
                 accessSession.packageURL.stopAccessingSecurityScopedResource()
             }
-            closeLibrary()
-            DocumentLibraryService.persistLibraryURL(nil)
             libraryErrorMessage = error.localizedDescription
             return false
         }
@@ -932,11 +1017,11 @@ final class LibrarySessionController: ObservableObject {
         migration: LibraryMigrationResult,
         packageRepair: LibraryRepairResult
     ) throws {
+        let container = try DocumentLibraryService.openModelContainer(for: accessSession.dataRootURL)
         if let currentURL = selectedLibraryURL,
            currentURL != accessSession.packageURL {
-            closeLibrary()
+            try closeLibraryOrThrow()
         }
-        let container = try DocumentLibraryService.openModelContainer(for: accessSession.dataRootURL)
         modelContainer = container
         selectedLibraryURL = accessSession.packageURL
         activeLibraryDataURL = accessSession.dataRootURL
