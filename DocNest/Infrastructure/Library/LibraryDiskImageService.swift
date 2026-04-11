@@ -59,14 +59,13 @@ enum LibraryDiskImageService {
         stack.orientation = .vertical
         stack.spacing = 10
         stack.alignment = .leading
-        stack.translatesAutoresizingMaskIntoConstraints = false
 
         let alert = NSAlert()
         alert.messageText = "Create Encrypted Library"
         alert.informativeText = "The library will use a macOS-encrypted sparsebundle."
         alert.addButton(withTitle: "Create")
         alert.addButton(withTitle: "Cancel")
-        alert.accessoryView = stack
+        alert.accessoryView = accessoryContainer(for: stack)
 
         guard alert.runModal() == .alertFirstButtonReturn else {
             return nil
@@ -104,14 +103,13 @@ enum LibraryDiskImageService {
         stack.orientation = .vertical
         stack.spacing = 10
         stack.alignment = .leading
-        stack.translatesAutoresizingMaskIntoConstraints = false
 
         let alert = NSAlert()
         alert.messageText = "Unlock Encrypted Library"
         alert.informativeText = "DocNest needs the library password to mount the encrypted sparsebundle."
         alert.addButton(withTitle: "Unlock")
         alert.addButton(withTitle: "Cancel")
-        alert.accessoryView = stack
+        alert.accessoryView = accessoryContainer(for: stack)
 
         guard alert.runModal() == .alertFirstButtonReturn else {
             return nil
@@ -334,7 +332,7 @@ enum LibraryDiskImageService {
         let label = NSTextField(labelWithString: string)
         label.lineBreakMode = .byWordWrapping
         label.maximumNumberOfLines = 0
-        label.preferredMaxLayoutWidth = 320
+        label.preferredMaxLayoutWidth = 360
         return label
     }
 
@@ -343,11 +341,35 @@ enum LibraryDiskImageService {
         title.alignment = .right
         title.font = .systemFont(ofSize: NSFont.systemFontSize)
         title.setContentHuggingPriority(.required, for: .horizontal)
+        title.setContentCompressionResistancePriority(.required, for: .horizontal)
+        title.widthAnchor.constraint(equalToConstant: 72).isActive = true
+
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.widthAnchor.constraint(equalToConstant: 250).isActive = true
 
         let stack = NSStackView(views: [title, field])
         stack.orientation = .horizontal
         stack.spacing = 8
         stack.alignment = .firstBaseline
+        stack.translatesAutoresizingMaskIntoConstraints = false
         return stack
+    }
+
+    private static func accessoryContainer(for content: NSStackView) -> NSView {
+        content.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: 1))
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(content)
+
+        NSLayoutConstraint.activate([
+            container.widthAnchor.constraint(equalToConstant: 380),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            content.topAnchor.constraint(equalTo: container.topAnchor),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+
+        return container
     }
 }
