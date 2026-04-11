@@ -68,11 +68,13 @@ final class ThumbnailCache {
                   let page = pdfDocument.page(at: 0) else { return }
 
             let nsImage = page.thumbnail(of: NSSize(width: size.width, height: size.height), for: .mediaBox)
+            guard let imageData = nsImage.tiffRepresentation else { return }
 
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.backingCache.setObject(nsImage, forKey: key as NSString)
-                self.loadedThumbnails[key] = nsImage
+                guard let cachedImage = NSImage(data: imageData) else { return }
+                self.backingCache.setObject(cachedImage, forKey: key as NSString)
+                self.loadedThumbnails[key] = cachedImage
                 self.pruneStaleEntries()
             }
         }
