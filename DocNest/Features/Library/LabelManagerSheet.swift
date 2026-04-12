@@ -133,10 +133,26 @@ struct LabelManagerSheet: View {
                 .frame(width: 260)
                 .background(panelSurface)
 
+            Rectangle()
+                .fill(Color.primary.opacity(0.06))
+                .frame(width: 1)
+                .padding(.vertical, 12)
+
             editorPanel
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(panelSurface)
         }
+        .background(
+            Group {
+                if isEmbeddedInSettings {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                } else {
+                    Color.clear
+                }
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: isEmbeddedInSettings ? 0 : 18, style: .continuous))
     }
 
     // MARK: - Header
@@ -203,7 +219,6 @@ struct LabelManagerSheet: View {
                 }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func labelRow(for label: LabelTag) -> some View {
@@ -517,12 +532,18 @@ struct LabelManagerSheet: View {
     }
 
     private var panelSurface: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .overlay(
+        Group {
+            if isEmbeddedInSettings {
+                Color.clear
+            } else {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-            )
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+                    )
+            }
+        }
     }
 
     private func editorContainer<Content: View>(
@@ -533,20 +554,28 @@ struct LabelManagerSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.headline)
+                    .font(.title3.weight(.semibold))
 
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 16)
-            .padding(.top, 16)
+            .padding(.top, isEmbeddedInSettings ? 14 : 16)
             .padding(.bottom, 8)
 
             content()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(
+            Group {
+                if isEmbeddedInSettings {
+                    Color(nsColor: .windowBackgroundColor)
+                } else {
+                    Color.clear
+                }
+            }
+        )
     }
 
     // MARK: - Actions

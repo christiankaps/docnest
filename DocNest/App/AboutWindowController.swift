@@ -570,25 +570,30 @@ private struct AppSettingsRootView: View {
 
     var body: some View {
         ZStack {
-            Rectangle()
-                .fill(.thinMaterial)
+            Color(nsColor: .windowBackgroundColor)
                 .ignoresSafeArea()
 
             if let coordinator = settings.libraryCoordinator,
                let modelContainer = settings.modelContainer {
-                HStack(spacing: 18) {
+                HStack(spacing: 0) {
                     settingsSidebar
                         .frame(width: 220)
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        VStack(alignment: .leading, spacing: 6) {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text(settings.selectedPane.title)
-                                .font(.system(size: 28, weight: .semibold))
+                                .font(.title2.weight(.semibold))
 
                             Text(settings.selectedPane.subtitle)
-                                .font(.subheadline)
+                                .font(.callout)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        .padding(.horizontal, 28)
+                        .padding(.top, 24)
+                        .padding(.bottom, 14)
 
                         Group {
                             switch settings.selectedPane {
@@ -602,18 +607,12 @@ private struct AppSettingsRootView: View {
                                     .modelContainer(modelContainer)
                             }
                         }
+                        .padding(.horizontal, 22)
+                        .padding(.bottom, 22)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(
-                            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                .fill(.regularMaterial)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
-                        )
                     }
+                    .background(Color(nsColor: .windowBackgroundColor))
                 }
-                .padding(24)
             } else {
                 ContentUnavailableView(
                     "No Library Open",
@@ -628,61 +627,56 @@ private struct AppSettingsRootView: View {
     }
 
     private var settingsSidebar: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Settings")
-                    .font(.title2.weight(.semibold))
-
-                Text("Library-specific tools")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
+            List(selection: selectedPaneBinding) {
                 ForEach(AppSettingsPane.allCases) { pane in
-                    Button {
-                        settings.selectedPane = pane
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: pane.systemImage)
-                                .font(.body.weight(.medium))
-                                .frame(width: 18)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(pane.title)
-                                    .font(.body.weight(.medium))
-
-                                Text(pane.shortDescription)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(settings.selectedPane == pane ? Color.accentColor.opacity(0.18) : Color.clear)
-                        )
-                    }
-                    .buttonStyle(.plain)
+                    settingsSidebarRow(for: pane)
+                        .tag(pane)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+                        .listRowBackground(Color.clear)
                 }
             }
-
-            Spacer()
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .safeAreaInset(edge: .top) {
+                Color.clear.frame(height: 8)
+            }
         }
-        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            Rectangle()
                 .fill(.ultraThinMaterial)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+    }
+
+    private var selectedPaneBinding: Binding<AppSettingsPane?> {
+        Binding(
+            get: { settings.selectedPane },
+            set: { if let newValue = $0 { settings.selectedPane = newValue } }
         )
+    }
+
+    private func settingsSidebarRow(for pane: AppSettingsPane) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: pane.systemImage)
+                .font(.body.weight(.medium))
+                .frame(width: 18)
+                .foregroundStyle(settings.selectedPane == pane ? .primary : .secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(pane.title)
+                    .font(.body.weight(.medium))
+
+                Text(pane.shortDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
 

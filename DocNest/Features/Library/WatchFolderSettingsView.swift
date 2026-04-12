@@ -12,8 +12,23 @@ struct WatchFolderSettingsView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(spacing: 18) {
-            header
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Monitored folders import new PDFs automatically.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button {
+                    promptAndAddWatchFolder()
+                } label: {
+                    Label("Add Folder", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
 
             Group {
                 if coordinator.allWatchFolders.isEmpty {
@@ -45,28 +60,22 @@ struct WatchFolderSettingsView: View {
                     .background(settingsPaneSurface)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            HStack {
-                Button {
-                    promptAndAddWatchFolder()
-                } label: {
-                    Label("Add Folder\u{2026}", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
+            if showsDoneButton {
+                HStack {
+                    Spacer()
 
-                Spacer()
-
-                if showsDoneButton {
                     Button("Done") {
                         dismiss()
                     }
                     .keyboardShortcut(.cancelAction)
                 }
+                .padding(.horizontal, 16)
             }
         }
-        .padding(20)
-        .frame(minWidth: 520, minHeight: 420)
+        .padding(.bottom, showsDoneButton ? 16 : 0)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(item: $editorConfig) { config in
             WatchFolderEditorSheet(config: config)
         }
@@ -79,25 +88,9 @@ struct WatchFolderSettingsView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Watch Folders")
-                .font(.title2.weight(.semibold))
-
-            Text("Monitor Finder folders and import new PDFs automatically into the current library.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     private var settingsPaneSurface: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
-            )
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(Color(nsColor: .controlBackgroundColor))
     }
 
     private var errorBinding: Binding<Bool> {
@@ -227,10 +220,6 @@ private struct WatchFolderRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.primary.opacity(0.035))
-        )
         .contentShape(Rectangle())
         .contextMenu {
             Button("Edit\u{2026}") { onEdit() }
