@@ -17,6 +17,13 @@ private final class ModalActionTarget: NSObject {
 }
 
 enum LibraryDiskImageService {
+    enum KeychainPasswordLookupResult {
+        case password(String)
+        case notFound
+        case cancelled
+        case authenticationFailed
+    }
+
     struct MountedVolume: Equatable {
         let imageURL: URL
         let mountPointURL: URL
@@ -380,9 +387,9 @@ enum LibraryDiskImageService {
         }
     }
 
-    static func passwordFromKeychain(libraryID: UUID, prompt: String) throws -> String? {
+    static func passwordFromKeychain(libraryID: UUID, prompt: String) throws -> KeychainPasswordLookupResult {
         let context = LAContext()
-        context.localizedReason = prompt
+        context.interactionNotAllowed = false
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -390,7 +397,8 @@ enum LibraryDiskImageService {
             kSecAttrAccount as String: libraryID.uuidString,
             kSecUseDataProtectionKeychain as String: true,
             kSecReturnData as String: true,
-            kSecUseAuthenticationContext as String: context
+            kSecUseAuthenticationContext as String: context,
+            kSecUseOperationPrompt as String: prompt
         ]
 
         var item: CFTypeRef?
@@ -399,11 +407,15 @@ enum LibraryDiskImageService {
         case errSecSuccess:
             guard let data = item as? Data,
                   let password = String(data: data, encoding: .utf8) else {
-                return nil
+                return .authenticationFailed
             }
-            return password
-        case errSecItemNotFound, errSecUserCanceled, errSecAuthFailed:
-            return nil
+            return .password(password)
+        case errSecItemNotFound:
+            return .notFound
+        case errSecUserCanceled:
+            return .cancelled
+        case errSecAuthFailed, errSecInteractionNotAllowed:
+            return .authenticationFailed
         default:
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
         }

@@ -1161,10 +1161,11 @@ final class LibrarySessionController: ObservableObject {
             )
         }
 
-        if let password = try? LibraryDiskImageService.passwordFromKeychain(
+        switch try LibraryDiskImageService.passwordFromKeychain(
             libraryID: manifest.libraryID,
             prompt: "Unlock \(validatedURL.deletingPathExtension().lastPathComponent)"
         ) {
+        case .password(let password):
             if let opened = try? DocumentLibraryService.createOpenedSession(
                 from: accessSession,
                 manifest: manifest,
@@ -1172,6 +1173,12 @@ final class LibrarySessionController: ObservableObject {
             ) {
                 return opened
             }
+        case .notFound:
+            break
+        case .cancelled:
+            throw LibraryDiskImageService.Error.cancelled
+        case .authenticationFailed:
+            throw LibraryDiskImageService.Error.invalidPassword
         }
 
         guard let configuration = LibraryDiskImageService.promptForUnlockPassword(
