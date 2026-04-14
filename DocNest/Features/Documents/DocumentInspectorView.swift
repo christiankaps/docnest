@@ -129,21 +129,21 @@ struct DocumentInspectorView: View {
             )
             .frame(minHeight: 420, idealHeight: 620)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 10)
+            .padding(.horizontal, 18)
+            .padding(.top, 18)
+            .padding(.bottom, 8)
 
             ScrollView {
                 documentMetadataSection(for: document)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 8)
                     .padding(.bottom, 24)
             }
             .frame(minHeight: 240, idealHeight: 320)
         }
         .navigationTitle("Preview")
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     @ViewBuilder
@@ -299,14 +299,17 @@ struct DocumentInspectorView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Divider()
             labelSection(for: document)
 
+            Divider()
             textExtractionSection(for: document)
 
             if !document.contentHash.isEmpty {
+                Divider()
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Content Hash")
-                        .font(AppTypography.sectionTitle)
+                        .font(AppTypography.sectionLabel)
                     Text(document.contentHash)
                         .font(AppTypography.caption.monospaced())
                         .foregroundStyle(.secondary)
@@ -315,6 +318,7 @@ struct DocumentInspectorView: View {
             }
 
             let resolvedFileURL = originalFileURL(for: document)
+            Divider()
             HStack(spacing: 12) {
                 Button("Open Original") {
                     if let fileURL = resolvedFileURL {
@@ -365,7 +369,7 @@ struct DocumentInspectorView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Labels")
-                    .font(AppTypography.sectionTitle)
+                    .font(AppTypography.sectionLabel)
             }
 
             if document.labels.isEmpty {
@@ -427,7 +431,7 @@ struct DocumentInspectorView: View {
     private func textExtractionSection(for document: DocumentRecord) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Text Extraction")
-                .font(AppTypography.sectionTitle)
+                .font(AppTypography.sectionLabel)
 
             HStack(spacing: 6) {
                 if document.ocrCompleted {
@@ -482,7 +486,7 @@ struct DocumentInspectorView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Shared Labels")
-                        .font(AppTypography.sectionTitle)
+                        .font(AppTypography.sectionLabel)
                 }
 
                 if selectionSummary.labelsOnAllSelectedDocuments.isEmpty {
@@ -508,7 +512,7 @@ struct DocumentInspectorView: View {
             if !selectionSummary.partiallyAssignedLabels.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Partially Assigned")
-                        .font(AppTypography.sectionTitle)
+                        .font(AppTypography.sectionLabel)
 
                     Text(selectionSummary.partiallyAssignedLabels.map(\.name).joined(separator: ", "))
                         .font(AppTypography.body)
@@ -560,7 +564,7 @@ struct DocumentInspectorView: View {
 
         VStack(alignment: .leading, spacing: 8) {
             Text("Delete")
-                .font(AppTypography.sectionTitle)
+                .font(AppTypography.sectionLabel)
 
             Text(deletionHelpText(for: documents))
                 .font(AppTypography.body)
@@ -846,10 +850,10 @@ private struct DocumentPreviewPane: View {
             if let path = document.storedFilePath, let libraryURL {
                 if selectedFileAvailable ?? true {
                     PDFViewRepresentable(url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL))
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
                         }
                         .id(document.persistentModelID)
                 } else {
@@ -878,19 +882,19 @@ private struct DocumentPreviewPane: View {
     }
 
     private func placeholderCard(icon: String, iconColor: Color, title: String, message: String) -> some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(.thinMaterial)
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color(nsColor: .windowBackgroundColor))
             .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
             }
             .overlay {
                 VStack(spacing: 12) {
                     Image(systemName: icon)
-                        .font(.system(size: 44))
+                        .font(.system(size: 40))
                         .foregroundStyle(iconColor)
                     Text(title)
-                        .font(AppTypography.sectionTitle)
+                        .font(AppTypography.sectionLabel)
                     Text(message)
                         .font(AppTypography.body)
                         .foregroundStyle(.secondary)

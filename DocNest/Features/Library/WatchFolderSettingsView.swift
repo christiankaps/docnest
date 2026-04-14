@@ -15,7 +15,7 @@ struct WatchFolderSettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Monitored folders import new PDFs automatically.")
-                    .font(.subheadline)
+                    .font(AppTypography.settingsSubtitle)
                     .foregroundStyle(.secondary)
 
                 Spacer()
@@ -27,8 +27,8 @@ struct WatchFolderSettingsView: View {
                 }
                 .buttonStyle(.bordered)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
 
             Group {
                 if coordinator.allWatchFolders.isEmpty {
@@ -89,8 +89,7 @@ struct WatchFolderSettingsView: View {
     }
 
     private var settingsPaneSurface: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(Color(nsColor: .controlBackgroundColor))
+        Color(nsColor: showsDoneButton ? .controlBackgroundColor : .windowBackgroundColor)
     }
 
     private var errorBinding: Binding<Bool> {
@@ -177,7 +176,7 @@ private struct WatchFolderRow: View {
                     .frame(width: 32, height: 32)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.primary.opacity(0.06))
+                            .fill(Color.primary.opacity(0.05))
                     )
             } else {
                 Image(systemName: "folder.circle.fill")
@@ -186,7 +185,7 @@ private struct WatchFolderRow: View {
                     .frame(width: 32, height: 32)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.accentColor.opacity(0.12))
+                            .fill(Color.accentColor.opacity(0.10))
                     )
             }
 
@@ -215,11 +214,11 @@ private struct WatchFolderRow: View {
             .padding(.vertical, 5)
             .background(
                 Capsule(style: .continuous)
-                    .fill(statusColor.opacity(0.12))
+                    .fill(statusColor.opacity(0.10))
             )
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .contentShape(Rectangle())
         .contextMenu {
             Button("Edit\u{2026}") { onEdit() }

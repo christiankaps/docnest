@@ -435,7 +435,7 @@ private struct AboutView: View {
     var body: some View {
         ZStack {
             Rectangle()
-                .fill(.thinMaterial)
+                .fill(Color(nsColor: .windowBackgroundColor))
                 .ignoresSafeArea()
 
             VStack(spacing: 16) {
@@ -445,10 +445,10 @@ private struct AboutView: View {
                         .frame(width: 96, height: 96)
 
                     Text("DocNest")
-                        .font(.system(size: 24, weight: .semibold))
+                        .font(AppTypography.titleLarge)
 
                     Text("Version \(releaseVersion) • Build \(buildNumber)")
-                        .font(.subheadline)
+                        .font(AppTypography.settingsSubtitle)
                         .foregroundStyle(.secondary)
 
                     Button("Check for Updates…") {
@@ -531,15 +531,11 @@ private struct AboutView: View {
 
     private func aboutCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(16)
+            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.regularMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
             )
     }
 
@@ -577,23 +573,23 @@ private struct AppSettingsRootView: View {
                let modelContainer = settings.modelContainer {
                 HStack(spacing: 0) {
                     settingsSidebar
-                        .frame(width: 220)
+                        .frame(width: 210)
 
                     Divider()
 
                     VStack(alignment: .leading, spacing: 0) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(settings.selectedPane.title)
-                                .font(.title2.weight(.semibold))
+                                .font(AppTypography.settingsTitle)
 
                             Text(settings.selectedPane.subtitle)
-                                .font(.callout)
+                                .font(AppTypography.settingsSubtitle)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        .padding(.horizontal, 28)
-                        .padding(.top, 24)
-                        .padding(.bottom, 14)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 22)
+                        .padding(.bottom, 12)
 
                         Group {
                             switch settings.selectedPane {
@@ -607,8 +603,8 @@ private struct AppSettingsRootView: View {
                                     .modelContainer(modelContainer)
                             }
                         }
-                        .padding(.horizontal, 22)
-                        .padding(.bottom, 22)
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 18)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     .background(Color(nsColor: .windowBackgroundColor))
@@ -632,7 +628,7 @@ private struct AppSettingsRootView: View {
                 ForEach(AppSettingsPane.allCases) { pane in
                     settingsSidebarRow(for: pane)
                         .tag(pane)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+                        .listRowInsets(EdgeInsets(top: 7, leading: 10, bottom: 7, trailing: 10))
                         .listRowBackground(Color.clear)
                 }
             }
@@ -658,7 +654,7 @@ private struct AppSettingsRootView: View {
     private func settingsSidebarRow(for pane: AppSettingsPane) -> some View {
         HStack(spacing: 10) {
             Image(systemName: pane.systemImage)
-                .font(.body.weight(.medium))
+                .font(.system(size: 14, weight: .medium))
                 .frame(width: 18)
                 .foregroundStyle(settings.selectedPane == pane ? .primary : .secondary)
 
@@ -791,7 +787,7 @@ private struct HelpView: View {
     var body: some View {
         ZStack {
             Rectangle()
-                .fill(.thinMaterial)
+                .fill(Color(nsColor: .windowBackgroundColor))
                 .ignoresSafeArea()
 
             ScrollView {
@@ -814,10 +810,10 @@ private struct HelpView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("DocNest Help")
-                .font(.system(size: 28, weight: .semibold))
+                .font(AppTypography.titleLarge)
 
             Text("A quick guide to the app, the library workflow, and where to find important commands and settings.")
-                .font(.system(size: 13))
+                .font(AppTypography.settingsSubtitle)
                 .foregroundStyle(.secondary)
         }
     }
@@ -825,37 +821,33 @@ private struct HelpView: View {
     private func sectionCard(title: String, items: [String]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.system(size: 16, weight: .semibold))
+                .font(AppTypography.sectionTitle)
 
             ForEach(items, id: \.self) { item in
                 HStack(alignment: .top, spacing: 8) {
                     Text("•")
                         .foregroundStyle(.secondary)
                     Text(item)
-                        .font(.system(size: 13))
+                        .font(AppTypography.body)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .padding(18)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.regularMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
         )
     }
 
     private var locationsBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Where to Find Things")
-                .font(.system(size: 16, weight: .semibold))
+                .font(AppTypography.sectionTitle)
 
             Text("DocNest uses a small set of menus and contextual controls instead of a large settings window. This table points you to the right place quickly.")
-                .font(.system(size: 13))
+                .font(AppTypography.body)
                 .foregroundStyle(.secondary)
 
             VStack(spacing: 8) {
@@ -866,7 +858,7 @@ private struct HelpView: View {
                             .frame(width: 250, alignment: .leading)
 
                         Text(item.1)
-                            .font(.system(size: 13))
+                            .font(AppTypography.body)
                             .foregroundStyle(.secondary)
 
                         Spacer(minLength: 0)
@@ -877,15 +869,11 @@ private struct HelpView: View {
                 }
             }
         }
-        .padding(18)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.regularMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.07), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
         )
     }
 }

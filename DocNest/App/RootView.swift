@@ -142,6 +142,7 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: coordinator.isQuickLabelPickerPresented)
+        .background(Color(nsColor: .windowBackgroundColor))
         .background { QuickLookPanelResponder(coordinator: quickLook) }
         .onDrop(of: [.fileURL], delegate: FileImportDropDelegate(coordinator: coordinator))
         .onChange(of: coordinator.displayedShareURLs) {
@@ -158,7 +159,7 @@ struct RootView: View {
                     text: Bindable(coordinator).searchText,
                     focusRequestToken: coordinator.searchFocusRequestToken
                 )
-                .frame(width: 280)
+                .frame(width: 300)
 
                 if let progress = coordinator.importProgress {
                     ImportProgressIndicator(progress: progress) {
@@ -180,7 +181,7 @@ struct RootView: View {
             Button {
                 coordinator.isImporting = true
             } label: {
-                Label("Import", systemImage: "plus")
+                Label("Import PDFs", systemImage: "plus")
             }
         }
 

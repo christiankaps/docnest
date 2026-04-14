@@ -134,9 +134,9 @@ struct LabelManagerSheet: View {
                 .background(panelSurface)
 
             Rectangle()
-                .fill(Color.primary.opacity(0.06))
+                .fill(Color.primary.opacity(0.05))
                 .frame(width: 1)
-                .padding(.vertical, 12)
+                .padding(.vertical, isEmbeddedInSettings ? 0 : 12)
 
             editorPanel
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -145,14 +145,13 @@ struct LabelManagerSheet: View {
         .background(
             Group {
                 if isEmbeddedInSettings {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color(nsColor: .controlBackgroundColor))
+                    Color(nsColor: .windowBackgroundColor)
                 } else {
                     Color.clear
                 }
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: isEmbeddedInSettings ? 0 : 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: isEmbeddedInSettings ? 0 : 14, style: .continuous))
     }
 
     // MARK: - Header
@@ -161,10 +160,10 @@ struct LabelManagerSheet: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Labels")
-                    .font(.title2.weight(.semibold))
+                    .font(AppTypography.settingsTitle)
 
                 Text("Organize labels and groups for the current library. Changes here update the sidebar and document workflows immediately.")
-                    .font(.subheadline)
+                    .font(AppTypography.settingsSubtitle)
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -534,12 +533,12 @@ struct LabelManagerSheet: View {
     private var panelSurface: some View {
         Group {
             if isEmbeddedInSettings {
-                Color.clear
+                Color(nsColor: .windowBackgroundColor)
             } else {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
                     )
             }
