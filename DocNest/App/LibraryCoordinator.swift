@@ -77,6 +77,7 @@ final class LibraryCoordinator {
     private(set) var displayedShareURLs: [URL] = []
     private(set) var selectedDocumentIDsToDrag: [UUID] = []
     private(set) var sidebarCounts = LibrarySidebarCounts.empty
+    private(set) var existingContentHashes: Set<String> = []
     private var labelsByUUID: [UUID: LabelTag] = [:]
     private var labelUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
     private var smartFoldersByPersistentID: [PersistentIdentifier: SmartFolder] = [:]
@@ -163,6 +164,7 @@ final class LibraryCoordinator {
         }
         activeDocuments = active
         trashedDocuments = trashed
+        existingContentHashes = Set(allDocuments.lazy.map(\.contentHash))
 
         recomputeSmartFolderCountsIfNeeded()
         recomputeFilteredDocuments()
@@ -644,6 +646,7 @@ final class LibraryCoordinator {
                 urls: urls,
                 into: libraryURL,
                 autoAssignLabels: activeFilterLabels,
+                existingContentHashes: self?.existingContentHashes ?? [],
                 using: modelContext
             ) { [weak self] completed, total in
                 self?.importProgress = ImportProgress(total: total, completed: completed)
@@ -794,6 +797,7 @@ final class LibraryCoordinator {
                 urls: urls,
                 into: libraryURL,
                 autoAssignLabels: labelsToAssign,
+                existingContentHashes: self?.existingContentHashes ?? [],
                 using: modelContext
             )
 

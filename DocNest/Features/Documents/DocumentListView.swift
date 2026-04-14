@@ -631,7 +631,7 @@ struct DocumentListView: View {
         coordinator.toggleLabel(label, on: [document])
     }
 
-    private func contextMenuDocuments(for document: DocumentRecord) -> [DocumentRecord] {
+    private func actionTargetDocuments(for document: DocumentRecord) -> [DocumentRecord] {
         if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
             return coordinator.immediateSelectionDocuments
         }
@@ -640,7 +640,7 @@ struct DocumentListView: View {
 
     @ViewBuilder
     private func documentContextMenu(for document: DocumentRecord) -> some View {
-        let targets = contextMenuDocuments(for: document)
+        let targets = actionTargetDocuments(for: document)
 
         if coordinator.isBinSelected {
             Button("Restore") {
@@ -718,10 +718,7 @@ struct DocumentListView: View {
     }
 
     private func dropTargetDocuments(for document: DocumentRecord) -> [DocumentRecord] {
-        if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
-            return coordinator.immediateSelectionDocuments
-        }
-        return [document]
+        actionTargetDocuments(for: document)
     }
 
     private func dragPayload(for document: DocumentRecord) -> String {
