@@ -8,7 +8,6 @@ enum ManageWatchFoldersUseCase {
         icon: String?,
         folderPath: String,
         libraryURL: URL? = nil,
-        libraryPackageURL: URL? = nil,
         isEnabled: Bool = true,
         labelIDs: [UUID],
         using modelContext: ModelContext
@@ -19,7 +18,7 @@ enum ManageWatchFoldersUseCase {
             throw WatchFolderValidationError.emptyPath
         }
 
-        try validate(folderPath: folderPath, libraryURL: libraryURL, libraryPackageURL: libraryPackageURL)
+        try validate(folderPath: folderPath, libraryURL: libraryURL)
 
         let descriptor = FetchDescriptor<WatchFolder>(sortBy: [SortDescriptor(\.sortOrder)])
         let existing = try modelContext.fetch(descriptor)
@@ -44,7 +43,6 @@ enum ManageWatchFoldersUseCase {
         icon: String?,
         folderPath: String,
         libraryURL: URL? = nil,
-        libraryPackageURL: URL? = nil,
         isEnabled: Bool,
         labelIDs: [UUID],
         using modelContext: ModelContext
@@ -55,7 +53,7 @@ enum ManageWatchFoldersUseCase {
             throw WatchFolderValidationError.emptyPath
         }
 
-        try validate(folderPath: folderPath, libraryURL: libraryURL, libraryPackageURL: libraryPackageURL)
+        try validate(folderPath: folderPath, libraryURL: libraryURL)
 
         folder.name = trimmedName
         folder.icon = icon?.isEmpty == true ? nil : icon
@@ -92,15 +90,11 @@ enum ManageWatchFoldersUseCase {
         return collapsed
     }
 
-    private static func validate(folderPath: String, libraryURL: URL?, libraryPackageURL: URL?) throws {
-        guard libraryURL != nil || libraryPackageURL != nil else { return }
+    private static func validate(folderPath: String, libraryURL: URL?) throws {
+        guard let libraryURL else { return }
 
         let watchFolderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
-        if DocumentLibraryService.contains(
-            watchFolderURL,
-            inLibraryPackage: libraryPackageURL,
-            dataRootURL: libraryURL
-        ) {
+        if DocumentLibraryService.contains(watchFolderURL, inLibrary: libraryURL) {
             throw WatchFolderValidationError.insideLibrary
         }
     }

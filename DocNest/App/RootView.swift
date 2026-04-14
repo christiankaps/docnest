@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 
 struct RootView: View {
     let libraryURL: URL
-    let libraryPackageURL: URL
     @ObservedObject var librarySession: LibrarySessionController
 
     @State private var coordinator = LibraryCoordinator()
@@ -78,7 +77,6 @@ struct RootView: View {
         .focusedSceneValue(\.isInspectorCollapsed, coordinator.isInspectorCollapsed)
         .task {
             coordinator.libraryURL = libraryURL
-            coordinator.libraryPackageURL = libraryPackageURL
             coordinator.modelContext = modelContext
             inspectorVisibilityProgress = coordinator.isInspectorCollapsed ? 0 : 1
             AppSettingsController.shared.setActiveLibraryContext(
@@ -709,7 +707,6 @@ private struct OCRProgressIndicator: View {
 #Preview {
     RootView(
         libraryURL: URL(fileURLWithPath: "/tmp/preview.docnestlibrary"),
-        libraryPackageURL: URL(fileURLWithPath: "/tmp/preview.docnestlibrary"),
         librarySession: LibrarySessionController()
     )
     .modelContainer(for: DocumentRecord.self, inMemory: true)

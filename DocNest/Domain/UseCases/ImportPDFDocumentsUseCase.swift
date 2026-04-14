@@ -98,8 +98,8 @@ enum ImportPDFDocumentsUseCase {
     static func execute(
         urls: [URL],
         into libraryURL: URL,
-        libraryPackageURL: URL? = nil,
         autoAssignLabels: [LabelTag] = [],
+        existingContentHashes: Set<String> = [],
         using modelContext: ModelContext,
         onProgress: (@MainActor (_ completed: Int, _ total: Int) -> Void)? = nil
     ) async -> ImportPDFDocumentsResult {
@@ -109,7 +109,7 @@ enum ImportPDFDocumentsUseCase {
         var failures: [ImportPDFDocumentsResult.Failure] = []
         for url in urls {
             if url.isFileURL {
-                if shouldRejectSelfImport(of: url, into: libraryURL, libraryPackageURL: libraryPackageURL) {
+                if shouldRejectSelfImport(of: url, into: libraryURL) {
                     failures.append(
                         .init(
                             fileName: url.lastPathComponent.isEmpty ? nil : url.lastPathComponent,
@@ -149,7 +149,13 @@ enum ImportPDFDocumentsUseCase {
         var importedStoredPaths: [String] = []
         var duplicates: [ImportPDFDocumentsResult.Duplicate] = []
         var unsupportedFiles: [ImportPDFDocumentsResult.Unsupported] = []
-        let knownContentHashesSeed = await existingContentHashes(in: libraryURL)
+        let persistedContentHashes: Set<String>
+        if existingContentHashes.isEmpty {
+            persistedContentHashes = storedContentHashes(using: modelContext)
+        } else {
+            persistedContentHashes = existingContentHashes
+        }
+        let knownContentHashesSeed = persistedContentHashes
             .union(pendingContentHashes(using: modelContext))
         var knownContentHashes = knownContentHashesSeed
 
@@ -158,7 +164,7 @@ enum ImportPDFDocumentsUseCase {
 
             if Task.isCancelled { break }
 
-            guard !shouldRejectSelfImport(of: url, into: libraryURL, libraryPackageURL: libraryPackageURL) else {
+            guard !shouldRejectSelfImport(of: url, into: libraryURL) else {
                 failures.append(
                     .init(
                         fileName: url.lastPathComponent.isEmpty ? nil : url.lastPathComponent,
@@ -359,20 +365,18 @@ enum ImportPDFDocumentsUseCase {
         return record
     }
 
-    private static func existingContentHashes(in libraryURL: URL) async -> Set<String> {
-        await (try? Task.detached(priority: .utility) {
-            let modelContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
-            let modelContext = ModelContext(modelContainer)
-            let documents = try modelContext.fetch(FetchDescriptor<DocumentRecord>())
-            return Set(documents.lazy.map(\.contentHash))
-        }.value) ?? Set<String>()
-    }
-
     @MainActor
     private static func pendingContentHashes(using modelContext: ModelContext) -> Set<String> {
         let stagedDocuments = (modelContext.insertedModelsArray + modelContext.changedModelsArray)
             .compactMap { $0 as? DocumentRecord }
         return Set(stagedDocuments.lazy.map(\.contentHash))
+    }
+
+    @MainActor
+    private static func storedContentHashes(using modelContext: ModelContext) -> Set<String> {
+        let descriptor = FetchDescriptor<DocumentRecord>()
+        let records: [DocumentRecord] = (try? modelContext.fetch(descriptor)) ?? []
+        return Set(records.lazy.map(\.contentHash))
     }
 
     private static func importMetadata(for url: URL) async throws -> ImportMetadata {
@@ -546,18 +550,13 @@ enum ImportPDFDocumentsUseCase {
 
     private static func shouldRejectSelfImport(
         of url: URL,
-        into libraryURL: URL,
-        libraryPackageURL: URL?
+        into libraryURL: URL
     ) -> Bool {
         guard url.isFileURL else {
             return false
         }
 
-        return DocumentLibraryService.contains(
-            url,
-            inLibraryPackage: libraryPackageURL,
-            dataRootURL: libraryURL
-        )
+        return DocumentLibraryService.contains(url, inLibrary: libraryURL)
     }
 
     private static func normalizedTitle(for url: URL) -> String {

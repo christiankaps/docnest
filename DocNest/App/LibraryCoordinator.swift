@@ -37,7 +37,6 @@ final class LibraryCoordinator {
 
     // MARK: - Injected dependencies (set once by RootView)
     var libraryURL: URL?
-    var libraryPackageURL: URL?
     var modelContext: ModelContext?
 
     // MARK: - UI state (moved from RootView @State)
@@ -644,7 +643,6 @@ final class LibraryCoordinator {
             let importResult = await ImportPDFDocumentsUseCase.execute(
                 urls: urls,
                 into: libraryURL,
-                libraryPackageURL: self?.libraryPackageURL,
                 autoAssignLabels: activeFilterLabels,
                 using: modelContext
             ) { [weak self] completed, total in
@@ -795,7 +793,6 @@ final class LibraryCoordinator {
             let result = await ImportPDFDocumentsUseCase.execute(
                 urls: urls,
                 into: libraryURL,
-                libraryPackageURL: self?.libraryPackageURL,
                 autoAssignLabels: labelsToAssign,
                 using: modelContext
             )
