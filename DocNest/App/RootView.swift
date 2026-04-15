@@ -383,24 +383,24 @@ private struct RootViewChangeHandlers: ViewModifier {
     let allLabelGroups: [LabelGroup]
     let allWatchFolders: [WatchFolder]
 
-    /// Lightweight fingerprint that changes when documents are added, removed,
-    /// trashed/restored, or have their labels modified -- covering mutations
-    /// that `allDocuments.count` alone would miss.
     private var documentFingerprint: Int {
         var hasher = Hasher()
+        hasher.combine(allDocuments.count)
         for document in allDocuments {
             hasher.combine(document.persistentModelID)
             hasher.combine(document.trashedAt)
-            hasher.combine(document.labels.count)
+            hasher.combine(document.storedFilePath)
         }
         return hasher.finalize()
     }
 
     private var labelFingerprint: Int {
         var hasher = Hasher()
+        hasher.combine(allLabels.count)
         for label in allLabels {
             hasher.combine(label.persistentModelID)
             hasher.combine(label.name)
+            hasher.combine(label.sortOrder)
             hasher.combine(label.groupID)
         }
         return hasher.finalize()
@@ -408,17 +408,22 @@ private struct RootViewChangeHandlers: ViewModifier {
 
     private var smartFolderFingerprint: Int {
         var hasher = Hasher()
+        hasher.combine(allSmartFolders.count)
         for folder in allSmartFolders {
             hasher.combine(folder.persistentModelID)
             hasher.combine(folder.name)
-            hasher.combine(folder.labelIDs)
+            hasher.combine(folder.icon)
             hasher.combine(folder.sortOrder)
+            for labelID in folder.labelIDs {
+                hasher.combine(labelID)
+            }
         }
         return hasher.finalize()
     }
 
     private var labelGroupFingerprint: Int {
         var hasher = Hasher()
+        hasher.combine(allLabelGroups.count)
         for group in allLabelGroups {
             hasher.combine(group.persistentModelID)
             hasher.combine(group.name)
@@ -429,13 +434,17 @@ private struct RootViewChangeHandlers: ViewModifier {
 
     private var watchFolderFingerprint: Int {
         var hasher = Hasher()
+        hasher.combine(allWatchFolders.count)
         for folder in allWatchFolders {
             hasher.combine(folder.persistentModelID)
             hasher.combine(folder.name)
+            hasher.combine(folder.icon)
             hasher.combine(folder.folderPath)
             hasher.combine(folder.isEnabled)
-            hasher.combine(folder.labelIDs)
             hasher.combine(folder.sortOrder)
+            for labelID in folder.labelIDs {
+                hasher.combine(labelID)
+            }
         }
         return hasher.finalize()
     }
@@ -489,6 +498,7 @@ private struct ChangeHandlersNotifications: ViewModifier {
                 coordinator.cancelPendingLabelFilter()
                 coordinator.cancelPendingDisplayedSelectionUpdate()
                 coordinator.cancelPendingSearchRecompute()
+                coordinator.cancelPendingDerivedStateRefresh()
                 coordinator.tearDownWatchFolderMonitoring()
                 AppSettingsController.shared.clearActiveLibraryContext()
             }

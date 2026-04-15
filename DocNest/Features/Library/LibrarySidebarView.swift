@@ -443,7 +443,12 @@ struct LibrarySidebarView: View {
 
     @ViewBuilder
     private var smartFolderSection: some View {
-        let folders = coordinator.allSmartFolders
+        let folders = coordinator.allSmartFolders.sorted {
+            if $0.sortOrder == $1.sortOrder {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.sortOrder < $1.sortOrder
+        }
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Image(systemName: "folder.badge.gearshape")
@@ -977,6 +982,14 @@ struct PendingLabelDeletion {
 struct LibrarySidebarCounts {
     private let sectionCounts: [LibrarySection: Int]
     private let labelCounts: [PersistentIdentifier: Int]
+
+    init(
+        sectionCounts: [LibrarySection: Int],
+        labelCounts: [PersistentIdentifier: Int]
+    ) {
+        self.sectionCounts = sectionCounts
+        self.labelCounts = labelCounts
+    }
 
     init(
         activeDocuments: [DocumentRecord],

@@ -12,6 +12,7 @@ final class ThumbnailCache {
     init(countLimit: Int = 500) {
         self.countLimit = countLimit
         backingCache.countLimit = countLimit
+        backingCache.totalCostLimit = countLimit * 512 * 1024
     }
 
     /// Returns a cached thumbnail immediately, or `nil` while kicking off an
@@ -22,10 +23,6 @@ final class ThumbnailCache {
 
         if let image = backingCache.object(forKey: key as NSString) {
             return image
-        }
-
-        if readyThumbnailKeys.contains(key) {
-            readyThumbnailKeys.remove(key)
         }
 
         loadThumbnailAsync(storedFilePath: storedFilePath, libraryURL: libraryURL, size: size, key: key)
@@ -62,7 +59,8 @@ final class ThumbnailCache {
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 guard let cachedImage = NSImage(data: imageData) else { return }
-                self.backingCache.setObject(cachedImage, forKey: key as NSString)
+                let estimatedCost = Int(size.width * size.height * 4)
+                self.backingCache.setObject(cachedImage, forKey: key as NSString, cost: estimatedCost)
                 self.readyThumbnailKeys.insert(key)
             }
         }

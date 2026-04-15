@@ -20,6 +20,7 @@ final class FolderMonitorService {
 
     private var monitors: [UUID: MonitoredFolder] = [:]
     private var knownSnapshotsByFolderID: [UUID: [String: Date]] = [:]
+    private var pendingScanTasks: [UUID: Task<Void, Never>] = [:]
     private let monitorQueue = DispatchQueue(
         label: "com.kaps.docnest.foldermonitor",
         qos: .utility
@@ -81,6 +82,8 @@ final class FolderMonitorService {
 
     func stopMonitoring(id: UUID) {
         guard let existing = monitors.removeValue(forKey: id) else { return }
+        pendingScanTasks[id]?.cancel()
+        pendingScanTasks.removeValue(forKey: id)
         knownSnapshotsByFolderID.removeValue(forKey: id)
         existing.dispatchSource.cancel()
         Self.logger.info("Stopped monitoring: \(existing.folderPath, privacy: .public)")
@@ -136,7 +139,12 @@ final class FolderMonitorService {
         let folderID = entry.watchFolderID
         let folderPath = entry.folderPath
 
-        Task.detached(priority: .utility) {
+        pendingScanTasks[folderID]?.cancel()
+        pendingScanTasks[folderID] = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, let self else { return }
+
+            await Task.detached(priority: .utility) {
             let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
             guard let contents = try? FileManager.default.contentsOfDirectory(
                 at: folderURL,
@@ -161,6 +169,7 @@ final class FolderMonitorService {
             }
 
             await MainActor.run {
+                self.pendingScanTasks[folderID] = nil
                 guard let monitor = self.monitors[folderID] else { return }
 
                 let previousSnapshots = self.knownSnapshotsByFolderID[folderID] ?? [:]
@@ -175,6 +184,7 @@ final class FolderMonitorService {
                 Self.logger.info("Found \(result.urls.count) new or updated PDF(s) in \(folderPath, privacy: .public)")
                 self.onNewPDFsDetected?(result.urls, monitor.labelIDs)
             }
+            }.value
         }
     }
 }

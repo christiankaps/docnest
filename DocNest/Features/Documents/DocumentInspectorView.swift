@@ -662,6 +662,7 @@ struct DocumentInspectorView: View {
 
         do {
             try modelContext.save()
+            coordinator.recomputeFilteredDocuments()
         } catch {
             inspectorErrorMessage = error.localizedDescription
         }
@@ -704,6 +705,7 @@ struct DocumentInspectorView: View {
                Self.germanDateFormatter.string(from: parsed) == masked {
                 document.documentDate = parsed
                 try? modelContext.save()
+                coordinator.recomputeFilteredDocuments()
             }
         }
     }
@@ -928,14 +930,15 @@ private struct BatchLabelSelectionSummary {
     }
 
     init(documents: [DocumentRecord], availableLabels: [LabelTag]) {
-        let states: [BatchLabelState] = availableLabels.compactMap { label in
-            let assignedDocumentCount = documents.reduce(into: 0) { count, document in
-                if document.labels.contains(where: { $0.persistentModelID == label.persistentModelID }) {
-                    count += 1
-                }
+        var assignedCounts: [PersistentIdentifier: Int] = [:]
+        for document in documents {
+            for label in document.labels {
+                assignedCounts[label.persistentModelID, default: 0] += 1
             }
+        }
 
-            guard assignedDocumentCount > 0 else {
+        let states: [BatchLabelState] = availableLabels.compactMap { label in
+            guard let assignedDocumentCount = assignedCounts[label.persistentModelID] else {
                 return nil
             }
 

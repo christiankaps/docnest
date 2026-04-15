@@ -68,6 +68,15 @@ enum DocumentListViewMode: String, CaseIterable {
 }
 
 struct DocumentListView: View {
+    private struct SortSnapshot: Sendable {
+        let documentID: UUID
+        let title: String
+        let importedAt: Date
+        let documentDate: Date?
+        let pageCount: Int
+        let fileSize: Int64
+    }
+
     private struct OptionalColumnVisibility {
         var imported: Bool
         var created: Bool
@@ -97,7 +106,8 @@ struct DocumentListView: View {
     @State private var sortDirection: SortDirection = .descending
     @State private var cachedSortedDocuments: [DocumentRecord] = []
     @State private var cachedGroupedDocuments: [DocumentGroup] = []
-    @State private var pendingSortedDocumentsRecomputeTask: Task<Void, Never>?
+    @State private var pendingSortedDocumentsDebounceTask: Task<Void, Never>?
+    @State private var pendingSortedDocumentsTask: Task<Void, Never>?
     @AppStorage("docListGroupMode") private var groupMode: DocumentGroupMode = .none
     @State private var availableListWidth = AppSplitViewLayout.documentListIdealWidth
     @AppStorage("docListThumbnailSize") private var thumbnailSize = 160.0
@@ -130,28 +140,52 @@ struct DocumentListView: View {
     private func recomputeSortedDocuments() {
         let column = sortColumn
         let direction = sortDirection
-        cachedSortedDocuments = coordinator.filteredDocuments.sorted { lhs, rhs in
-            let comparison = compare(lhs, rhs, for: column)
-            if comparison == .orderedSame {
-                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-            }
-
-            if direction == .ascending {
-                return comparison == .orderedAscending
-            }
-
-            return comparison == .orderedDescending
+        let snapshots = coordinator.filteredDocuments.map {
+            SortSnapshot(
+                documentID: $0.id,
+                title: $0.title,
+                importedAt: $0.importedAt,
+                documentDate: $0.documentDate,
+                pageCount: $0.pageCount,
+                fileSize: $0.fileSize
+            )
         }
-        cachedGroupedDocuments = groupMode == .none ? [] : groupMode.group(cachedSortedDocuments)
+
+        pendingSortedDocumentsTask?.cancel()
+        pendingSortedDocumentsTask = Task(priority: .userInitiated) {
+            let sortedIDs = snapshots.sorted { lhs, rhs in
+                let comparison = Self.compare(lhs, rhs, for: column)
+                if comparison == .orderedSame {
+                    return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+                }
+
+                if direction == .ascending {
+                    return comparison == .orderedAscending
+                }
+
+                return comparison == .orderedDescending
+            }
+            .map(\.documentID)
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard !Task.isCancelled else { return }
+                let documentsByID = Dictionary(uniqueKeysWithValues: coordinator.filteredDocuments.map { ($0.id, $0) })
+                cachedSortedDocuments = sortedIDs.compactMap { documentsByID[$0] }
+                cachedGroupedDocuments = groupMode == .none ? [] : groupMode.group(cachedSortedDocuments)
+                pendingSortedDocumentsTask = nil
+            }
+        }
     }
 
     private func scheduleSortedDocumentsRecompute() {
-        pendingSortedDocumentsRecomputeTask?.cancel()
-        pendingSortedDocumentsRecomputeTask = Task { @MainActor in
+        pendingSortedDocumentsDebounceTask?.cancel()
+        pendingSortedDocumentsDebounceTask = Task { @MainActor in
             await Task.yield()
             guard !Task.isCancelled else { return }
             recomputeSortedDocuments()
-            pendingSortedDocumentsRecomputeTask = nil
+            pendingSortedDocumentsDebounceTask = nil
         }
     }
 
@@ -274,8 +308,10 @@ struct DocumentListView: View {
             scheduleSortedDocumentsRecompute()
         }
         .onDisappear {
-            pendingSortedDocumentsRecomputeTask?.cancel()
-            pendingSortedDocumentsRecomputeTask = nil
+            pendingSortedDocumentsDebounceTask?.cancel()
+            pendingSortedDocumentsTask?.cancel()
+            pendingSortedDocumentsDebounceTask = nil
+            pendingSortedDocumentsTask = nil
         }
     }
 
@@ -631,6 +667,14 @@ struct DocumentListView: View {
         coordinator.toggleLabel(label, on: [document])
     }
 
+    private func resolvedStoredFileURL(for document: DocumentRecord) -> URL? {
+        guard let path = document.storedFilePath, let libraryURL = coordinator.libraryURL else {
+            return nil
+        }
+
+        return DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
+    }
+
     private func actionTargetDocuments(for document: DocumentRecord) -> [DocumentRecord] {
         if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
             return coordinator.immediateSelectionDocuments
@@ -775,7 +819,7 @@ struct DocumentListView: View {
         scrollProxy?.scrollTo(nextID, anchor: nil)
 
         let nextDocument = sortedDocs[nextIndex]
-        if let url = originalFileURL(for: nextDocument) {
+        if let url = resolvedStoredFileURL(for: nextDocument) {
             quickLook.previewURLs = [url]
         }
         quickLook.reloadIfVisible()
@@ -786,7 +830,7 @@ struct DocumentListView: View {
     private func openQuickLook(for document: DocumentRecord) {
         coordinator.beginSelectionInteraction()
         coordinator.selectedDocumentIDs = [document.persistentModelID]
-        if let url = originalFileURL(for: document) {
+        if let url = resolvedStoredFileURL(for: document) {
             quickLook.previewURLs = [url]
         }
         quickLook.togglePreview()
@@ -823,6 +867,7 @@ struct DocumentListView: View {
 
         do {
             try modelContext.save()
+            coordinator.recomputeFilteredDocuments()
         } catch {
             // Roll back to keep database and filesystem consistent
             document.title = previousTitle
@@ -877,6 +922,21 @@ struct DocumentListView: View {
         case .importedAt:
             lhs.importedAt.compare(rhs.importedAt)
         case .documentDate:
+            Self.compareOptionalDates(lhs.documentDate, rhs.documentDate)
+        case .pageCount:
+            Self.compareIntegers(lhs.pageCount, rhs.pageCount)
+        case .fileSize:
+            Self.compareIntegers(lhs.fileSize, rhs.fileSize)
+        }
+    }
+
+    nonisolated private static func compare(_ lhs: SortSnapshot, _ rhs: SortSnapshot, for column: SortColumn) -> ComparisonResult {
+        switch column {
+        case .title:
+            lhs.title.localizedCaseInsensitiveCompare(rhs.title)
+        case .importedAt:
+            lhs.importedAt.compare(rhs.importedAt)
+        case .documentDate:
             compareOptionalDates(lhs.documentDate, rhs.documentDate)
         case .pageCount:
             compareIntegers(lhs.pageCount, rhs.pageCount)
@@ -885,7 +945,7 @@ struct DocumentListView: View {
         }
     }
 
-    private func compareOptionalDates(_ lhs: Date?, _ rhs: Date?) -> ComparisonResult {
+    nonisolated private static func compareOptionalDates(_ lhs: Date?, _ rhs: Date?) -> ComparisonResult {
         switch (lhs, rhs) {
         case let (left?, right?):
             return left.compare(right)
@@ -898,7 +958,7 @@ struct DocumentListView: View {
         }
     }
 
-    private func compareIntegers<T: BinaryInteger>(_ lhs: T, _ rhs: T) -> ComparisonResult {
+    nonisolated private static func compareIntegers<T: BinaryInteger>(_ lhs: T, _ rhs: T) -> ComparisonResult {
         if lhs < rhs {
             return .orderedAscending
         }
@@ -1003,10 +1063,14 @@ private struct DocumentLabelStrip: View {
     init(labels: [LabelTag], onRemove: ((LabelTag) -> Void)? = nil) {
         self.labels = labels
         self.onRemove = onRemove
-        let sorted = labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        self.sortedLabels = sorted
-        self.visibleLabels = Array(sorted.prefix(2))
-        self.hiddenLabelCount = max(sorted.count - self.visibleLabels.count, 0)
+        self.sortedLabels = labels.sorted {
+            if $0.sortOrder == $1.sortOrder {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.sortOrder < $1.sortOrder
+        }
+        self.visibleLabels = Array(self.sortedLabels.prefix(2))
+        self.hiddenLabelCount = max(labels.count - self.visibleLabels.count, 0)
     }
 
     var body: some View {
@@ -1103,13 +1167,16 @@ private struct DocumentThumbnailCell: View {
         self.onBeginRename = onBeginRename
         self.dragPayload = dragPayload
 
-        let labelsBySortOrder = document.labels.sorted { $0.sortOrder < $1.sortOrder }
-        self.badgeLabels = Array(labelsBySortOrder.prefix(4))
-        self.badgeOverflowCount = max(labelsBySortOrder.count - self.badgeLabels.count, 0)
-
-        let labelsByName = document.labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        self.miniBarLabels = Array(labelsByName.prefix(2))
-        self.miniBarOverflowCount = max(labelsByName.count - self.miniBarLabels.count, 0)
+        let sortedLabels = document.labels.sorted {
+            if $0.sortOrder == $1.sortOrder {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.sortOrder < $1.sortOrder
+        }
+        self.badgeLabels = Array(sortedLabels.prefix(4))
+        self.badgeOverflowCount = max(sortedLabels.count - self.badgeLabels.count, 0)
+        self.miniBarLabels = Array(sortedLabels.prefix(2))
+        self.miniBarOverflowCount = max(sortedLabels.count - self.miniBarLabels.count, 0)
     }
 
     var body: some View {
