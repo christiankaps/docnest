@@ -105,6 +105,7 @@ struct DocumentListView: View {
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
     @State private var cachedSortedDocuments: [DocumentRecord] = []
+    @State private var cachedSortedDocumentIndices: [PersistentIdentifier: Int] = [:]
     @State private var cachedGroupedDocuments: [DocumentGroup] = []
     @State private var pendingSortedDocumentsDebounceTask: Task<Void, Never>?
     @State private var pendingSortedDocumentsTask: Task<Void, Never>?
@@ -121,21 +122,6 @@ struct DocumentListView: View {
     @AppStorage("docListShowPages") private var showsPagesColumn = true
     @AppStorage("docListShowSize") private var showsSizeColumn = true
     @AppStorage("docListShowLabels") private var showsLabelsColumn = true
-
-    private var documentListFingerprint: Int {
-        var hasher = Hasher()
-        for document in coordinator.filteredDocuments {
-            hasher.combine(document.persistentModelID)
-            hasher.combine(document.title)
-            hasher.combine(document.documentDate)
-            hasher.combine(document.importedAt)
-            hasher.combine(document.fileSize)
-            hasher.combine(document.pageCount)
-            hasher.combine(document.labels.count)
-            hasher.combine(document.trashedAt)
-        }
-        return hasher.finalize()
-    }
 
     private func recomputeSortedDocuments() {
         let column = sortColumn
@@ -173,6 +159,9 @@ struct DocumentListView: View {
                 guard !Task.isCancelled else { return }
                 let documentsByID = Dictionary(uniqueKeysWithValues: coordinator.filteredDocuments.map { ($0.id, $0) })
                 cachedSortedDocuments = sortedIDs.compactMap { documentsByID[$0] }
+                cachedSortedDocumentIndices = Dictionary(
+                    uniqueKeysWithValues: cachedSortedDocuments.enumerated().map { ($0.element.persistentModelID, $0.offset) }
+                )
                 cachedGroupedDocuments = groupMode == .none ? [] : groupMode.group(cachedSortedDocuments)
                 pendingSortedDocumentsTask = nil
             }
@@ -295,7 +284,7 @@ struct DocumentListView: View {
         .onChange(of: coordinator.filteredDocuments) {
             scheduleSortedDocumentsRecompute()
         }
-        .onChange(of: documentListFingerprint) {
+        .onChange(of: coordinator.filteredDocumentsVersion) {
             scheduleSortedDocumentsRecompute()
         }
         .onChange(of: sortColumn) {
@@ -777,14 +766,13 @@ struct DocumentListView: View {
         guard !coordinator.isQuickLabelPickerPresented else { return .ignored }
         guard !sortedDocs.isEmpty else { return .ignored }
 
-        let ids = sortedDocs.map(\.persistentModelID)
         let isShift = keyPress.modifiers.contains(.shift)
 
         // Find the current cursor position — the last navigated-to item.
-        let currentIndex: Int? = if let anchor = selectionAnchor, let index = ids.firstIndex(of: anchor) {
+        let currentIndex: Int? = if let anchor = selectionAnchor, let index = cachedSortedDocumentIndices[anchor] {
             index
-        } else if let first = coordinator.selectedDocumentIDs.first(where: { ids.contains($0) }) {
-            ids.firstIndex(of: first)
+        } else if let first = coordinator.selectedDocumentIDs.first(where: { cachedSortedDocumentIndices[$0] != nil }) {
+            cachedSortedDocumentIndices[first]
         } else {
             nil
         }
@@ -801,12 +789,13 @@ struct DocumentListView: View {
 
         let nextIndex: Int
         if let currentIndex {
-            nextIndex = min(max(currentIndex + delta, 0), ids.count - 1)
+            nextIndex = min(max(currentIndex + delta, 0), sortedDocs.count - 1)
         } else {
-            nextIndex = delta > 0 ? 0 : ids.count - 1
+            nextIndex = delta > 0 ? 0 : sortedDocs.count - 1
         }
 
-        let nextID = ids[nextIndex]
+        let nextDocument = sortedDocs[nextIndex]
+        let nextID = nextDocument.persistentModelID
         coordinator.beginSelectionInteraction()
 
         if isShift {
@@ -818,7 +807,6 @@ struct DocumentListView: View {
         selectionAnchor = nextID
         scrollProxy?.scrollTo(nextID, anchor: nil)
 
-        let nextDocument = sortedDocs[nextIndex]
         if let url = resolvedStoredFileURL(for: nextDocument) {
             quickLook.previewURLs = [url]
         }
@@ -1288,6 +1276,7 @@ private struct DocumentThumbnailCell: View {
         if let path = document.storedFilePath,
            let libraryURL {
             let targetSize = CGSize(width: size * 2, height: size * 2.6)
+            let _ = thumbnailCache.isObserved(storedFilePath: path, size: targetSize)
             if let image = thumbnailCache.thumbnail(for: path, libraryURL: libraryURL, size: targetSize) {
                 Image(nsImage: image)
                     .resizable()

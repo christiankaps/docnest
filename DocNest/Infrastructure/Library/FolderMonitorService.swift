@@ -20,9 +20,12 @@ final class FolderMonitorService {
 
     private var monitors: [UUID: MonitoredFolder] = [:]
     private var knownSnapshotsByFolderID: [UUID: [String: Date]] = [:]
+    private var scanGenerationByFolderID: [UUID: Int] = [:]
+    private var lastCompletedScanAtByFolderID: [UUID: Date] = [:]
     private var pendingScanTasks: [UUID: Task<Void, Never>] = [:]
     private var activeScanTasks: [UUID: Task<Void, Never>] = [:]
-    private var scanGenerationByFolderID: [UUID: Int] = [:]
+    private var pendingRescanIDs: Set<UUID> = []
+    private let minimumScanInterval: TimeInterval = 1
     private let monitorQueue = DispatchQueue(
         label: "com.kaps.docnest.foldermonitor",
         qos: .utility
@@ -74,6 +77,7 @@ final class FolderMonitorService {
         }
 
         monitors[watchFolder.id] = entry
+        scanGenerationByFolderID[watchFolder.id] = (scanGenerationByFolderID[watchFolder.id] ?? 0) &+ 1
         source.resume()
 
         // Initial scan to catch files added while the app was closed
@@ -88,8 +92,10 @@ final class FolderMonitorService {
         activeScanTasks[id]?.cancel()
         pendingScanTasks.removeValue(forKey: id)
         activeScanTasks.removeValue(forKey: id)
-        scanGenerationByFolderID.removeValue(forKey: id)
+        pendingRescanIDs.remove(id)
         knownSnapshotsByFolderID.removeValue(forKey: id)
+        scanGenerationByFolderID[id] = (scanGenerationByFolderID[id] ?? 0) &+ 1
+        lastCompletedScanAtByFolderID.removeValue(forKey: id)
         existing.dispatchSource.cancel()
         Self.logger.info("Stopped monitoring: \(existing.folderPath, privacy: .public)")
     }
@@ -107,6 +113,10 @@ final class FolderMonitorService {
 
     func isMonitoring(id: UUID) -> Bool {
         monitors[id] != nil
+    }
+
+    func monitoredFolderPath(for id: UUID) -> String? {
+        monitors[id]?.folderPath
     }
 
     var monitoredIDs: Set<UUID> {
@@ -143,36 +153,46 @@ final class FolderMonitorService {
     private func scanFolderAsync(_ entry: MonitoredFolder) {
         let folderID = entry.watchFolderID
         let folderPath = entry.folderPath
+        let scanGeneration = scanGenerationByFolderID[folderID] ?? 0
 
-        scanGenerationByFolderID[folderID, default: 0] += 1
-        let generation = scanGenerationByFolderID[folderID, default: 0]
+        if activeScanTasks[folderID] != nil {
+            pendingRescanIDs.insert(folderID)
+            return
+        }
+
         pendingScanTasks[folderID]?.cancel()
-        activeScanTasks[folderID]?.cancel()
+        let now = Date()
+        let earliestScanDate = lastCompletedScanAtByFolderID[folderID]
+            .map { $0.addingTimeInterval(minimumScanInterval) } ?? now
+        let delayMilliseconds = max(250, Int(ceil(earliestScanDate.timeIntervalSince(now) * 1_000)))
         pendingScanTasks[folderID] = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(250))
+            try? await Task.sleep(for: .milliseconds(delayMilliseconds))
             guard !Task.isCancelled, let self else { return }
+            guard self.scanGenerationByFolderID[folderID] == scanGeneration else { return }
 
             self.pendingScanTasks[folderID] = nil
-            let scanTask = Task.detached(priority: .utility) { [generation] in
-                let snapshots = Self.scanSnapshots(in: folderPath)
+            let previousSnapshots = self.knownSnapshotsByFolderID[folderID] ?? [:]
+            let scanTask = Task.detached(priority: .utility) {
+                let result = Self.scanSnapshots(in: folderPath, previousSnapshots: previousSnapshots)
                 guard !Task.isCancelled else { return }
 
                 await MainActor.run {
-                    guard self.scanGenerationByFolderID[folderID] == generation else { return }
                     self.activeScanTasks[folderID] = nil
+                    guard self.scanGenerationByFolderID[folderID] == scanGeneration else { return }
                     guard let monitor = self.monitors[folderID] else { return }
 
-                    let previousSnapshots = self.knownSnapshotsByFolderID[folderID] ?? [:]
-                    let result = Self.newPDFURLs(
-                        from: snapshots,
-                        previousSnapshots: previousSnapshots
-                    )
                     self.knownSnapshotsByFolderID[folderID] = result.updatedSnapshots
+                    self.lastCompletedScanAtByFolderID[folderID] = Date()
 
-                    guard !result.urls.isEmpty else { return }
+                    if !result.urls.isEmpty {
+                        Self.logger.info("Found \(result.urls.count) new or updated PDF(s) in \(folderPath, privacy: .public)")
+                        self.onNewPDFsDetected?(result.urls, monitor.labelIDs)
+                    }
 
-                    Self.logger.info("Found \(result.urls.count) new or updated PDF(s) in \(folderPath, privacy: .public)")
-                    self.onNewPDFsDetected?(result.urls, monitor.labelIDs)
+                    if self.pendingRescanIDs.remove(folderID) != nil,
+                       let followUpMonitor = self.monitors[folderID] {
+                        self.scanFolderAsync(followUpMonitor)
+                    }
                 }
             }
 
@@ -180,28 +200,40 @@ final class FolderMonitorService {
         }
     }
 
-    nonisolated private static func scanSnapshots(in folderPath: String) -> [FileSnapshot] {
+    nonisolated private static func scanSnapshots(
+        in folderPath: String,
+        previousSnapshots: [String: Date]
+    ) -> (urls: [URL], updatedSnapshots: [String: Date]) {
         let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: folderURL,
-            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
+            includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-        ) else { return [] }
+        ) else {
+            return ([], [:])
+        }
 
-        return contents.compactMap { url in
-            guard url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame else {
-                return nil
-            }
+        let pdfURLs = contents.filter { url in
+            url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame
+        }
 
+        var snapshots: [FileSnapshot] = []
+        snapshots.reserveCapacity(pdfURLs.count)
+
+        for url in pdfURLs {
             let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
             guard values?.isRegularFile == true else {
-                return nil
+                continue
             }
 
-            return FileSnapshot(
-                path: url.path,
-                modificationDate: values?.contentModificationDate ?? .distantPast
+            snapshots.append(
+                FileSnapshot(
+                    path: url.path,
+                    modificationDate: values?.contentModificationDate ?? .distantPast
+                )
             )
         }
+
+        return newPDFURLs(from: snapshots, previousSnapshots: previousSnapshots)
     }
 }

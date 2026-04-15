@@ -94,7 +94,18 @@ enum ImportPDFDocumentsUseCase {
         let fullText: String?
     }
 
-    @MainActor
+    private struct PreparedImport {
+        let originalFileName: String
+        let title: String
+        let documentDate: Date?
+        let importedAt: Date
+        let pageCount: Int
+        let fileSize: Int64
+        let contentHash: String
+        let storedFilePath: String
+        let fullText: String?
+    }
+
     static func execute(
         urls: [URL],
         into libraryURL: URL,
@@ -103,7 +114,6 @@ enum ImportPDFDocumentsUseCase {
         using modelContext: ModelContext,
         onProgress: (@MainActor (_ completed: Int, _ total: Int) -> Void)? = nil
     ) async -> ImportPDFDocumentsResult {
-        // Partition into file URLs and web URLs
         var fileURLs: [URL] = []
         var webURLs: [URL] = []
         var failures: [ImportPDFDocumentsResult.Failure] = []
@@ -124,7 +134,6 @@ enum ImportPDFDocumentsUseCase {
             }
         }
 
-        // Download web URLs to temporary files
         var downloadFailures: [ImportPDFDocumentsResult.DownloadFailure] = []
         var downloadedTempFiles: [URL] = []
         for webURL in webURLs {
@@ -139,29 +148,23 @@ enum ImportPDFDocumentsUseCase {
 
         var zipTempDirectories: [URL] = []
         let resolvedURLs = resolveFileURLs(fileURLs, tempDirectories: &zipTempDirectories) + downloadedTempFiles
-        onProgress?(0, resolvedURLs.count)
+        if let onProgress {
+            await onProgress(0, resolvedURLs.count)
+        }
 
         let autoAssignedLabelNames = autoAssignLabels
             .map(\.name)
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
-        var importedRecords: [DocumentRecord] = []
-        var importedStoredPaths: [String] = []
+        let knownContentHashesSeed = existingContentHashes.union(
+            await pendingContentHashes(using: modelContext)
+        )
+        var preparedImports: [PreparedImport] = []
         var duplicates: [ImportPDFDocumentsResult.Duplicate] = []
         var unsupportedFiles: [ImportPDFDocumentsResult.Unsupported] = []
-        let persistedContentHashes: Set<String>
-        if existingContentHashes.isEmpty {
-            persistedContentHashes = storedContentHashes(using: modelContext)
-        } else {
-            persistedContentHashes = existingContentHashes
-        }
-        let knownContentHashesSeed = persistedContentHashes
-            .union(pendingContentHashes(using: modelContext))
         var knownContentHashes = knownContentHashesSeed
 
         for (index, url) in resolvedURLs.enumerated() {
-            defer { onProgress?(index + 1, resolvedURLs.count) }
-
             if Task.isCancelled { break }
 
             guard !shouldRejectSelfImport(of: url, into: libraryURL) else {
@@ -188,26 +191,22 @@ enum ImportPDFDocumentsUseCase {
 
             do {
                 let importedAt = Date.now
-                let metadata = try await importMetadata(for: url)
-
-                if knownContentHashes.contains(metadata.contentHash) {
-                    duplicates.append(.init(fileName: url.lastPathComponent))
-                    continue
-                }
-
-                let record = try importDocument(
+                let preparedImport = try await prepareImport(
                     from: url,
-                    metadata: metadata,
-                    importedAt: importedAt,
-                    into: libraryURL
+                    importedAt: importedAt
                 )
-                modelContext.insert(record)
-                record.labels = autoAssignLabels
-                importedRecords.append(record)
-                if let storedFilePath = record.storedFilePath {
-                    importedStoredPaths.append(storedFilePath)
+
+                if knownContentHashes.contains(preparedImport.contentHash) {
+                    duplicates.append(.init(fileName: url.lastPathComponent))
+                } else {
+                    let stagedImport = try stagePreparedImport(
+                        preparedImport,
+                        from: url,
+                        into: libraryURL
+                    )
+                    preparedImports.append(stagedImport)
+                    knownContentHashes.insert(preparedImport.contentHash)
                 }
-                knownContentHashes.insert(metadata.contentHash)
             } catch {
                 failures.append(
                     .init(
@@ -216,9 +215,12 @@ enum ImportPDFDocumentsUseCase {
                     )
                 )
             }
+
+            if let onProgress {
+                await onProgress(index + 1, resolvedURLs.count)
+            }
         }
 
-        // Clean up temporary files and directories — originals have been copied into the library
         for tempFile in downloadedTempFiles {
             try? FileManager.default.removeItem(at: tempFile)
         }
@@ -226,41 +228,16 @@ enum ImportPDFDocumentsUseCase {
             try? FileManager.default.removeItem(at: tempDir)
         }
 
-        do {
-            try modelContext.save()
-        } catch {
-            for record in importedRecords {
-                modelContext.delete(record)
-            }
-
-            for storedFilePath in importedStoredPaths {
-                DocumentStorageService.deleteStoredFile(at: storedFilePath, libraryURL: libraryURL)
-            }
-
-            failures.append(
-                .init(
-                    fileName: nil,
-                    message: "The imported metadata could not be saved."
-                )
-            )
-
-            return ImportPDFDocumentsResult(
-                importedCount: 0,
-                duplicates: duplicates,
-                unsupportedFiles: unsupportedFiles,
-                downloadFailures: downloadFailures,
-                failures: failures,
-                autoAssignedLabels: autoAssignedLabelNames
-            )
-        }
-
-        return ImportPDFDocumentsResult(
-            importedCount: importedRecords.count,
+        return await commitPreparedImports(
+            preparedImports,
+            autoAssignLabels: autoAssignLabels,
+            into: modelContext,
+            libraryURL: libraryURL,
             duplicates: duplicates,
             unsupportedFiles: unsupportedFiles,
             downloadFailures: downloadFailures,
             failures: failures,
-            autoAssignedLabels: autoAssignedLabelNames
+            autoAssignedLabelNames: autoAssignedLabelNames
         )
     }
 
@@ -332,25 +309,15 @@ enum ImportPDFDocumentsUseCase {
         return nil
     }
 
-    private static func importDocument(
+    private static func prepareImport(
         from url: URL,
-        metadata: ImportMetadata,
-        importedAt: Date,
-        into libraryURL: URL
-    ) throws -> DocumentRecord {
-        let documentID = UUID()
+        importedAt: Date
+    ) async throws -> PreparedImport {
+        let metadata = try await importMetadata(for: url)
         let originalFileName = url.lastPathComponent
         let title = normalizedTitle(for: url)
-        let storedFilePath = try DocumentStorageService.copyToStorage(
-            from: url,
-            title: title,
-            contentHash: metadata.contentHash,
-            importedAt: importedAt,
-            libraryURL: libraryURL
-        )
 
-        let record = DocumentRecord(
-            id: documentID,
+        return PreparedImport(
             originalFileName: originalFileName,
             title: title,
             documentDate: metadata.documentDate,
@@ -358,11 +325,35 @@ enum ImportPDFDocumentsUseCase {
             pageCount: metadata.pageCount,
             fileSize: metadata.fileSize,
             contentHash: metadata.contentHash,
-            storedFilePath: storedFilePath
+            storedFilePath: "",
+            fullText: metadata.fullText
         )
-        record.fullText = metadata.fullText
-        record.ocrCompleted = true
-        return record
+    }
+
+    private static func stagePreparedImport(
+        _ preparedImport: PreparedImport,
+        from sourceURL: URL,
+        into libraryURL: URL
+    ) throws -> PreparedImport {
+        let storedFilePath = try DocumentStorageService.copyToStorage(
+            from: sourceURL,
+            title: preparedImport.title,
+            contentHash: preparedImport.contentHash,
+            importedAt: preparedImport.importedAt,
+            libraryURL: libraryURL
+        )
+
+        return PreparedImport(
+            originalFileName: preparedImport.originalFileName,
+            title: preparedImport.title,
+            documentDate: preparedImport.documentDate,
+            importedAt: preparedImport.importedAt,
+            pageCount: preparedImport.pageCount,
+            fileSize: preparedImport.fileSize,
+            contentHash: preparedImport.contentHash,
+            storedFilePath: storedFilePath,
+            fullText: preparedImport.fullText
+        )
     }
 
     @MainActor
@@ -373,10 +364,76 @@ enum ImportPDFDocumentsUseCase {
     }
 
     @MainActor
-    private static func storedContentHashes(using modelContext: ModelContext) -> Set<String> {
-        let descriptor = FetchDescriptor<DocumentRecord>()
-        let records: [DocumentRecord] = (try? modelContext.fetch(descriptor)) ?? []
-        return Set(records.lazy.map(\.contentHash))
+    private static func commitPreparedImports(
+        _ preparedImports: [PreparedImport],
+        autoAssignLabels: [LabelTag],
+        into modelContext: ModelContext,
+        libraryURL: URL,
+        duplicates: [ImportPDFDocumentsResult.Duplicate],
+        unsupportedFiles: [ImportPDFDocumentsResult.Unsupported],
+        downloadFailures: [ImportPDFDocumentsResult.DownloadFailure],
+        failures: [ImportPDFDocumentsResult.Failure],
+        autoAssignedLabelNames: [String]
+    ) -> ImportPDFDocumentsResult {
+        var importedRecords: [DocumentRecord] = []
+        var importedStoredPaths: [String] = []
+        var failures = failures
+
+        for preparedImport in preparedImports {
+            let record = DocumentRecord(
+                originalFileName: preparedImport.originalFileName,
+                title: preparedImport.title,
+                documentDate: preparedImport.documentDate,
+                importedAt: preparedImport.importedAt,
+                pageCount: preparedImport.pageCount,
+                fileSize: preparedImport.fileSize,
+                contentHash: preparedImport.contentHash,
+                storedFilePath: preparedImport.storedFilePath
+            )
+            record.fullText = preparedImport.fullText
+            record.ocrCompleted = true
+            record.labels = autoAssignLabels
+            modelContext.insert(record)
+            importedRecords.append(record)
+            importedStoredPaths.append(preparedImport.storedFilePath)
+        }
+
+        do {
+            try modelContext.save()
+        } catch {
+            for record in importedRecords {
+                modelContext.delete(record)
+            }
+
+            for storedFilePath in importedStoredPaths {
+                DocumentStorageService.deleteStoredFile(at: storedFilePath, libraryURL: libraryURL)
+            }
+
+            failures.append(
+                .init(
+                    fileName: nil,
+                    message: "The imported metadata could not be saved."
+                )
+            )
+
+            return ImportPDFDocumentsResult(
+                importedCount: 0,
+                duplicates: duplicates,
+                unsupportedFiles: unsupportedFiles,
+                downloadFailures: downloadFailures,
+                failures: failures,
+                autoAssignedLabels: autoAssignedLabelNames
+            )
+        }
+
+        return ImportPDFDocumentsResult(
+            importedCount: importedRecords.count,
+            duplicates: duplicates,
+            unsupportedFiles: unsupportedFiles,
+            downloadFailures: downloadFailures,
+            failures: failures,
+            autoAssignedLabels: autoAssignedLabelNames
+        )
     }
 
     private static func importMetadata(for url: URL) async throws -> ImportMetadata {

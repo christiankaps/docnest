@@ -4,11 +4,11 @@ import SwiftData
 enum SearchDocumentsUseCase {
     struct Snapshot: Sendable {
         let documentID: UUID
+        let labelIDs: Set<UUID>
         let title: String
         let originalFileName: String
-        let fullText: String?
-        let labelIDs: Set<UUID>
         let labelNames: [String]
+        let fullText: String?
     }
 
     static func filter(
@@ -28,13 +28,23 @@ enum SearchDocumentsUseCase {
         _ documents: [Snapshot],
         query: String,
         selectedLabelIDs: Set<UUID>
-    ) -> [Snapshot] {
+    ) throws -> [Snapshot] {
         let searchTerms = normalizedSearchTerms(from: query)
+        var matches: [Snapshot] = []
+        matches.reserveCapacity(documents.count)
 
-        return documents.filter { document in
-            matchesAllSelectedLabels(document, selectedLabelIDs: selectedLabelIDs)
-                && matchesAllSearchTerms(document, searchTerms: searchTerms)
+        for (index, document) in documents.enumerated() {
+            if index.isMultiple(of: 64) {
+                try Task.checkCancellation()
+            }
+
+            if matchesAllSelectedLabels(document, selectedLabelIDs: selectedLabelIDs)
+                && matchesAllSearchTerms(document, searchTerms: searchTerms) {
+                matches.append(document)
+            }
         }
+
+        return matches
     }
 
     private static func matchesAllSelectedLabels(_ document: DocumentRecord, selectedLabelIDs: Set<PersistentIdentifier>) -> Bool {
@@ -112,20 +122,17 @@ enum SearchDocumentsUseCase {
         }
 
         for term in searchTerms {
-            let titleMatches = document.title.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-            if titleMatches {
+            if document.title.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil {
                 continue
             }
 
-            let fileNameMatches = document.originalFileName.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-            if fileNameMatches {
+            if document.originalFileName.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil {
                 continue
             }
 
-            let labelMatches = document.labelNames.contains { labelName in
-                labelName.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-            }
-            if labelMatches {
+            if document.labelNames.contains(where: {
+                $0.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            }) {
                 continue
             }
 
@@ -140,7 +147,7 @@ enum SearchDocumentsUseCase {
         return true
     }
 
-    private static func normalizedSearchTerms(from query: String) -> [String] {
+    static func normalizedSearchTerms(from query: String) -> [String] {
         query
             .components(separatedBy: .whitespacesAndNewlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }

@@ -61,7 +61,7 @@ struct RootView: View {
         .toolbar { toolbarContent }
         .modifier(RootViewImportModifier(coordinator: coordinator))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
-        .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders))
+        .modifier(RootViewChangeHandlers(coordinator: coordinator, thumbnailCache: thumbnailCache, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders))
         .focusedSceneValue(\.exportDocumentsAction) {
             coordinator.exportDocuments(coordinator.displayedSelectedDocuments)
         }
@@ -377,22 +377,12 @@ private struct RootViewDialogsModifier: ViewModifier {
 
 private struct RootViewChangeHandlers: ViewModifier {
     let coordinator: LibraryCoordinator
+    let thumbnailCache: ThumbnailCache
     let allDocuments: [DocumentRecord]
     let allLabels: [LabelTag]
     let allSmartFolders: [SmartFolder]
     let allLabelGroups: [LabelGroup]
     let allWatchFolders: [WatchFolder]
-
-    private var documentFingerprint: Int {
-        var hasher = Hasher()
-        hasher.combine(allDocuments.count)
-        for document in allDocuments {
-            hasher.combine(document.persistentModelID)
-            hasher.combine(document.trashedAt)
-            hasher.combine(document.storedFilePath)
-        }
-        return hasher.finalize()
-    }
 
     private var labelFingerprint: Int {
         var hasher = Hasher()
@@ -451,7 +441,7 @@ private struct RootViewChangeHandlers: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .modifier(ChangeHandlersNotifications(coordinator: coordinator))
+            .modifier(ChangeHandlersNotifications(coordinator: coordinator, thumbnailCache: thumbnailCache))
             .modifier(ChangeHandlersData(
                 coordinator: coordinator,
                 allDocuments: allDocuments,
@@ -459,7 +449,6 @@ private struct RootViewChangeHandlers: ViewModifier {
                 allSmartFolders: allSmartFolders,
                 allLabelGroups: allLabelGroups,
                 allWatchFolders: allWatchFolders,
-                documentFingerprint: documentFingerprint,
                 labelFingerprint: labelFingerprint,
                 smartFolderFingerprint: smartFolderFingerprint,
                 labelGroupFingerprint: labelGroupFingerprint,
@@ -470,6 +459,7 @@ private struct RootViewChangeHandlers: ViewModifier {
 
 private struct ChangeHandlersNotifications: ViewModifier {
     let coordinator: LibraryCoordinator
+    let thumbnailCache: ThumbnailCache
 
     func body(content: Content) -> some View {
         content
@@ -492,6 +482,7 @@ private struct ChangeHandlersNotifications: ViewModifier {
                 coordinator.cancelPendingDisplayedSelectionUpdate()
                 coordinator.cancelPendingSearchRecompute()
                 coordinator.cancelPendingDerivedStateRefresh()
+                thumbnailCache.cancelAllInFlightTasks()
                 coordinator.tearDownWatchFolderMonitoring()
                 AppSettingsController.shared.clearActiveLibraryContext()
             }
@@ -526,7 +517,6 @@ private struct ChangeHandlersData: ViewModifier {
     let allSmartFolders: [SmartFolder]
     let allLabelGroups: [LabelGroup]
     let allWatchFolders: [WatchFolder]
-    let documentFingerprint: Int
     let labelFingerprint: Int
     let smartFolderFingerprint: Int
     let labelGroupFingerprint: Int
@@ -535,11 +525,16 @@ private struct ChangeHandlersData: ViewModifier {
     @State private var pendingMetadataRefreshTask: Task<Void, Never>?
     @State private var pendingWatchFolderRefreshTask: Task<Void, Never>?
 
-    private func scheduleDocumentRefresh() {
+    private func scheduleDocumentRefresh(allowWhenMetadataRefreshPending: Bool = true) {
         pendingDocumentRefreshTask?.cancel()
         pendingDocumentRefreshTask = Task { @MainActor in
+            defer { pendingDocumentRefreshTask = nil }
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
+            guard allowWhenMetadataRefreshPending
+                || (pendingMetadataRefreshTask == nil && pendingWatchFolderRefreshTask == nil) else {
+                return
+            }
             coordinator.syncDocuments(allDocuments)
         }
     }
@@ -547,8 +542,11 @@ private struct ChangeHandlersData: ViewModifier {
     private func scheduleMetadataRefresh(syncLabels: Bool = false) {
         pendingMetadataRefreshTask?.cancel()
         pendingMetadataRefreshTask = Task { @MainActor in
+            defer { pendingMetadataRefreshTask = nil }
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
+
+            coordinator.syncDocuments(allDocuments, recompute: false)
 
             if syncLabels {
                 coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
@@ -565,6 +563,7 @@ private struct ChangeHandlersData: ViewModifier {
     private func scheduleWatchFolderRefresh() {
         pendingWatchFolderRefreshTask?.cancel()
         pendingWatchFolderRefreshTask = Task { @MainActor in
+            defer { pendingWatchFolderRefreshTask = nil }
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
             coordinator.syncWatchFolders(allWatchFolders)
@@ -573,8 +572,11 @@ private struct ChangeHandlersData: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onChange(of: documentFingerprint) {
+            .onChange(of: allDocuments.count) {
                 scheduleDocumentRefresh()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+                scheduleDocumentRefresh(allowWhenMetadataRefreshPending: false)
             }
             .onChange(of: labelFingerprint) {
                 scheduleMetadataRefresh(syncLabels: true)

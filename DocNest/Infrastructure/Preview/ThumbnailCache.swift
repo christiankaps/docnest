@@ -29,6 +29,10 @@ final class ThumbnailCache {
         return nil
     }
 
+    func isObserved(storedFilePath: String, size: CGSize) -> Bool {
+        readyThumbnailKeys.contains(cacheKey(storedFilePath: storedFilePath, size: size))
+    }
+
     func cancelAllInFlightTasks() {
         for task in inFlightTasks.values {
             task.cancel()
