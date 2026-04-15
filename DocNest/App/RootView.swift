@@ -449,23 +449,16 @@ private struct RootViewChangeHandlers: ViewModifier {
         return hasher.finalize()
     }
 
-    private func reingest() {
-        coordinator.ingest(
-            allDocuments: allDocuments,
-            allLabels: allLabels,
-            allSmartFolders: allSmartFolders,
-            allLabelGroups: allLabelGroups,
-            allWatchFolders: allWatchFolders
-        )
-    }
-
     func body(content: Content) -> some View {
         content
             .modifier(ChangeHandlersNotifications(coordinator: coordinator))
             .modifier(ChangeHandlersData(
                 coordinator: coordinator,
-                reingest: reingest,
+                allDocuments: allDocuments,
                 allLabels: allLabels,
+                allSmartFolders: allSmartFolders,
+                allLabelGroups: allLabelGroups,
+                allWatchFolders: allWatchFolders,
                 documentFingerprint: documentFingerprint,
                 labelFingerprint: labelFingerprint,
                 smartFolderFingerprint: smartFolderFingerprint,
@@ -528,61 +521,77 @@ private struct ChangeHandlersNotifications: ViewModifier {
 
 private struct ChangeHandlersData: ViewModifier {
     let coordinator: LibraryCoordinator
-    let reingest: () -> Void
+    let allDocuments: [DocumentRecord]
     let allLabels: [LabelTag]
+    let allSmartFolders: [SmartFolder]
+    let allLabelGroups: [LabelGroup]
+    let allWatchFolders: [WatchFolder]
     let documentFingerprint: Int
     let labelFingerprint: Int
     let smartFolderFingerprint: Int
     let labelGroupFingerprint: Int
     let watchFolderFingerprint: Int
-    @State private var pendingRefreshTask: Task<Void, Never>?
-    @State private var pendingNeedsLabelSync = false
-    @State private var pendingNeedsWatchFolderRefresh = false
+    @State private var pendingDocumentRefreshTask: Task<Void, Never>?
+    @State private var pendingMetadataRefreshTask: Task<Void, Never>?
+    @State private var pendingWatchFolderRefreshTask: Task<Void, Never>?
 
-    private func scheduleRefresh(syncLabels: Bool = false, refreshWatchFolders: Bool = false) {
-        pendingNeedsLabelSync = pendingNeedsLabelSync || syncLabels
-        pendingNeedsWatchFolderRefresh = pendingNeedsWatchFolderRefresh || refreshWatchFolders
-        pendingRefreshTask?.cancel()
-        pendingRefreshTask = Task { @MainActor in
+    private func scheduleDocumentRefresh() {
+        pendingDocumentRefreshTask?.cancel()
+        pendingDocumentRefreshTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            coordinator.syncDocuments(allDocuments)
+        }
+    }
+
+    private func scheduleMetadataRefresh(syncLabels: Bool = false) {
+        pendingMetadataRefreshTask?.cancel()
+        pendingMetadataRefreshTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
 
-            let needsLabelSync = pendingNeedsLabelSync
-            let needsWatchRefresh = pendingNeedsWatchFolderRefresh
-            pendingNeedsLabelSync = false
-            pendingNeedsWatchFolderRefresh = false
-
-            if needsLabelSync {
+            if syncLabels {
                 coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
             }
-            reingest()
-            if needsWatchRefresh {
-                coordinator.refreshWatchFolderMonitors()
-            }
+
+            coordinator.syncMetadata(
+                labels: allLabels,
+                smartFolders: allSmartFolders,
+                labelGroups: allLabelGroups
+            )
+        }
+    }
+
+    private func scheduleWatchFolderRefresh() {
+        pendingWatchFolderRefreshTask?.cancel()
+        pendingWatchFolderRefreshTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            coordinator.syncWatchFolders(allWatchFolders)
         }
     }
 
     func body(content: Content) -> some View {
         content
             .onChange(of: documentFingerprint) {
-                scheduleRefresh()
+                scheduleDocumentRefresh()
             }
             .onChange(of: labelFingerprint) {
-                scheduleRefresh(syncLabels: true)
+                scheduleMetadataRefresh(syncLabels: true)
             }
             .onChange(of: smartFolderFingerprint) {
-                scheduleRefresh()
+                scheduleMetadataRefresh()
             }
             .onChange(of: labelGroupFingerprint) {
-                scheduleRefresh()
+                scheduleMetadataRefresh()
             }
             .onChange(of: watchFolderFingerprint) {
-                scheduleRefresh(refreshWatchFolders: true)
+                scheduleWatchFolderRefresh()
             }
             .onDisappear {
-                pendingRefreshTask?.cancel()
-                pendingNeedsLabelSync = false
-                pendingNeedsWatchFolderRefresh = false
+                pendingDocumentRefreshTask?.cancel()
+                pendingMetadataRefreshTask?.cancel()
+                pendingWatchFolderRefreshTask?.cancel()
             }
     }
 }

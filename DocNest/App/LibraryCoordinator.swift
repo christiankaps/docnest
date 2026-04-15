@@ -159,18 +159,20 @@ final class LibraryCoordinator {
     // MARK: - Data ingestion
 
     func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag], allSmartFolders: [SmartFolder] = [], allLabelGroups: [LabelGroup] = [], allWatchFolders: [WatchFolder] = []) {
-        self.allLabels = allLabels
-        self.allSmartFolders = allSmartFolders
-        self.allLabelGroups = allLabelGroups
-        self.allWatchFolders = allWatchFolders
-        labelsByUUID = Dictionary(uniqueKeysWithValues: allLabels.map { ($0.id, $0) })
-        labelUUIDByPersistentID = Dictionary(uniqueKeysWithValues: allLabels.map { ($0.persistentModelID, $0.id) })
-        smartFoldersByPersistentID = Dictionary(uniqueKeysWithValues: allSmartFolders.map { ($0.persistentModelID, $0) })
+        syncMetadata(labels: allLabels, smartFolders: allSmartFolders, labelGroups: allLabelGroups, recompute: false)
+        syncWatchFolders(allWatchFolders, refreshMonitors: false)
+        syncDocuments(allDocuments, recompute: true)
+    }
+
+    func syncDocuments(_ allDocuments: [DocumentRecord], recompute: Bool = true) {
         documentUUIDByPersistentID = Dictionary(uniqueKeysWithValues: allDocuments.map { ($0.persistentModelID, $0.id) })
         documentByUUID = Dictionary(uniqueKeysWithValues: allDocuments.map { ($0.id, $0) })
 
         var active: [DocumentRecord] = []
         var trashed: [DocumentRecord] = []
+        active.reserveCapacity(allDocuments.count)
+        trashed.reserveCapacity(min(allDocuments.count / 8, allDocuments.count))
+
         for document in allDocuments {
             if document.trashedAt == nil {
                 active.append(document)
@@ -178,11 +180,40 @@ final class LibraryCoordinator {
                 trashed.append(document)
             }
         }
+
         activeDocuments = active
         trashedDocuments = trashed
         existingContentHashes = Set(allDocuments.lazy.map(\.contentHash))
+        recomputeSelectedDocuments()
 
-        recomputeFilteredDocuments()
+        if recompute {
+            recomputeFilteredDocuments()
+        }
+    }
+
+    func syncMetadata(
+        labels: [LabelTag],
+        smartFolders: [SmartFolder],
+        labelGroups: [LabelGroup],
+        recompute: Bool = true
+    ) {
+        allLabels = labels
+        allSmartFolders = smartFolders
+        allLabelGroups = labelGroups
+        labelsByUUID = Dictionary(uniqueKeysWithValues: labels.map { ($0.id, $0) })
+        labelUUIDByPersistentID = Dictionary(uniqueKeysWithValues: labels.map { ($0.persistentModelID, $0.id) })
+        smartFoldersByPersistentID = Dictionary(uniqueKeysWithValues: smartFolders.map { ($0.persistentModelID, $0) })
+
+        if recompute {
+            recomputeFilteredDocuments()
+        }
+    }
+
+    func syncWatchFolders(_ watchFolders: [WatchFolder], refreshMonitors: Bool = true) {
+        allWatchFolders = watchFolders
+        if refreshMonitors {
+            refreshWatchFolderMonitors()
+        }
     }
 
     // MARK: - Recomputation
@@ -341,14 +372,10 @@ final class LibraryCoordinator {
             )
         }
 
-        var smartFolderCounts: [UUID: Int] = [:]
-        for (folderID, labelIDs) in smartFolderLabelUUIDs {
-            smartFolderCounts[folderID] = SearchDocumentsUseCase.filter(
-                activeDocuments,
-                query: "",
-                selectedLabelIDs: labelIDs
-            ).count
-        }
+        let smartFolderCounts = computeSmartFolderCounts(
+            activeDocuments: activeDocuments,
+            smartFolderLabelUUIDs: smartFolderLabelUUIDs
+        )
 
         var needsLabelsCount = 0
         for document in activeDocuments where document.labelIDs.isEmpty {
@@ -403,6 +430,56 @@ final class LibraryCoordinator {
                 selectedLabelIDs: labelIDs
             ).count
         }
+    }
+
+    nonisolated private static func computeSmartFolderCounts(
+        activeDocuments: [SearchDocumentsUseCase.Snapshot],
+        smartFolderLabelUUIDs: [UUID: Set<UUID>]
+    ) -> [UUID: Int] {
+        guard !smartFolderLabelUUIDs.isEmpty else { return [:] }
+
+        var counts = Dictionary(uniqueKeysWithValues: smartFolderLabelUUIDs.keys.map { ($0, 0) })
+        var candidateFoldersByLabelID: [UUID: [UUID]] = [:]
+        var requiredLabelCounts: [UUID: Int] = [:]
+        var emptyFolderIDs: [UUID] = []
+
+        for (folderID, labelIDs) in smartFolderLabelUUIDs {
+            requiredLabelCounts[folderID] = labelIDs.count
+            if labelIDs.isEmpty {
+                emptyFolderIDs.append(folderID)
+                continue
+            }
+
+            for labelID in labelIDs {
+                candidateFoldersByLabelID[labelID, default: []].append(folderID)
+            }
+        }
+
+        if !emptyFolderIDs.isEmpty {
+            for folderID in emptyFolderIDs {
+                counts[folderID] = activeDocuments.count
+            }
+        }
+
+        for document in activeDocuments {
+            guard !document.labelIDs.isEmpty else { continue }
+
+            var matchedRequirements: [UUID: Int] = [:]
+            for labelID in document.labelIDs {
+                guard let folderIDs = candidateFoldersByLabelID[labelID] else { continue }
+                for folderID in folderIDs {
+                    matchedRequirements[folderID, default: 0] += 1
+                }
+            }
+
+            for (folderID, matchedCount) in matchedRequirements {
+                if matchedCount == requiredLabelCounts[folderID] {
+                    counts[folderID, default: 0] += 1
+                }
+            }
+        }
+
+        return counts
     }
 
     private func rebuildFilteredDocumentLookups() {

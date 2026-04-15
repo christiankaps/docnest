@@ -48,6 +48,30 @@ struct QuickLabelPickerView: View {
         preparedAssignmentCounts
     }
 
+    private var labelFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(allLabels.count)
+        for label in allLabels {
+            hasher.combine(label.persistentModelID)
+            hasher.combine(label.name)
+            hasher.combine(label.icon)
+            hasher.combine(label.sortOrder)
+            hasher.combine(label.groupID)
+        }
+        return hasher.finalize()
+    }
+
+    private var labelGroupFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(allGroups.count)
+        for group in allGroups {
+            hasher.combine(group.persistentModelID)
+            hasher.combine(group.name)
+            hasher.combine(group.sortOrder)
+        }
+        return hasher.finalize()
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -74,11 +98,11 @@ struct QuickLabelPickerView: View {
             refreshPreparedState()
             highlightedIndex = selectableIndices.first ?? 0
         }
-        .onChange(of: coordinator.allLabels.count) {
+        .onChange(of: labelFingerprint) {
             refreshPreparedState()
             highlightedIndex = selectableIndices.first ?? 0
         }
-        .onChange(of: coordinator.allLabelGroups.count) {
+        .onChange(of: labelGroupFingerprint) {
             refreshPreparedState()
             highlightedIndex = selectableIndices.first ?? 0
         }

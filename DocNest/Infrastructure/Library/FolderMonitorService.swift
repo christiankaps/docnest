@@ -21,6 +21,8 @@ final class FolderMonitorService {
     private var monitors: [UUID: MonitoredFolder] = [:]
     private var knownSnapshotsByFolderID: [UUID: [String: Date]] = [:]
     private var pendingScanTasks: [UUID: Task<Void, Never>] = [:]
+    private var activeScanTasks: [UUID: Task<Void, Never>] = [:]
+    private var scanGenerationByFolderID: [UUID: Int] = [:]
     private let monitorQueue = DispatchQueue(
         label: "com.kaps.docnest.foldermonitor",
         qos: .utility
@@ -83,7 +85,10 @@ final class FolderMonitorService {
     func stopMonitoring(id: UUID) {
         guard let existing = monitors.removeValue(forKey: id) else { return }
         pendingScanTasks[id]?.cancel()
+        activeScanTasks[id]?.cancel()
         pendingScanTasks.removeValue(forKey: id)
+        activeScanTasks.removeValue(forKey: id)
+        scanGenerationByFolderID.removeValue(forKey: id)
         knownSnapshotsByFolderID.removeValue(forKey: id)
         existing.dispatchSource.cancel()
         Self.logger.info("Stopped monitoring: \(existing.folderPath, privacy: .public)")
@@ -139,52 +144,64 @@ final class FolderMonitorService {
         let folderID = entry.watchFolderID
         let folderPath = entry.folderPath
 
+        scanGenerationByFolderID[folderID, default: 0] += 1
+        let generation = scanGenerationByFolderID[folderID, default: 0]
         pendingScanTasks[folderID]?.cancel()
+        activeScanTasks[folderID]?.cancel()
         pendingScanTasks[folderID] = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled, let self else { return }
 
-            await Task.detached(priority: .utility) {
-            let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
-            guard let contents = try? FileManager.default.contentsOfDirectory(
-                at: folderURL,
-                includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
-                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-            ) else { return }
+            self.pendingScanTasks[folderID] = nil
+            let scanTask = Task.detached(priority: .utility) { [generation] in
+                let snapshots = Self.scanSnapshots(in: folderPath)
+                guard !Task.isCancelled else { return }
 
-            let snapshots: [FileSnapshot] = contents.compactMap { url in
-                guard url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame else {
-                    return nil
+                await MainActor.run {
+                    guard self.scanGenerationByFolderID[folderID] == generation else { return }
+                    self.activeScanTasks[folderID] = nil
+                    guard let monitor = self.monitors[folderID] else { return }
+
+                    let previousSnapshots = self.knownSnapshotsByFolderID[folderID] ?? [:]
+                    let result = Self.newPDFURLs(
+                        from: snapshots,
+                        previousSnapshots: previousSnapshots
+                    )
+                    self.knownSnapshotsByFolderID[folderID] = result.updatedSnapshots
+
+                    guard !result.urls.isEmpty else { return }
+
+                    Self.logger.info("Found \(result.urls.count) new or updated PDF(s) in \(folderPath, privacy: .public)")
+                    self.onNewPDFsDetected?(result.urls, monitor.labelIDs)
                 }
-
-                let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
-                guard values?.isRegularFile == true else {
-                    return nil
-                }
-
-                return FileSnapshot(
-                    path: url.path,
-                    modificationDate: values?.contentModificationDate ?? .distantPast
-                )
             }
 
-            await MainActor.run {
-                self.pendingScanTasks[folderID] = nil
-                guard let monitor = self.monitors[folderID] else { return }
+            self.activeScanTasks[folderID] = scanTask
+        }
+    }
 
-                let previousSnapshots = self.knownSnapshotsByFolderID[folderID] ?? [:]
-                let result = Self.newPDFURLs(
-                    from: snapshots,
-                    previousSnapshots: previousSnapshots
-                )
-                self.knownSnapshotsByFolderID[folderID] = result.updatedSnapshots
+    nonisolated private static func scanSnapshots(in folderPath: String) -> [FileSnapshot] {
+        let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: folderURL,
+            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+        ) else { return [] }
 
-                guard !result.urls.isEmpty else { return }
-
-                Self.logger.info("Found \(result.urls.count) new or updated PDF(s) in \(folderPath, privacy: .public)")
-                self.onNewPDFsDetected?(result.urls, monitor.labelIDs)
+        return contents.compactMap { url in
+            guard url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame else {
+                return nil
             }
-            }.value
+
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
+            guard values?.isRegularFile == true else {
+                return nil
+            }
+
+            return FileSnapshot(
+                path: url.path,
+                modificationDate: values?.contentModificationDate ?? .distantPast
+            )
         }
     }
 }
