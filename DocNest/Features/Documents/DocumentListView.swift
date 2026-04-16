@@ -68,6 +68,11 @@ enum DocumentListViewMode: String, CaseIterable {
 }
 
 struct DocumentListView: View {
+    struct ArrowNavigationStep {
+        let nextID: PersistentIdentifier
+        let selectedIDs: Set<PersistentIdentifier>
+    }
+
     private struct SortSnapshot: Sendable {
         let documentID: UUID
         let title: String
@@ -766,46 +771,26 @@ struct DocumentListView: View {
         guard !coordinator.isQuickLabelPickerPresented else { return .ignored }
         guard !sortedDocs.isEmpty else { return .ignored }
 
-        let isShift = keyPress.modifiers.contains(.shift)
-
-        // Find the current cursor position — the last navigated-to item.
-        let currentIndex: Int? = if let anchor = selectionAnchor, let index = cachedSortedDocumentIndices[anchor] {
-            index
-        } else if let first = coordinator.selectedDocumentIDs.first(where: { cachedSortedDocumentIndices[$0] != nil }) {
-            cachedSortedDocumentIndices[first]
-        } else {
-            nil
-        }
-
-        let delta: Int
-        switch keyPress.key {
-        case .upArrow, .leftArrow:
-            delta = -1
-        case .downArrow, .rightArrow:
-            delta = 1
-        default:
+        guard let step = Self.arrowNavigationStep(
+            key: keyPress.key,
+            anchor: selectionAnchor,
+            selectedDocumentIDs: coordinator.selectedDocumentIDs,
+            orderedSelectedDocumentIDs: sortedDocs
+                .map(\.persistentModelID)
+                .filter { coordinator.selectedDocumentIDs.contains($0) },
+            visibleDocuments: sortedDocs,
+            extendSelection: keyPress.modifiers.contains(.shift)
+        ) else {
             return .ignored
         }
 
-        let nextIndex: Int
-        if let currentIndex {
-            nextIndex = min(max(currentIndex + delta, 0), sortedDocs.count - 1)
-        } else {
-            nextIndex = delta > 0 ? 0 : sortedDocs.count - 1
+        guard let nextDocument = sortedDocs.first(where: { $0.persistentModelID == step.nextID }) else {
+            return .ignored
         }
-
-        let nextDocument = sortedDocs[nextIndex]
-        let nextID = nextDocument.persistentModelID
         coordinator.beginSelectionInteraction()
-
-        if isShift {
-            // Extend selection to include the next item
-            coordinator.selectedDocumentIDs.insert(nextID)
-        } else {
-            coordinator.selectedDocumentIDs = [nextID]
-        }
-        selectionAnchor = nextID
-        scrollProxy?.scrollTo(nextID, anchor: nil)
+        coordinator.selectedDocumentIDs = step.selectedIDs
+        selectionAnchor = step.nextID
+        scrollProxy?.scrollTo(step.nextID, anchor: nil)
 
         if let url = resolvedStoredFileURL(for: nextDocument) {
             quickLook.previewURLs = [url]
@@ -956,6 +941,71 @@ struct DocumentListView: View {
         }
 
         return .orderedSame
+    }
+
+    static func documentIndicesByPersistentID(for documents: [DocumentRecord]) -> [PersistentIdentifier: Int] {
+        Dictionary(uniqueKeysWithValues: documents.enumerated().map { ($0.element.persistentModelID, $0.offset) })
+    }
+
+    static func arrowNavigationCurrentIndex(
+        anchor: PersistentIdentifier?,
+        selectedDocumentIDs: Set<PersistentIdentifier>,
+        orderedSelectedDocumentIDs: [PersistentIdentifier],
+        visibleDocumentIndices: [PersistentIdentifier: Int]
+    ) -> Int? {
+        if let anchor, let index = visibleDocumentIndices[anchor] {
+            return index
+        }
+
+        if let firstOrderedSelected = orderedSelectedDocumentIDs.first(where: { visibleDocumentIndices[$0] != nil }) {
+            return visibleDocumentIndices[firstOrderedSelected]
+        }
+
+        if let firstSelected = selectedDocumentIDs.first(where: { visibleDocumentIndices[$0] != nil }) {
+            return visibleDocumentIndices[firstSelected]
+        }
+
+        return nil
+    }
+
+    static func arrowNavigationStep(
+        key: KeyEquivalent,
+        anchor: PersistentIdentifier?,
+        selectedDocumentIDs: Set<PersistentIdentifier>,
+        orderedSelectedDocumentIDs: [PersistentIdentifier],
+        visibleDocuments: [DocumentRecord],
+        extendSelection: Bool
+    ) -> ArrowNavigationStep? {
+        guard !visibleDocuments.isEmpty else { return nil }
+
+        let visibleDocumentIndices = documentIndicesByPersistentID(for: visibleDocuments)
+        let currentIndex = arrowNavigationCurrentIndex(
+            anchor: anchor,
+            selectedDocumentIDs: selectedDocumentIDs,
+            orderedSelectedDocumentIDs: orderedSelectedDocumentIDs,
+            visibleDocumentIndices: visibleDocumentIndices
+        )
+
+        let delta: Int
+        switch key {
+        case .upArrow, .leftArrow:
+            delta = -1
+        case .downArrow, .rightArrow:
+            delta = 1
+        default:
+            return nil
+        }
+
+        let nextIndex: Int
+        if let currentIndex {
+            nextIndex = min(max(currentIndex + delta, 0), visibleDocuments.count - 1)
+        } else {
+            nextIndex = delta > 0 ? 0 : visibleDocuments.count - 1
+        }
+
+        let nextID = visibleDocuments[nextIndex].persistentModelID
+        let selectedIDs = extendSelection ? selectedDocumentIDs.union([nextID]) : [nextID]
+        return ArrowNavigationStep(nextID: nextID, selectedIDs: selectedIDs)
     }
 }
 

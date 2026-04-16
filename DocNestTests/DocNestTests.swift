@@ -1718,4 +1718,54 @@ final class DocNestTests: XCTestCase {
         XCTAssertLessThan(base!, patch!)
         XCTAssertLessThan(patch!, nextMajor!)
     }
+
+    @MainActor
+    func testArrowNavigationStepUsesVisibleGroupedOrderAndOrderedSelectionFallback() {
+        let jan2025 = DocumentRecord(
+            originalFileName: "jan-2025.pdf",
+            title: "Jan 2025",
+            documentDate: Calendar.current.date(from: DateComponents(year: 2025, month: 1, day: 15)),
+            importedAt: .now,
+            pageCount: 1
+        )
+        let feb2026 = DocumentRecord(
+            originalFileName: "feb-2026.pdf",
+            title: "Feb 2026",
+            documentDate: Calendar.current.date(from: DateComponents(year: 2026, month: 2, day: 15)),
+            importedAt: .now,
+            pageCount: 1
+        )
+        let jan2026 = DocumentRecord(
+            originalFileName: "jan-2026.pdf",
+            title: "Jan 2026",
+            documentDate: Calendar.current.date(from: DateComponents(year: 2026, month: 1, day: 15)),
+            importedAt: .now,
+            pageCount: 1
+        )
+
+        let flatSortedDocuments = [jan2025, feb2026, jan2026]
+        let visibleDocuments = DocumentGroupMode.yearMonth.group(flatSortedDocuments).flatMap(\.documents)
+
+        let groupedDownStep = DocumentListView.arrowNavigationStep(
+            key: .downArrow,
+            anchor: feb2026.persistentModelID,
+            selectedDocumentIDs: [feb2026.persistentModelID],
+            orderedSelectedDocumentIDs: [feb2026.persistentModelID],
+            visibleDocuments: visibleDocuments,
+            extendSelection: false
+        )
+        XCTAssertEqual(groupedDownStep?.nextID, jan2026.persistentModelID)
+        XCTAssertEqual(groupedDownStep?.selectedIDs, [jan2026.persistentModelID])
+
+        let missingAnchorStep = DocumentListView.arrowNavigationStep(
+            key: .downArrow,
+            anchor: nil,
+            selectedDocumentIDs: [jan2025.persistentModelID, feb2026.persistentModelID],
+            orderedSelectedDocumentIDs: [feb2026.persistentModelID, jan2025.persistentModelID],
+            visibleDocuments: visibleDocuments,
+            extendSelection: false
+        )
+        XCTAssertEqual(missingAnchorStep?.nextID, jan2026.persistentModelID)
+        XCTAssertEqual(missingAnchorStep?.selectedIDs, [jan2026.persistentModelID])
+    }
 }
