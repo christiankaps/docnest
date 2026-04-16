@@ -119,6 +119,7 @@ final class LibraryCoordinator {
     private let displayedSelectionDelay: Duration = .milliseconds(65)
     private let searchRecomputeDelay: Duration = .milliseconds(85)
     private var lastSelectionInteractionStart: TimeInterval?
+    private var isImmediateDisplayedSelectionPending = false
     private var derivedStateGeneration = 0
     let recentDocumentLimit = 10
 
@@ -580,6 +581,13 @@ final class LibraryCoordinator {
     /// Coalesces inspector and passive share updates so row highlighting can update immediately on click.
     func scheduleDisplayedSelectionUpdate() {
         pendingDisplayedSelectionTask?.cancel()
+
+        if isImmediateDisplayedSelectionPending {
+            isImmediateDisplayedSelectionPending = false
+            syncDisplayedSelectionImmediately()
+            return
+        }
+
         pendingDisplayedSelectionTask = Task { @MainActor in
             try? await Task.sleep(for: displayedSelectionDelay)
 
@@ -665,6 +673,7 @@ final class LibraryCoordinator {
 
     func beginSelectionInteraction() {
         lastSelectionInteractionStart = Date().timeIntervalSinceReferenceDate
+        isImmediateDisplayedSelectionPending = true
     }
 
     func scheduleSelectionVisualResponseLog() {

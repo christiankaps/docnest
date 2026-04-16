@@ -1768,4 +1768,32 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(missingAnchorStep?.nextID, jan2026.persistentModelID)
         XCTAssertEqual(missingAnchorStep?.selectedIDs, [jan2026.persistentModelID])
     }
+
+    @MainActor
+    func testDisplayedSelectionUpdatesImmediatelyForDirectSelectionInteraction() async {
+        let coordinator = LibraryCoordinator()
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", importedAt: .now, pageCount: 1)
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", importedAt: .now, pageCount: 1)
+
+        coordinator.ingest(allDocuments: [first, second], allLabels: [], allSmartFolders: [], allLabelGroups: [], allWatchFolders: [])
+
+        for _ in 0..<20 {
+            if coordinator.filteredDocuments.count == 2 {
+                break
+            }
+            await Task.yield()
+        }
+
+        coordinator.selectedDocumentIDs = [first.persistentModelID]
+        coordinator.recomputeSelectedDocuments()
+        coordinator.syncDisplayedSelectionImmediately()
+        XCTAssertEqual(coordinator.displayedSelectedDocuments.map(\.persistentModelID), [first.persistentModelID])
+
+        coordinator.beginSelectionInteraction()
+        coordinator.selectedDocumentIDs = [second.persistentModelID]
+        coordinator.recomputeSelectedDocuments()
+        coordinator.scheduleDisplayedSelectionUpdate()
+
+        XCTAssertEqual(coordinator.displayedSelectedDocuments.map(\.persistentModelID), [second.persistentModelID])
+    }
 }
