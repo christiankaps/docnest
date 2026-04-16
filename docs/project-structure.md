@@ -1,10 +1,10 @@
 # DocNest Project Structure
 
-## Ziel
+## Goal
 
-Die Projektstruktur ist so aufgeteilt, dass Produktlogik, Feature-UI und Infrastruktur sauber getrennt bleiben, ohne frueh in unnoetige Modularisierung zu kippen.
+The project structure separates product behavior, feature UI, and infrastructure concerns without splitting the app into premature modules.
 
-## Verzeichnislayout
+## Directory Layout
 
 ```text
 DocNest/
@@ -18,6 +18,7 @@ DocNest/
   Infrastructure/
     Library/
     Preview/
+    OCR/
   Resources/
   Shared/
     Design/
@@ -26,46 +27,59 @@ DocNestTests/
 DocNestUITests/
 SampleLibraries/
 docs/
+scripts/
 ```
 
-## Verantwortlichkeiten
+## Responsibilities
 
 ### App
 
-- App-Einstiegspunkt
-- globale Navigation
-- Window- und Scene-Konfiguration
+- process entry point
+- scene and menu setup
+- focused-value command wiring
+- library session restoration
+- top-level coordination and window state
+
+Representative files:
+
+- [DocNestApp.swift](/Users/kaps/Projects/docnest/DocNest/App/DocNestApp.swift)
+- [RootView.swift](/Users/kaps/Projects/docnest/DocNest/App/RootView.swift)
+- [LibraryCoordinator.swift](/Users/kaps/Projects/docnest/DocNest/App/LibraryCoordinator.swift)
 
 ### Domain
 
-- fachliche Kerntypen wie Dokument, Label und spaetere Filtermodelle
-- spaetere Use Cases fuer Import, Labeling, Suche und Library-Operationen
+- persistent entities such as documents, labels, watch folders, and smart folders
+- business use cases for import, export, search, labeling, deletion, and watch-folder management
 
 ### Features
 
-- UI und Ablauf pro Fachbereich
-- Aufteilung nach Library und Documents
-- jedes Feature kann spaeter eigene ViewModels, Commands und Unteransichten enthalten
+- user-facing views grouped by product area
+- document list, thumbnail, inspector, and quick-label flows
+- sidebar, label management, smart folders, and watch-folder settings
 
 ### Infrastructure
 
-- Dateisystemzugriff fuer die Library
-- PDF-Vorschau und spaetere Thumbnail-Erzeugung
+- library package access, validation, repair, and locking
+- document storage layout inside the package
+- watch-folder monitoring
+- preview support and OCR/text extraction
+- SwiftData schema versioning and migration
 
 ### Shared
 
-- wiederverwendbare UI-Bausteine und Theme-Definitionen (AppTypography, LabelChip)
-- kein unklarer Sammelplatz fuer Fachlogik
+- reusable UI building blocks
+- command wrappers
+- layout helpers
+- lightweight state helpers
 
-## Startpunkt in Xcode
+## Xcode and Project Definition
 
-- Das Repository enthaelt eine versionierte Projektdefinition in [project.yml](project.yml).
-- Daraus wird [DocNest.xcodeproj](DocNest.xcodeproj) generiert.
-- Die bestehende Ordnerstruktur wird direkt als Group- und Source-Struktur im Xcode-Projekt verwendet.
+- The repository contains a versioned project definition in [project.yml](/Users/kaps/Projects/docnest/project.yml).
+- The generated Xcode project lives at [DocNest.xcodeproj](/Users/kaps/Projects/docnest/DocNest.xcodeproj/project.pbxproj).
+- The on-disk folder structure maps closely to the Xcode group structure.
 
-## Naechste sinnvolle Schritte
+## Related Documentation
 
-1. App- und Test-Schemes ueber `xcodebuild` in CI oder lokal standardisieren.
-2. Persistenzentscheidung zwischen SwiftData und Core Data treffen.
-3. Library-Service in `Infrastructure/Library` anlegen.
-4. PDFKit-basierte Vorschau in `Features/Documents` und `Infrastructure/Preview` verdrahten.
+- [overview.md](/Users/kaps/Projects/docnest/docs/overview.md)
+- [architecture.md](/Users/kaps/Projects/docnest/docs/architecture.md)
+- [requirements.md](/Users/kaps/Projects/docnest/docs/requirements.md)

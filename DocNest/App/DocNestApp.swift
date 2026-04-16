@@ -3,6 +3,11 @@ import OSLog
 import SwiftUI
 import SwiftData
 
+// The application entry point for DocNest lives in this file.
+//
+// It owns process-wide concerns such as scene setup, menu configuration,
+// focused-value command wiring, library-session restoration, and app-level
+// routing of Services and open-URL events into the currently active library session.
 // MARK: - Focused Value for Library Session
 
 private struct LibrarySessionKey: FocusedValueKey {
@@ -643,6 +648,12 @@ private struct AppRootView: View {
 }
 
 @MainActor
+/// Owns the currently selected library session across app launches.
+///
+/// The session controller bridges app lifecycle events and library access:
+/// it restores the last valid library, creates or opens new libraries, holds
+/// the active `ModelContainer`, and queues import URLs until a library becomes
+/// available.
 final class LibrarySessionController: ObservableObject {
     private static let logger = Logger(subsystem: "com.kaps.docnest", category: "LibrarySession")
     private static let isRunningUnderTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil

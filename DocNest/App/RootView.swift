@@ -2,6 +2,11 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+/// The root window content for an open DocNest library.
+///
+/// `RootView` owns the live `LibraryCoordinator` and wires SwiftData query
+/// results, focused-value commands, drag-and-drop, paste/import actions, and
+/// split-view presentation into the open-library experience.
 struct RootView: View {
     let libraryURL: URL
     @ObservedObject var librarySession: LibrarySessionController

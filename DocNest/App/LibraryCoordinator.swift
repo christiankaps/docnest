@@ -32,6 +32,12 @@ enum WatchFolderStatus {
 
 @MainActor
 @Observable
+/// Central UI-state coordinator for the open-library experience.
+///
+/// The coordinator sits between persisted SwiftData models and SwiftUI views.
+/// It owns transient interaction state such as selection, filters, progress,
+/// summary messages, derived sidebar counts, and watch-folder wiring while
+/// delegating business behavior to dedicated use cases and services.
 final class LibraryCoordinator {
     private static let performanceLogger = Logger(subsystem: "com.kaps.docnest", category: "performance")
 
@@ -161,6 +167,8 @@ final class LibraryCoordinator {
 
     // MARK: - Data ingestion
 
+    /// Synchronizes the latest queried SwiftData models into coordinator-managed
+    /// UI state and recomputes all derived views when needed.
     func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag], allSmartFolders: [SmartFolder] = [], allLabelGroups: [LabelGroup] = [], allWatchFolders: [WatchFolder] = []) {
         syncMetadata(labels: allLabels, smartFolders: allSmartFolders, labelGroups: allLabelGroups, recompute: false)
         syncWatchFolders(allWatchFolders, refreshMonitors: false)
@@ -237,6 +245,11 @@ final class LibraryCoordinator {
 
     // MARK: - Recomputation
 
+    /// Rebuilds the document list, sidebar counts, and label counts from the
+    /// current selection, filter, and search state.
+    ///
+    /// The expensive filtering work happens off the main actor and is guarded
+    /// by generation checks so stale computations do not overwrite newer UI state.
     func recomputeFilteredDocuments() {
         #if DEBUG
         let startTime = Date().timeIntervalSinceReferenceDate
@@ -902,6 +915,9 @@ final class LibraryCoordinator {
 
         importProgress = ImportProgress(total: 0, completed: 0)
 
+        // Manual imports and drop/paste/service imports all converge here so
+        // they share progress reporting, active-filter label assignment, and
+        // summary-message behavior.
         activeImportTask = Task { @MainActor [weak self] in
             let importResult = await ImportPDFDocumentsUseCase.execute(
                 urls: urls,
@@ -1024,6 +1040,8 @@ final class LibraryCoordinator {
 
     // MARK: - Watch folder monitoring
 
+    /// Sets up callbacks so watch-folder detections re-enter the same import
+    /// pipeline used by manual imports.
     func setupWatchFolderMonitoring() {
         watchFolderController.onImportRequested = { [weak self] urls, labelIDs in
             self?.importFromWatchFolder(urls: urls, labelIDs: labelIDs)

@@ -5,10 +5,12 @@ import PDFKit
 import SwiftData
 import UniformTypeIdentifiers
 
+/// Custom UTType used for DocNest library packages.
 extension UTType {
     static let docNestLibrary = UTType("com.kaps.docnest.library")!
 }
 
+/// Manifest stored in `Metadata/library.json` for every library package.
 struct DocumentLibraryManifest: Codable {
     let formatVersion: Int
     let createdAt: Date
@@ -107,6 +109,10 @@ struct LibraryLockFile: Codable {
     }
 }
 
+/// Filesystem and package management service for `.docnestlibrary` bundles.
+///
+/// This service owns creation, validation, repair, persistence of the selected
+/// library reference, lock-file handling, and integrity-report generation.
 enum DocumentLibraryService {
     static let packageExtension = "docnestlibrary"
     static let currentFormatVersion = 1
@@ -129,6 +135,8 @@ enum DocumentLibraryService {
         "Diagnostics"
     ]
 
+    /// Restores the previously selected library, preferring an explicit launch
+    /// argument over persisted bookmark or path state.
     static func restorePersistedLibraryAccess() -> LibraryAccessSession? {
         if let launchArgumentLibraryURL = selectedLibraryURL(from: ProcessInfo.processInfo.arguments) {
             return accessLibrary(at: launchArgumentLibraryURL)
@@ -172,6 +180,7 @@ enum DocumentLibraryService {
         return accessLibrary(at: url)
     }
 
+    /// Persists or clears the library reference used for startup restoration.
     static func persistLibraryURL(_ url: URL?) {
         if let url {
             let standardizedURL = url.standardizedFileURL
@@ -231,6 +240,7 @@ enum DocumentLibraryService {
         return normalizedLibraryURL(from: url)
     }
 
+    /// Creates a new library package with the required directory structure and manifest.
     static func createLibrary(at url: URL) throws -> URL {
         let libraryURL = normalizedLibraryURL(from: url)
         try FileManager.default.createDirectory(at: libraryURL, withIntermediateDirectories: true)
@@ -244,6 +254,8 @@ enum DocumentLibraryService {
         return libraryURL
     }
 
+    /// Ensures the required library-package structure exists and repairs missing
+    /// package-level components when they can be recreated safely.
     static func repairLibraryPackageIfNeeded(at url: URL) throws -> LibraryRepairResult {
         let libraryURL = normalizedLibraryURL(from: url)
         var actions: [LibraryRepairAction] = []

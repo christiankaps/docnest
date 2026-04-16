@@ -3,6 +3,11 @@ import CoreServices
 import OSLog
 
 @MainActor
+/// Watches configured filesystem folders for new or changed PDFs.
+///
+/// The monitor combines recursive full scans with event-driven incremental
+/// updates. Discovered files are handed back to higher-level code, which then
+/// routes them through the normal import pipeline.
 final class FolderMonitorService {
     private static let logger = Logger(subsystem: "com.kaps.docnest", category: "FolderMonitor")
 
@@ -58,6 +63,8 @@ final class FolderMonitorService {
 
     // MARK: - Public API
 
+    /// Starts monitoring one watch folder, replacing any existing monitor for
+    /// the same watch-folder identifier.
     func startMonitoring(_ watchFolder: WatchFolder) {
         stopMonitoring(id: watchFolder.id)
 
@@ -177,6 +184,8 @@ final class FolderMonitorService {
 
     // MARK: - Scanning
 
+    /// Computes the delta between the latest recursive file snapshots and the
+    /// previously known state for a watch folder.
     nonisolated static func newPDFURLs(
         from snapshots: [FileSnapshot],
         previousSnapshots: [String: Date]

@@ -4,6 +4,10 @@ import PDFKit
 import SwiftData
 import UniformTypeIdentifiers
 
+/// Summary of one import run across all supported inputs.
+///
+/// The result is intentionally count-based so UI surfaces can show concise
+/// toasts for batch imports without enumerating filenames.
 struct ImportPDFDocumentsResult {
     struct Duplicate {
         let fileName: String
@@ -94,6 +98,11 @@ struct ImportPDFDocumentsResult {
     }
 }
 
+/// Shared import pipeline for PDFs, folders, ZIP archives, and downloadable URLs.
+///
+/// All user-facing import entry points are expected to route through this use case
+/// so duplicate handling, recursive folder expansion, self-import protection,
+/// storage behavior, and record creation remain consistent.
 enum ImportPDFDocumentsUseCase {
     private struct ImportMetadata {
         let contentHash: String
@@ -115,6 +124,13 @@ enum ImportPDFDocumentsUseCase {
         let fullText: String?
     }
 
+    /// Resolves the supplied URLs, imports all supported PDFs into the active
+    /// library package, and creates `DocumentRecord` entries for successfully
+    /// staged documents.
+    ///
+    /// The method expands folders and ZIP archives recursively, downloads web
+    /// URLs to temporary files, rejects files from inside the open library, and
+    /// reports a count-based summary of imported, skipped, and failed work.
     static func execute(
         urls: [URL],
         into libraryURL: URL,
@@ -539,6 +555,11 @@ enum ImportPDFDocumentsUseCase {
     }
 
     /// Recursively enumerates PDF files inside a directory.
+    /// Recursively enumerates PDF files inside a directory while skipping hidden
+    /// files and package descendants.
+    ///
+    /// This helper is used both for direct folder imports and for watch-folder
+    /// recursive scanning so nested-folder behavior stays aligned.
     static func enumeratePDFs(in directoryURL: URL) -> [URL] {
         let accessedSecurityScope = directoryURL.startAccessingSecurityScopedResource()
         defer {
