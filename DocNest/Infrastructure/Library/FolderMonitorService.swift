@@ -305,53 +305,30 @@ final class FolderMonitorService {
                 | kFSEventStreamEventFlagMount
                 | kFSEventStreamEventFlagUnmount
         )
-        return event.path == folderPath || (event.flags & fullRescanFlags) != 0
+        let directoryFlags = FSEventStreamEventFlags(
+            kFSEventStreamEventFlagItemIsDir
+                | kFSEventStreamEventFlagItemRenamed
+                | kFSEventStreamEventFlagItemCreated
+                | kFSEventStreamEventFlagItemRemoved
+        )
+        return event.path == folderPath
+            || (event.flags & fullRescanFlags) != 0
+            || (isDescendantPath(event.path, of: folderPath) && (event.flags & directoryFlags) != 0)
     }
 
     nonisolated private static func shouldTrack(eventPath: String, in folderPath: String) -> Bool {
-        let url = URL(fileURLWithPath: eventPath)
-        guard url.deletingLastPathComponent().path == folderPath else { return false }
-        return true
+        isDescendantPath(eventPath, of: folderPath)
     }
 
-    nonisolated private static func scanSnapshots(
+    nonisolated static func scanSnapshots(
         in folderPath: String,
         previousSnapshots: [String: Date]
     ) -> (urls: [URL], updatedSnapshots: [String: Date]) {
-        let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
-        guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: folderURL,
-            includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey],
-            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-        ) else {
-            return ([], [:])
-        }
-
-        var snapshots: [FileSnapshot] = []
-        snapshots.reserveCapacity(contents.count)
-
-        for url in contents {
-            guard url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame else {
-                continue
-            }
-
-            let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
-            guard values?.isRegularFile == true else {
-                continue
-            }
-
-            snapshots.append(
-                FileSnapshot(
-                    path: url.path,
-                    modificationDate: values?.contentModificationDate ?? .distantPast
-                )
-            )
-        }
-
+        let snapshots = recursivePDFSnapshots(in: folderPath)
         return newPDFURLs(from: snapshots, previousSnapshots: previousSnapshots)
     }
 
-    nonisolated private static func applyFileEvents(
+    nonisolated static func applyFileEvents(
         _ eventFlagsByPath: [String: FSEventStreamEventFlags],
         in folderPath: String,
         previousSnapshots: [String: Date]
@@ -365,26 +342,26 @@ final class FolderMonitorService {
         urls.reserveCapacity(eventFlagsByPath.count)
 
         for (path, flags) in eventFlagsByPath {
-            let url = URL(fileURLWithPath: path)
-            guard url.deletingLastPathComponent().path == folderPath else { continue }
+            guard isDescendantPath(path, of: folderPath) else { continue }
 
             let removedFlags = FSEventStreamEventFlags(
                 kFSEventStreamEventFlagItemRemoved
                     | kFSEventStreamEventFlagItemIsDir
             )
             if flags & removedFlags != 0 {
-                updatedSnapshots.removeValue(forKey: path)
+                removeSnapshots(atOrBelow: path, from: &updatedSnapshots)
                 continue
             }
 
+            let url = URL(fileURLWithPath: path)
             guard url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame else {
-                updatedSnapshots.removeValue(forKey: path)
+                removeSnapshots(atOrBelow: path, from: &updatedSnapshots)
                 continue
             }
 
             let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
             guard values?.isRegularFile == true else {
-                updatedSnapshots.removeValue(forKey: path)
+                removeSnapshots(atOrBelow: path, from: &updatedSnapshots)
                 continue
             }
 
@@ -396,5 +373,40 @@ final class FolderMonitorService {
         }
 
         return (urls, updatedSnapshots)
+    }
+
+    nonisolated private static func recursivePDFSnapshots(in folderPath: String) -> [FileSnapshot] {
+        let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
+        let urls = ImportPDFDocumentsUseCase.enumeratePDFs(in: folderURL)
+        var snapshots: [FileSnapshot] = []
+        snapshots.reserveCapacity(urls.count)
+
+        for url in urls {
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+            snapshots.append(
+                FileSnapshot(
+                    path: url.path,
+                    modificationDate: values?.contentModificationDate ?? .distantPast
+                )
+            )
+        }
+
+        return snapshots
+    }
+
+    nonisolated private static func isDescendantPath(_ path: String, of folderPath: String) -> Bool {
+        let standardizedFolder = URL(fileURLWithPath: folderPath).standardizedFileURL.path
+        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let prefix = standardizedFolder.hasSuffix("/") ? standardizedFolder : standardizedFolder + "/"
+        return standardizedPath == standardizedFolder
+            || standardizedPath.hasPrefix(prefix)
+    }
+
+    nonisolated private static func removeSnapshots(atOrBelow path: String, from snapshots: inout [String: Date]) {
+        let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+        let prefix = standardizedPath + "/"
+        for key in Array(snapshots.keys) where key == standardizedPath || key.hasPrefix(prefix) {
+            snapshots.removeValue(forKey: key)
+        }
     }
 }

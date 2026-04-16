@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 import SwiftData
 import PDFKit
@@ -21,6 +22,43 @@ private enum TestSampleDataSeeder {
         }
 
         try context.save()
+    }
+}
+
+private enum TestImportFixtures {
+    static func createPDF(at url: URL, text: String = "Test PDF") throws {
+        let document = PDFDocument()
+        let image = NSImage(size: NSSize(width: 200, height: 200))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 200, height: 200)).fill()
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 18),
+            .foregroundColor: NSColor.black
+        ]
+        NSString(string: text).draw(at: NSPoint(x: 24, y: 96), withAttributes: attributes)
+        image.unlockFocus()
+
+        guard let page = PDFPage(image: image) else {
+            throw NSError(domain: "DocNestTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not create PDF page."])
+        }
+
+        document.insert(page, at: 0)
+        guard let data = document.dataRepresentation() else {
+            throw NSError(domain: "DocNestTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not render PDF data."])
+        }
+
+        try data.write(to: url)
+    }
+
+    @MainActor
+    static func makeInMemoryContainer() throws -> ModelContainer {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return try ModelContainer(
+            for: DocumentRecord.self,
+            LabelTag.self,
+            configurations: config
+        )
     }
 }
 
@@ -226,6 +264,150 @@ final class DocNestTests: XCTestCase {
             result.updatedSnapshots,
             [remainingPath: originalDate]
         )
+    }
+
+    @MainActor
+    func testImportPDFDocumentsUseCaseImportsNestedFolderPDFsAndIgnoresNonPDFs() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let importRoot = tempRoot.appendingPathComponent("ImportRoot", isDirectory: true)
+        let nestedFolder = importRoot.appendingPathComponent("Nested", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: nestedFolder, withIntermediateDirectories: true)
+        try TestImportFixtures.createPDF(at: importRoot.appendingPathComponent("top-level.pdf"), text: "Top Level")
+        try TestImportFixtures.createPDF(at: nestedFolder.appendingPathComponent("nested.pdf"), text: "Nested")
+        try Data("ignore me".utf8).write(to: nestedFolder.appendingPathComponent("notes.txt"))
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("ImportLibrary")
+        )
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+
+        let result = await ImportPDFDocumentsUseCase.execute(
+            urls: [importRoot],
+            into: libraryURL,
+            using: context
+        )
+
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        XCTAssertEqual(result.importedCount, 2)
+        XCTAssertFalse(result.hasNoImportablePDFs)
+        XCTAssertTrue(result.unsupportedFiles.isEmpty)
+        XCTAssertEqual(documents.count, 2)
+        XCTAssertEqual(Set(documents.map(\.originalFileName)), Set(["top-level.pdf", "nested.pdf"]))
+    }
+
+    @MainActor
+    func testImportPDFDocumentsUseCaseReportsNoPDFsForFolderWithoutPDFContent() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let importRoot = tempRoot.appendingPathComponent("NoPDFs", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: importRoot, withIntermediateDirectories: true)
+        try Data("hello".utf8).write(to: importRoot.appendingPathComponent("readme.txt"))
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("EmptyLibrary")
+        )
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+
+        let result = await ImportPDFDocumentsUseCase.execute(
+            urls: [importRoot],
+            into: libraryURL,
+            using: context
+        )
+
+        XCTAssertEqual(result.importedCount, 0)
+        XCTAssertTrue(result.hasNoImportablePDFs)
+        XCTAssertEqual(result.summaryMessage, "No PDF documents found to import.")
+    }
+
+    @MainActor
+    func testImportPDFDocumentsUseCaseRejectsLibrarySubfoldersAsImportSource() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("SelfImportLibrary")
+        )
+        let nestedLibraryFolder = DocumentLibraryService.originalsDirectory(for: libraryURL)
+            .appendingPathComponent("2026", isDirectory: true)
+        try FileManager.default.createDirectory(at: nestedLibraryFolder, withIntermediateDirectories: true)
+        try TestImportFixtures.createPDF(at: nestedLibraryFolder.appendingPathComponent("inside.pdf"), text: "Inside")
+
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let result = await ImportPDFDocumentsUseCase.execute(
+            urls: [nestedLibraryFolder],
+            into: libraryURL,
+            using: context
+        )
+
+        XCTAssertEqual(result.importedCount, 0)
+        XCTAssertEqual(result.failures.count, 1)
+        XCTAssertFalse(result.hasNoImportablePDFs)
+    }
+
+    func testFolderMonitorScanSnapshotsFindsNestedPDFsRecursively() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let watchRoot = tempRoot.appendingPathComponent("WatchRoot", isDirectory: true)
+        let nestedFolder = watchRoot.appendingPathComponent("Deep", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: nestedFolder, withIntermediateDirectories: true)
+        try TestImportFixtures.createPDF(at: nestedFolder.appendingPathComponent("nested-watch.pdf"), text: "Watch")
+        try Data("ignore".utf8).write(to: watchRoot.appendingPathComponent("note.txt"))
+
+        let result = FolderMonitorService.scanSnapshots(
+            in: watchRoot.path,
+            previousSnapshots: [:]
+        )
+
+        XCTAssertEqual(result.urls.map(\.lastPathComponent), ["nested-watch.pdf"])
+        XCTAssertEqual(result.updatedSnapshots.count, 1)
+    }
+
+    func testFolderMonitorApplyFileEventsTracksNestedPDFChanges() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let watchRoot = tempRoot.appendingPathComponent("WatchRoot", isDirectory: true)
+        let nestedFolder = watchRoot.appendingPathComponent("Deep", isDirectory: true)
+        let nestedPDF = nestedFolder.appendingPathComponent("nested-event.pdf")
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: nestedFolder, withIntermediateDirectories: true)
+        try TestImportFixtures.createPDF(at: nestedPDF, text: "Event")
+
+        let result = FolderMonitorService.applyFileEvents(
+            [nestedPDF.path: FSEventStreamEventFlags(kFSEventStreamEventFlagItemCreated)],
+            in: watchRoot.path,
+            previousSnapshots: [:]
+        )
+
+        XCTAssertEqual(result.urls.map(\.lastPathComponent), ["nested-event.pdf"])
+        XCTAssertEqual(result.updatedSnapshots.count, 1)
+        XCTAssertNotNil(result.updatedSnapshots[nestedPDF.path])
     }
 
     func testAcquireLockCreatesLockFile() throws {

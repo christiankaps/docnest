@@ -28,6 +28,7 @@ struct ImportPDFDocumentsResult {
     let unsupportedFiles: [Unsupported]
     let downloadFailures: [DownloadFailure]
     let failures: [Failure]
+    let hadNoImportablePDFs: Bool
     let autoAssignedLabels: [String]
 
     var hasDuplicates: Bool {
@@ -50,8 +51,12 @@ struct ImportPDFDocumentsResult {
         !downloadFailures.isEmpty
     }
 
+    var hasNoImportablePDFs: Bool {
+        hadNoImportablePDFs
+    }
+
     var hasUserMessage: Bool {
-        hasDuplicates || hasUnsupportedFiles || hasDownloadFailures || hasFailures || hasAutoAssignedLabels
+        hasDuplicates || hasUnsupportedFiles || hasDownloadFailures || hasFailures || hasAutoAssignedLabels || hasNoImportablePDFs
     }
 
     var summaryMessage: String {
@@ -75,6 +80,10 @@ struct ImportPDFDocumentsResult {
 
         if hasFailures {
             parts.append(failures.count == 1 ? "1 file failed" : "\(failures.count) files failed")
+        }
+
+        if hasNoImportablePDFs {
+            parts.append("No PDF documents found to import")
         }
 
         if parts.isEmpty {
@@ -148,6 +157,7 @@ enum ImportPDFDocumentsUseCase {
 
         var zipTempDirectories: [URL] = []
         let resolvedURLs = resolveFileURLs(fileURLs, tempDirectories: &zipTempDirectories) + downloadedTempFiles
+        let hadNoImportablePDFs = resolvedURLs.isEmpty && !fileURLs.isEmpty && failures.isEmpty
         if let onProgress {
             await onProgress(0, resolvedURLs.count)
         }
@@ -156,9 +166,9 @@ enum ImportPDFDocumentsUseCase {
             .map(\.name)
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
 
-        let knownContentHashesSeed = existingContentHashes.union(
-            await pendingContentHashes(using: modelContext)
-        )
+        let knownContentHashesSeed = existingContentHashes
+            .union(await persistedContentHashes(using: modelContext))
+            .union(await pendingContentHashes(using: modelContext))
         var preparedImports: [PreparedImport] = []
         var duplicates: [ImportPDFDocumentsResult.Duplicate] = []
         var unsupportedFiles: [ImportPDFDocumentsResult.Unsupported] = []
@@ -237,6 +247,7 @@ enum ImportPDFDocumentsUseCase {
             unsupportedFiles: unsupportedFiles,
             downloadFailures: downloadFailures,
             failures: failures,
+            hadNoImportablePDFs: hadNoImportablePDFs,
             autoAssignedLabelNames: autoAssignedLabelNames
         )
     }
@@ -357,6 +368,13 @@ enum ImportPDFDocumentsUseCase {
     }
 
     @MainActor
+    private static func persistedContentHashes(using modelContext: ModelContext) -> Set<String> {
+        let descriptor = FetchDescriptor<DocumentRecord>()
+        let savedDocuments = (try? modelContext.fetch(descriptor)) ?? []
+        return Set(savedDocuments.lazy.map(\.contentHash))
+    }
+
+    @MainActor
     private static func pendingContentHashes(using modelContext: ModelContext) -> Set<String> {
         let stagedDocuments = (modelContext.insertedModelsArray + modelContext.changedModelsArray)
             .compactMap { $0 as? DocumentRecord }
@@ -373,6 +391,7 @@ enum ImportPDFDocumentsUseCase {
         unsupportedFiles: [ImportPDFDocumentsResult.Unsupported],
         downloadFailures: [ImportPDFDocumentsResult.DownloadFailure],
         failures: [ImportPDFDocumentsResult.Failure],
+        hadNoImportablePDFs: Bool,
         autoAssignedLabelNames: [String]
     ) -> ImportPDFDocumentsResult {
         var importedRecords: [DocumentRecord] = []
@@ -422,6 +441,7 @@ enum ImportPDFDocumentsUseCase {
                 unsupportedFiles: unsupportedFiles,
                 downloadFailures: downloadFailures,
                 failures: failures,
+                hadNoImportablePDFs: hadNoImportablePDFs,
                 autoAssignedLabels: autoAssignedLabelNames
             )
         }
@@ -432,6 +452,7 @@ enum ImportPDFDocumentsUseCase {
             unsupportedFiles: unsupportedFiles,
             downloadFailures: downloadFailures,
             failures: failures,
+            hadNoImportablePDFs: hadNoImportablePDFs,
             autoAssignedLabels: autoAssignedLabelNames
         )
     }
@@ -518,7 +539,7 @@ enum ImportPDFDocumentsUseCase {
     }
 
     /// Recursively enumerates PDF files inside a directory.
-    private static func enumeratePDFs(in directoryURL: URL) -> [URL] {
+    static func enumeratePDFs(in directoryURL: URL) -> [URL] {
         let accessedSecurityScope = directoryURL.startAccessingSecurityScopedResource()
         defer {
             if accessedSecurityScope {
