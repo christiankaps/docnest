@@ -3,6 +3,7 @@ import XCTest
 
 final class DocNestUITests: XCTestCase {
     private let appBundleIdentifier = "com.kaps.docnest"
+    private let openLibraryRootIdentifier = "library-open-root"
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -34,10 +35,10 @@ final class DocNestUITests: XCTestCase {
                                 "-selectedLibraryPath", libraryURL.path]
         app.launch()
 
-        // The Import toolbar button only appears in RootView when a library is open.
-        let importButton = app.buttons["Import"]
-        XCTAssertTrue(importButton.waitForExistence(timeout: 10),
-            "Expected the Import button to appear after restoring a library fixture")
+        XCTAssertTrue(
+            app.otherElements[openLibraryRootIdentifier].waitForExistence(timeout: 10),
+            "Expected the open-library root view to appear after restoring a library fixture"
+        )
     }
 
     @MainActor
@@ -58,8 +59,8 @@ final class DocNestUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(
-            app.buttons["Import"].waitForExistence(timeout: 10),
-            "Expected the Import button to appear after restoring a library fixture"
+            app.otherElements[openLibraryRootIdentifier].waitForExistence(timeout: 10),
+            "Expected the open-library root view to appear after restoring a library fixture"
         )
         XCTAssertFalse(
             app.buttons["Toggle Sidebar"].exists,
@@ -84,7 +85,12 @@ final class DocNestUITests: XCTestCase {
                                 "-selectedLibraryPath", libraryURL.path]
         app.launch()
 
-        let searchField = app.searchFields["document-search-field"]
+        XCTAssertTrue(
+            app.otherElements[openLibraryRootIdentifier].waitForExistence(timeout: 10),
+            "Expected the open-library root view to appear after restoring a library fixture"
+        )
+
+        let searchField = app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitForExistence(timeout: 10))
 
         app.typeKey("f", modifierFlags: .command)
