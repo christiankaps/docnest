@@ -1796,4 +1796,49 @@ final class DocNestTests: XCTestCase {
 
         XCTAssertEqual(coordinator.displayedSelectedDocuments.map(\.persistentModelID), [second.persistentModelID])
     }
+
+    @MainActor
+    func testRecomputeSelectedDocumentsPreservesKnownSelectionDuringStaleFilteredLookup() async {
+        let coordinator = LibraryCoordinator()
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", importedAt: .now, pageCount: 1)
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", importedAt: .now, pageCount: 1)
+
+        coordinator.ingest(allDocuments: [first], allLabels: [], allSmartFolders: [], allLabelGroups: [], allWatchFolders: [])
+        for _ in 0..<20 {
+            if coordinator.filteredDocuments.count == 1 {
+                break
+            }
+            await Task.yield()
+        }
+        coordinator.syncDocuments([first, second], recompute: false)
+
+        coordinator.selectedDocumentIDs = [second.persistentModelID]
+        coordinator.recomputeSelectedDocuments()
+
+        XCTAssertEqual(coordinator.selectedDocumentIDs, [second.persistentModelID])
+        XCTAssertEqual(coordinator.selectedDocuments.map(\.persistentModelID), [second.persistentModelID])
+    }
+
+    @MainActor
+    func testRecomputeSelectedDocumentsFallsBackWhenSelectionNoLongerExists() async {
+        let coordinator = LibraryCoordinator()
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", importedAt: .now, pageCount: 1)
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", importedAt: .now, pageCount: 1)
+
+        coordinator.ingest(allDocuments: [first, second], allLabels: [], allSmartFolders: [], allLabelGroups: [], allWatchFolders: [])
+        for _ in 0..<20 {
+            if coordinator.filteredDocuments.count == 2 {
+                break
+            }
+            await Task.yield()
+        }
+        coordinator.selectedDocumentIDs = [second.persistentModelID]
+        coordinator.recomputeSelectedDocuments()
+
+        coordinator.syncDocuments([first], recompute: false)
+        coordinator.recomputeSelectedDocuments()
+
+        XCTAssertEqual(coordinator.selectedDocumentIDs, [first.persistentModelID])
+        XCTAssertEqual(coordinator.selectedDocuments.map(\.persistentModelID), [first.persistentModelID])
+    }
 }

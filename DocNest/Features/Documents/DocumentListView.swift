@@ -459,9 +459,9 @@ struct DocumentListView: View {
             .background(rowBackground(index: index, isSelected: isSelected))
             .contentShape(Rectangle())
             .id(document.persistentModelID)
-            .onTapGesture {
+            .highPriorityGesture(TapGesture().onEnded {
                 handleRowTap(document: document, in: allDocs)
-            }
+            })
             .contextMenu { documentContextMenu(for: document) }
             .dropDestination(for: String.self) { items, _ in
                 guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
@@ -549,9 +549,9 @@ struct DocumentListView: View {
                             dragPayload: dragPayload(for: document)
                         )
                         .id(document.persistentModelID)
-                        .onTapGesture {
+                        .highPriorityGesture(TapGesture().onEnded {
                             handleRowTap(document: document, in: sortedDocs)
-                        }
+                        })
                         .contextMenu { documentContextMenu(for: document) }
                         .accessibilityLabel("\(document.title), PDF document")
                     }
@@ -587,13 +587,10 @@ struct DocumentListView: View {
                         Text(document.title)
                             .font(AppTypography.listTitle)
                             .lineLimit(1)
-                            .contentShape(Rectangle())
-                            .simultaneousGesture(
-                                TapGesture().onEnded {
-                                    guard shouldBeginRenameFromTitleClick(for: document) else { return }
-                                    beginRename(for: document)
-                                }
-                            )
+                            .onTapGesture(count: 2) {
+                                guard canBeginRename(for: document) else { return }
+                                beginRename(for: document)
+                            }
                     }
                 }
             }
@@ -603,6 +600,7 @@ struct DocumentListView: View {
                 Text(document.importedAt, format: .dateTime.year().month().day())
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: importedColumnWidth, alignment: .leading)
+                    .allowsHitTesting(false)
             }
 
             if effectiveOptionalColumns.created {
@@ -616,18 +614,21 @@ struct DocumentListView: View {
                 }
                 .font(AppTypography.listMeta.monospacedDigit())
                 .frame(width: createdColumnWidth, alignment: .leading)
+                .allowsHitTesting(false)
             }
 
             if effectiveOptionalColumns.pages {
                 Text("\(document.pageCount)")
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: pagesColumnWidth, alignment: .leading)
+                    .allowsHitTesting(false)
             }
 
             if effectiveOptionalColumns.size {
                 Text(document.formattedFileSize)
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: sizeColumnWidth, alignment: .leading)
+                    .allowsHitTesting(false)
             }
 
             if effectiveOptionalColumns.labels {
@@ -857,7 +858,7 @@ struct DocumentListView: View {
         focusedRenameDocumentID = nil
     }
 
-    private func shouldBeginRenameFromTitleClick(for document: DocumentRecord) -> Bool {
+    private func canBeginRename(for document: DocumentRecord) -> Bool {
         guard renamingDocumentID == nil else { return false }
         guard coordinator.selectedDocumentIDs.count == 1,
               coordinator.selectedDocumentIDs.contains(document.persistentModelID) else { return false }
@@ -1254,15 +1255,12 @@ private struct DocumentThumbnailCell: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .frame(width: size)
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(
-                        TapGesture().onEnded {
-                            guard isSelected else { return }
-                            let disallowedModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
-                            guard NSEvent.modifierFlags.intersection(disallowedModifiers).isEmpty else { return }
-                            onBeginRename()
-                        }
-                    )
+                    .onTapGesture(count: 2) {
+                        guard isSelected else { return }
+                        let disallowedModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
+                        guard NSEvent.modifierFlags.intersection(disallowedModifiers).isEmpty else { return }
+                        onBeginRename()
+                    }
             }
 
             if !isRenaming, !document.labels.isEmpty {

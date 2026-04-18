@@ -526,11 +526,16 @@ final class LibraryCoordinator {
     }
 
     func recomputeSelectedDocuments() {
-        let explicitSelection = selectedDocumentIDs.compactMap { filteredDocumentByPersistentID[$0] }
+        let knownSelectionIDs = Set(
+            selectedDocumentIDs.filter { documentUUIDByPersistentID[$0] != nil }
+        )
+        if knownSelectionIDs != selectedDocumentIDs {
+            selectedDocumentIDs = knownSelectionIDs
+        }
+
+        let explicitSelection = selectedDocumentIDs.compactMap { selectedDocument(for: $0) }
             .sorted {
-                let leftIndex = filteredDocumentOrderByPersistentID[$0.persistentModelID] ?? .max
-                let rightIndex = filteredDocumentOrderByPersistentID[$1.persistentModelID] ?? .max
-                return leftIndex < rightIndex
+                compareSelectionOrder($0, $1)
             }
 
         if !explicitSelection.isEmpty {
@@ -545,6 +550,33 @@ final class LibraryCoordinator {
             }
         }
         selectedDocumentIDsToDrag = selectedDocuments.compactMap { documentUUIDByPersistentID[$0.persistentModelID] }
+    }
+
+    private func selectedDocument(for persistentID: PersistentIdentifier) -> DocumentRecord? {
+        if let filteredDocument = filteredDocumentByPersistentID[persistentID] {
+            return filteredDocument
+        }
+
+        guard let documentID = documentUUIDByPersistentID[persistentID] else {
+            return nil
+        }
+
+        return documentByUUID[documentID]
+    }
+
+    private func compareSelectionOrder(_ lhs: DocumentRecord, _ rhs: DocumentRecord) -> Bool {
+        let leftIndex = filteredDocumentOrderByPersistentID[lhs.persistentModelID] ?? .max
+        let rightIndex = filteredDocumentOrderByPersistentID[rhs.persistentModelID] ?? .max
+        if leftIndex != rightIndex {
+            return leftIndex < rightIndex
+        }
+
+        let titleComparison = lhs.title.localizedCaseInsensitiveCompare(rhs.title)
+        if titleComparison != .orderedSame {
+            return titleComparison == .orderedAscending
+        }
+
+        return lhs.importedAt < rhs.importedAt
     }
 
     func pruneSelectedDocumentIDs() {
