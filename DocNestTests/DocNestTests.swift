@@ -1720,6 +1720,56 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testAppUpdateMountedVolumeURLParsesHdiutilPlist() throws {
+        let propertyList: [String: Any] = [
+            "system-entities": [
+                ["dev-entry": "/dev/disk4"],
+                ["mount-point": "/Volumes/DocNest", "volume-kind": "hfs"]
+            ]
+        ]
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: propertyList,
+            format: .xml,
+            options: 0
+        )
+
+        let mountedURL = try AppUpdateService.mountedVolumeURL(fromAttachOutput: data)
+
+        XCTAssertEqual(mountedURL.path, "/Volumes/DocNest")
+    }
+
+    @MainActor
+    func testAppUpdateInstallerScriptContainsReplaceAndRelaunchSteps() {
+        let script = AppUpdateService.installerScript(
+            currentPID: 1234,
+            stagedAppURL: URL(fileURLWithPath: "/tmp/DocNestUpdate/DocNest.app"),
+            destinationAppURL: URL(fileURLWithPath: "/Applications/DocNest.app"),
+            temporaryRootURL: URL(fileURLWithPath: "/tmp/DocNestUpdate")
+        )
+
+        XCTAssertTrue(script.contains("CURRENT_PID=1234"))
+        XCTAssertTrue(script.contains("/usr/bin/ditto"))
+        XCTAssertTrue(script.contains("/usr/bin/osascript"))
+        XCTAssertTrue(script.contains("/usr/bin/open \"$DESTINATION_APP\""))
+        XCTAssertTrue(script.contains("/bin/rm -rf \"$TEMP_ROOT\""))
+    }
+
+    @MainActor
+    func testAppUpdateInstallerScriptRestoresPreviousAppOnReplaceFailure() {
+        let script = AppUpdateService.installerScript(
+            currentPID: 1234,
+            stagedAppURL: URL(fileURLWithPath: "/tmp/DocNestUpdate/DocNest.app"),
+            destinationAppURL: URL(fileURLWithPath: "/Applications/DocNest.app"),
+            temporaryRootURL: URL(fileURLWithPath: "/tmp/DocNestUpdate")
+        )
+
+        XCTAssertTrue(script.contains("if /bin/mv \"$DESTINATION_APP.new\" \"$DESTINATION_APP\"; then"))
+        XCTAssertTrue(script.contains("if [ -e \"$DESTINATION_APP.previous\" ]; then"))
+        XCTAssertTrue(script.contains("/bin/mv \"$DESTINATION_APP.previous\" \"$DESTINATION_APP\""))
+        XCTAssertTrue(script.contains("return 1"))
+    }
+
+    @MainActor
     func testArrowNavigationStepUsesVisibleGroupedOrderAndOrderedSelectionFallback() {
         let jan2025 = DocumentRecord(
             originalFileName: "jan-2025.pdf",

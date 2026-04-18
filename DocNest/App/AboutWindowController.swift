@@ -232,6 +232,8 @@ final class AppUpdateService: ObservableObject {
     enum Status: Equatable {
         case idle
         case checking
+        case downloading(AppReleaseVersion)
+        case installing(AppReleaseVersion)
         case upToDate(AppReleaseVersion)
         case updateAvailable(AppUpdateInfo)
         case failed(String)
@@ -245,7 +247,7 @@ final class AppUpdateService: ObservableObject {
     private init() {}
 
     func checkForUpdates(userInitiated: Bool = true) {
-        guard status != .checking else { return }
+        guard !isBusy else { return }
 
         status = .checking
 
@@ -287,8 +289,29 @@ final class AppUpdateService: ObservableObject {
         }
     }
 
-    func openDownload(_ info: AppUpdateInfo) {
-        NSWorkspace.shared.open(info.downloadURL)
+    func installUpdate(_ info: AppUpdateInfo) {
+        guard !isBusy else { return }
+
+        Task {
+            do {
+                status = .downloading(info.latestVersion)
+                let preparedInstaller = try await Self.prepareInstaller(
+                    for: info,
+                    currentAppURL: Bundle.main.bundleURL.standardizedFileURL,
+                    currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier
+                )
+                status = .installing(info.latestVersion)
+                try Self.launchInstaller(preparedInstaller)
+                NSApplication.shared.terminate(nil)
+            } catch {
+                let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                status = .failed(message)
+                presentInformationalAlert(
+                    title: "Update Installation Failed",
+                    message: message
+                )
+            }
+        }
     }
 
     private func fetchUpdateInfo() async throws -> AppUpdateInfo? {
@@ -306,15 +329,17 @@ final class AppUpdateService: ObservableObject {
         }
 
         let releasePageURL = URL(string: response.htmlURL) ?? releaseWebURL
-        let dmgAsset = response.assets.first(where: { $0.name.lowercased().hasSuffix(".dmg") })
-        let downloadURL = URL(string: dmgAsset?.browserDownloadURL ?? response.htmlURL) ?? releasePageURL
+        guard let dmgAsset = response.assets.first(where: { $0.name.lowercased().hasSuffix(".dmg") }) else {
+            throw UpdateError.missingInstallerAsset
+        }
+        let downloadURL = URL(string: dmgAsset.browserDownloadURL) ?? releasePageURL
 
         return AppUpdateInfo(
             currentVersion: currentVersion,
             latestVersion: latestVersion,
             releasePageURL: releasePageURL,
             downloadURL: downloadURL,
-            assetName: dmgAsset?.name
+            assetName: dmgAsset.name
         )
     }
 
@@ -349,13 +374,13 @@ final class AppUpdateService: ObservableObject {
         let alert = NSAlert()
         alert.messageText = "A New Version of DocNest Is Available"
         alert.informativeText = "Installed: \(info.currentVersion)\nAvailable: \(info.latestVersion)"
-        alert.addButton(withTitle: "Download")
+        alert.addButton(withTitle: "Install Update")
         alert.addButton(withTitle: "Cancel")
         alert.addButton(withTitle: "Release Page")
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:
-            openDownload(info)
+            installUpdate(info)
         case .alertThirdButtonReturn:
             NSWorkspace.shared.open(info.releasePageURL)
         default:
@@ -369,6 +394,15 @@ final class AppUpdateService: ObservableObject {
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+
+    private var isBusy: Bool {
+        switch status {
+        case .checking, .downloading, .installing:
+            return true
+        case .idle, .upToDate, .updateAvailable, .failed:
+            return false
+        }
     }
 
     private var apiURL: URL {
@@ -401,12 +435,25 @@ final class AppUpdateService: ObservableObject {
         }
     }
 
+    private struct PreparedInstaller {
+        let scriptURL: URL
+    }
+
     private enum UpdateError: LocalizedError {
         case invalidInstalledVersion
         case invalidRemoteVersion(String)
         case invalidResponse
         case httpStatus(Int)
         case invalidPayload
+        case missingInstallerAsset
+        case downloadMoveFailed
+        case mountFailed(String)
+        case mountedVolumeNotFound
+        case appBundleNotFound
+        case invalidInstallerBundle(String)
+        case signatureValidationFailed(String)
+        case installerLaunchFailed
+        case installerScriptWriteFailed
 
         var errorDescription: String? {
             switch self {
@@ -420,8 +467,372 @@ final class AppUpdateService: ObservableObject {
                 return "GitHub returned HTTP \(status)."
             case .invalidPayload:
                 return "The latest release payload could not be decoded."
+            case .missingInstallerAsset:
+                return "The latest release does not include a DMG installer asset."
+            case .downloadMoveFailed:
+                return "The downloaded installer could not be staged."
+            case .mountFailed(let message):
+                return "The downloaded installer could not be mounted. \(message)"
+            case .mountedVolumeNotFound:
+                return "The mounted installer volume could not be located."
+            case .appBundleNotFound:
+                return "The downloaded installer did not contain a DocNest app bundle."
+            case .invalidInstallerBundle(let message):
+                return message
+            case .signatureValidationFailed(let message):
+                return "The downloaded update could not be verified. \(message)"
+            case .installerLaunchFailed:
+                return "The update installer could not be launched."
+            case .installerScriptWriteFailed:
+                return "The update installer script could not be written."
             }
         }
+    }
+
+    private static func prepareInstaller(
+        for info: AppUpdateInfo,
+        currentAppURL: URL,
+        currentProcessIdentifier: Int32
+    ) async throws -> PreparedInstaller {
+        let tempRootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DocNestUpdate-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempRootURL, withIntermediateDirectories: true)
+
+        let installerFileName = info.assetName ?? "DocNest.dmg"
+        let downloadedDMGURL = tempRootURL.appendingPathComponent(installerFileName)
+        try await downloadInstaller(from: info.downloadURL, to: downloadedDMGURL)
+
+        let mountedVolumeURL = try mountDiskImage(at: downloadedDMGURL)
+        let stagedAppURL = tempRootURL.appendingPathComponent(currentAppURL.lastPathComponent, isDirectory: true)
+        let expectedBundleIdentifier = Bundle.main.bundleIdentifier ?? "com.kaps.docnest"
+        let expectedTeamIdentifier = currentTeamIdentifier(for: currentAppURL)
+
+        do {
+            let mountedAppURL = try locateAppBundle(
+                in: mountedVolumeURL,
+                named: currentAppURL.lastPathComponent
+            )
+            try FileManager.default.copyItem(at: mountedAppURL, to: stagedAppURL)
+            try validateInstalledApp(
+                at: stagedAppURL,
+                expectedAppName: currentAppURL.lastPathComponent,
+                expectedBundleIdentifier: expectedBundleIdentifier,
+                expectedTeamIdentifier: expectedTeamIdentifier
+            )
+        } catch {
+            try? detachDiskImage(at: mountedVolumeURL)
+            throw error
+        }
+
+        try detachDiskImage(at: mountedVolumeURL)
+
+        let scriptURL = tempRootURL.appendingPathComponent("install-update.sh")
+        let script = installerScript(
+            currentPID: currentProcessIdentifier,
+            stagedAppURL: stagedAppURL,
+            destinationAppURL: currentAppURL,
+            temporaryRootURL: tempRootURL
+        )
+
+        guard FileManager.default.createFile(atPath: scriptURL.path, contents: script.data(using: .utf8)) else {
+            throw UpdateError.installerScriptWriteFailed
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+
+        return PreparedInstaller(scriptURL: scriptURL)
+    }
+
+    private static func downloadInstaller(from sourceURL: URL, to destinationURL: URL) async throws {
+        var request = URLRequest(url: sourceURL)
+        request.setValue("DocNest", forHTTPHeaderField: "User-Agent")
+        let (temporaryURL, _) = try await URLSession.shared.download(for: request)
+
+        do {
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.moveItem(at: temporaryURL, to: destinationURL)
+        } catch {
+            throw UpdateError.downloadMoveFailed
+        }
+    }
+
+    private static func mountDiskImage(at diskImageURL: URL) throws -> URL {
+        let output = try runProcess(
+            executablePath: "/usr/bin/hdiutil",
+            arguments: ["attach", "-plist", "-nobrowse", "-noautoopen", diskImageURL.path]
+        )
+        do {
+            return try mountedVolumeURL(fromAttachOutput: output)
+        } catch {
+            let message = String(data: output, encoding: .utf8) ?? "No mount details were returned."
+            throw UpdateError.mountFailed(message)
+        }
+    }
+
+    private static func detachDiskImage(at mountedVolumeURL: URL) throws {
+        _ = try runProcess(
+            executablePath: "/usr/bin/hdiutil",
+            arguments: ["detach", mountedVolumeURL.path]
+        )
+    }
+
+    static func mountedVolumeURL(fromAttachOutput output: Data) throws -> URL {
+        let propertyList = try PropertyListSerialization.propertyList(from: output, format: nil)
+        guard let root = propertyList as? [String: Any],
+              let entities = root["system-entities"] as? [[String: Any]] else {
+            throw UpdateError.mountedVolumeNotFound
+        }
+
+        for entity in entities {
+            if let mountPoint = entity["mount-point"] as? String {
+                return URL(fileURLWithPath: mountPoint, isDirectory: true)
+            }
+        }
+
+        throw UpdateError.mountedVolumeNotFound
+    }
+
+    private static func locateAppBundle(in mountedVolumeURL: URL, named expectedAppName: String) throws -> URL {
+        let enumerator = FileManager.default.enumerator(
+            at: mountedVolumeURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        )
+
+        while let item = enumerator?.nextObject() as? URL {
+            if item.pathExtension == "app", item.lastPathComponent == expectedAppName {
+                return item
+            }
+        }
+
+        throw UpdateError.appBundleNotFound
+    }
+
+    private static func validateInstalledApp(
+        at appURL: URL,
+        expectedAppName: String,
+        expectedBundleIdentifier: String,
+        expectedTeamIdentifier: String?
+    ) throws {
+        guard appURL.lastPathComponent == expectedAppName else {
+            throw UpdateError.invalidInstallerBundle(
+                "The downloaded installer contained '\(appURL.lastPathComponent)' instead of '\(expectedAppName)'."
+            )
+        }
+
+        guard let bundle = Bundle(url: appURL),
+              let bundleIdentifier = bundle.bundleIdentifier,
+              bundleIdentifier == expectedBundleIdentifier else {
+            throw UpdateError.invalidInstallerBundle(
+                "The downloaded installer does not contain the expected DocNest app bundle."
+            )
+        }
+
+        try verifyCodeSignature(
+            of: appURL,
+            expectedBundleIdentifier: expectedBundleIdentifier,
+            expectedTeamIdentifier: expectedTeamIdentifier
+        )
+    }
+
+    private static func currentTeamIdentifier(for appURL: URL) -> String? {
+        try? codesignMetadata(for: appURL).teamIdentifier
+    }
+
+    private static func verifyCodeSignature(
+        of appURL: URL,
+        expectedBundleIdentifier: String,
+        expectedTeamIdentifier: String?
+    ) throws {
+        _ = try runProcess(
+            executablePath: "/usr/bin/codesign",
+            arguments: ["--verify", "--deep", "--strict", appURL.path]
+        )
+
+        let metadata = try codesignMetadata(for: appURL)
+        if let signingIdentifier = metadata.identifier,
+           signingIdentifier != expectedBundleIdentifier {
+            throw UpdateError.signatureValidationFailed(
+                "Expected signing identifier \(expectedBundleIdentifier), got \(signingIdentifier)."
+            )
+        }
+
+        if let expectedTeamIdentifier,
+           let actualTeamIdentifier = metadata.teamIdentifier,
+           actualTeamIdentifier != expectedTeamIdentifier {
+            throw UpdateError.signatureValidationFailed(
+                "Expected team identifier \(expectedTeamIdentifier), got \(actualTeamIdentifier)."
+            )
+        }
+    }
+
+    private static func codesignMetadata(for appURL: URL) throws -> (identifier: String?, teamIdentifier: String?) {
+        let process = Process()
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        process.arguments = ["-d", "--verbose=4", appURL.path]
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let message = String(
+                data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? "The app code signature could not be inspected."
+            throw UpdateError.signatureValidationFailed(message.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        let diagnostics = String(
+            data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
+
+        return (
+            identifier: codesignField(named: "Identifier", in: diagnostics),
+            teamIdentifier: codesignField(named: "TeamIdentifier", in: diagnostics)
+        )
+    }
+
+    private static func codesignField(named name: String, in diagnostics: String) -> String? {
+        for line in diagnostics.split(whereSeparator: \.isNewline) {
+            let prefix = "\(name)="
+            if line.hasPrefix(prefix) {
+                return String(line.dropFirst(prefix.count))
+            }
+        }
+        return nil
+    }
+
+    private static func launchInstaller(_ preparedInstaller: PreparedInstaller) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [preparedInstaller.scriptURL.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+        } catch {
+            throw UpdateError.installerLaunchFailed
+        }
+    }
+
+    private static func runProcess(executablePath: String, arguments: [String]) throws -> Data {
+        let process = Process()
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = arguments
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+
+        guard process.terminationStatus == 0 else {
+            let message = String(data: errorData.isEmpty ? outputData : errorData, encoding: .utf8) ?? executablePath
+            throw UpdateError.mountFailed(message.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        return outputData
+    }
+
+    static func installerScript(
+        currentPID: Int32,
+        stagedAppURL: URL,
+        destinationAppURL: URL,
+        temporaryRootURL: URL
+    ) -> String {
+        let stagedPath = shellQuoted(stagedAppURL.path)
+        let destinationPath = shellQuoted(destinationAppURL.path)
+        let temporaryRootPath = shellQuoted(temporaryRootURL.path)
+        let replaceFunction = replaceFunctionScript()
+        let privilegedCommand = """
+        set -eu
+        STAGED_APP=\(stagedPath)
+        DESTINATION_APP=\(destinationPath)
+        \(replaceFunction)
+        install_update
+        """
+
+        let privilegedAppleScript = appleScriptQuoted(privilegedCommand)
+
+        return """
+        #!/bin/sh
+        set -eu
+
+        CURRENT_PID=\(currentPID)
+        STAGED_APP=\(stagedPath)
+        DESTINATION_APP=\(destinationPath)
+        TEMP_ROOT=\(temporaryRootPath)
+
+        \(replaceFunction)
+
+        wait_for_app_exit() {
+          ATTEMPTS=0
+          while /bin/kill -0 "$CURRENT_PID" 2>/dev/null; do
+            ATTEMPTS=$((ATTEMPTS + 1))
+            if [ "$ATTEMPTS" -gt 120 ]; then
+              break
+            fi
+            /bin/sleep 1
+          done
+        }
+
+        wait_for_app_exit
+
+        if ! install_update; then
+          /usr/bin/osascript -e "do shell script \(privilegedAppleScript) with administrator privileges"
+        fi
+
+        if [ ! -d "$DESTINATION_APP" ]; then
+          exit 1
+        fi
+
+        /usr/bin/open "$DESTINATION_APP"
+        /bin/rm -rf "$TEMP_ROOT"
+        """
+    }
+
+    private static func replaceFunctionScript() -> String {
+        """
+        install_update() {
+          /bin/rm -rf "$DESTINATION_APP.new"
+          /usr/bin/ditto "$STAGED_APP" "$DESTINATION_APP.new"
+          /bin/rm -rf "$DESTINATION_APP.previous"
+          if [ -e "$DESTINATION_APP" ]; then
+            /bin/mv "$DESTINATION_APP" "$DESTINATION_APP.previous"
+          fi
+          if /bin/mv "$DESTINATION_APP.new" "$DESTINATION_APP"; then
+            /bin/rm -rf "$DESTINATION_APP.previous"
+            return 0
+          fi
+          /bin/rm -rf "$DESTINATION_APP"
+          if [ -e "$DESTINATION_APP.previous" ]; then
+            /bin/mv "$DESTINATION_APP.previous" "$DESTINATION_APP"
+          fi
+          return 1
+        }
+        """
+    }
+
+    private static func shellQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\"'\"'"))'"
+    }
+
+    private static func appleScriptQuoted(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 }
 
@@ -551,10 +962,14 @@ private struct AboutView: View {
             return nil
         case .checking:
             return "Checking GitHub releases…"
+        case .downloading(let version):
+            return "Downloading version \(version)…"
+        case .installing(let version):
+            return "Installing version \(version). DocNest will relaunch automatically."
         case .upToDate(let version):
             return "Installed version \(version) is current."
         case .updateAvailable(let info):
-            return "Version \(info.latestVersion) is available to download."
+            return "Version \(info.latestVersion) is ready to install."
         case .failed(let message):
             return message
         }
@@ -731,7 +1146,7 @@ private struct HelpView: View {
             id: "document-list",
             title: "Document List and Renaming",
             body: [
-                "Select a document once to focus it. Click the selected document name again to rename it inline, similar to Finder.",
+                "Select a document once to focus it. Double-click the selected document name to rename it inline.",
                 "You can also right-click a document and choose Rename from the context menu.",
                 "Press Return to confirm a rename or Escape to cancel editing."
             ]
@@ -775,7 +1190,7 @@ private struct HelpView: View {
         ("Find/search", "Edit > Find or Command-F"),
         ("Assign labels to the selection", "Edit > Assign Labels or Command-L"),
         ("Select all visible filtered documents", "Edit > Select All or Command-A"),
-        ("Rename a document", "Click the selected name again, or use the document context menu"),
+        ("Rename a document", "Double-click the selected name, or use the document context menu"),
         ("Open Settings", "DocNest > Settings… or Command-Comma"),
         ("Open full label management", "DocNest > Settings… > Labels"),
         ("Configure watch folders", "DocNest > Settings… > Watch Folders"),
