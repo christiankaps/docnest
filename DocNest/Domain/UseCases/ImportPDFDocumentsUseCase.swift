@@ -560,7 +560,10 @@ enum ImportPDFDocumentsUseCase {
     ///
     /// This helper is used both for direct folder imports and for watch-folder
     /// recursive scanning so nested-folder behavior stays aligned.
-    static func enumeratePDFs(in directoryURL: URL) -> [URL] {
+    static func enumeratePDFs(
+        in directoryURL: URL,
+        cancellationCheck: (() throws -> Void)? = nil
+    ) rethrows -> [URL] {
         let accessedSecurityScope = directoryURL.startAccessingSecurityScopedResource()
         defer {
             if accessedSecurityScope {
@@ -575,10 +578,15 @@ enum ImportPDFDocumentsUseCase {
         ) else { return [] }
 
         var results: [URL] = []
+        var index = 0
         for case let fileURL as URL in enumerator {
+            if index.isMultiple(of: 64) {
+                try cancellationCheck?()
+            }
             if isSupportedDocumentURL(fileURL) {
                 results.append(fileURL)
             }
+            index += 1
         }
         return results
     }

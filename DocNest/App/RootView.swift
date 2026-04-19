@@ -483,12 +483,8 @@ private struct ChangeHandlersNotifications: ViewModifier {
                 AppSettingsController.shared.show(.watchFolders)
             }
             .onDisappear {
-                coordinator.cancelPendingLabelFilter()
-                coordinator.cancelPendingDisplayedSelectionUpdate()
-                coordinator.cancelPendingSearchRecompute()
-                coordinator.cancelPendingDerivedStateRefresh()
+                coordinator.tearDown()
                 thumbnailCache.cancelAllInFlightTasks()
-                coordinator.tearDownWatchFolderMonitoring()
                 AppSettingsController.shared.clearActiveLibraryContext()
             }
             .onChange(of: coordinator.labelFilterSelection.visualSelection) { _, newSelection in

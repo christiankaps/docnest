@@ -18,17 +18,26 @@ struct PDFViewRepresentable: NSViewRepresentable {
     }
 
     func updateNSView(_ pdfView: PDFView, context: Context) {
-        if pdfView.document?.documentURL != url {
-            let requestID = context.coordinator.beginLoad(for: url)
-            let targetURL = url
-            Task.detached(priority: .userInitiated) {
+        let coordinator = context.coordinator
+        guard pdfView.document?.documentURL != url else { return }
+        guard !coordinator.isLoading(url) else { return }
+
+        let requestID = coordinator.beginLoad(for: url)
+        let targetURL = url
+        coordinator.installLoadTask(
+            Task.detached(priority: .userInitiated) { [weak coordinator, weak pdfView] in
                 #if DEBUG
                 let startTime = Date().timeIntervalSinceReferenceDate
                 #endif
+                guard !Task.isCancelled else { return }
                 let document = PDFDocument(url: targetURL)
-                await MainActor.run {
-                    guard context.coordinator.canApplyLoad(requestID, for: targetURL) else { return }
-                    guard pdfView.window != nil else { return }
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run { [weak coordinator, weak pdfView] in
+                    guard let coordinator else { return }
+                    defer { coordinator.finishLoad(requestID) }
+                    guard coordinator.canApplyLoad(requestID, for: targetURL) else { return }
+                    guard let pdfView, pdfView.window != nil else { return }
                     pdfView.document = document
                     pdfView.goToFirstPage(nil)
                     #if DEBUG
@@ -39,22 +48,56 @@ struct PDFViewRepresentable: NSViewRepresentable {
                     #endif
                 }
             }
-        }
+        )
     }
 
+    static func dismantleNSView(_ nsView: PDFView, coordinator: Coordinator) {
+        coordinator.cancelLoad(resetRequest: true)
+        nsView.document = nil
+    }
+
+    @MainActor
     final class Coordinator {
         private var activeRequestID = UUID()
         private var activeURL: URL?
+        private var loadTask: Task<Void, Never>?
+
+        deinit {
+            loadTask?.cancel()
+        }
 
         func beginLoad(for url: URL) -> UUID {
+            cancelLoad()
             let requestID = UUID()
             activeRequestID = requestID
             activeURL = url
             return requestID
         }
 
+        func installLoadTask(_ task: Task<Void, Never>) {
+            loadTask = task
+        }
+
         func canApplyLoad(_ requestID: UUID, for url: URL) -> Bool {
             activeRequestID == requestID && activeURL == url
+        }
+
+        func isLoading(_ url: URL) -> Bool {
+            activeURL == url && loadTask != nil
+        }
+
+        func finishLoad(_ requestID: UUID) {
+            guard activeRequestID == requestID else { return }
+            loadTask = nil
+        }
+
+        func cancelLoad(resetRequest: Bool = false) {
+            loadTask?.cancel()
+            loadTask = nil
+            if resetRequest {
+                activeURL = nil
+                activeRequestID = UUID()
+            }
         }
     }
 }

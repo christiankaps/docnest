@@ -265,19 +265,45 @@ final class FolderMonitorService {
             let previousSnapshots = self.knownSnapshotsByFolderID[folderID] ?? [:]
             let shouldPerformFullScan = self.pendingFullScanIDs.remove(folderID) != nil
             let pendingEvents = self.pendingEventFlagsByFolderID.removeValue(forKey: folderID) ?? [:]
-            let scanTask = Task.detached(priority: .utility) {
-                let result = if shouldPerformFullScan {
-                    Self.scanSnapshots(in: folderPath, previousSnapshots: previousSnapshots)
-                } else {
-                    Self.applyFileEvents(
-                        pendingEvents,
-                        in: folderPath,
-                        previousSnapshots: previousSnapshots
-                    )
+            let scanTask = Task.detached(priority: .utility) { [weak self] in
+                let result: (urls: [URL], updatedSnapshots: [String: Date])
+                do {
+                    result = if shouldPerformFullScan {
+                        try Self.scanSnapshots(in: folderPath, previousSnapshots: previousSnapshots)
+                    } else {
+                        try Self.applyFileEvents(
+                            pendingEvents,
+                            in: folderPath,
+                            previousSnapshots: previousSnapshots
+                        )
+                    }
+                } catch is CancellationError {
+                    await MainActor.run { [weak self] in
+                        guard let self else { return }
+                        guard self.scanGenerationByFolderID[folderID] == scanGeneration else { return }
+                        self.activeScanTasks[folderID] = nil
+                    }
+                    return
+                } catch {
+                    await MainActor.run { [weak self] in
+                        guard let self else { return }
+                        guard self.scanGenerationByFolderID[folderID] == scanGeneration else { return }
+                        self.activeScanTasks[folderID] = nil
+                    }
+                    return
                 }
-                guard !Task.isCancelled else { return }
 
-                await MainActor.run {
+                if Task.isCancelled {
+                    await MainActor.run { [weak self] in
+                        guard let self else { return }
+                        guard self.scanGenerationByFolderID[folderID] == scanGeneration else { return }
+                        self.activeScanTasks[folderID] = nil
+                    }
+                    return
+                }
+
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
                     guard self.scanGenerationByFolderID[folderID] == scanGeneration else { return }
                     guard let monitor = self.monitors[folderID] else { return }
                     self.activeScanTasks[folderID] = nil
@@ -332,8 +358,8 @@ final class FolderMonitorService {
     nonisolated static func scanSnapshots(
         in folderPath: String,
         previousSnapshots: [String: Date]
-    ) -> (urls: [URL], updatedSnapshots: [String: Date]) {
-        let snapshots = recursivePDFSnapshots(in: folderPath)
+    ) throws -> (urls: [URL], updatedSnapshots: [String: Date]) {
+        let snapshots = try recursivePDFSnapshots(in: folderPath)
         return newPDFURLs(from: snapshots, previousSnapshots: previousSnapshots)
     }
 
@@ -341,7 +367,7 @@ final class FolderMonitorService {
         _ eventFlagsByPath: [String: FSEventStreamEventFlags],
         in folderPath: String,
         previousSnapshots: [String: Date]
-    ) -> (urls: [URL], updatedSnapshots: [String: Date]) {
+    ) throws -> (urls: [URL], updatedSnapshots: [String: Date]) {
         guard !eventFlagsByPath.isEmpty else {
             return ([], previousSnapshots)
         }
@@ -350,7 +376,11 @@ final class FolderMonitorService {
         var urls: [URL] = []
         urls.reserveCapacity(eventFlagsByPath.count)
 
-        for (path, flags) in eventFlagsByPath {
+        for (index, entry) in eventFlagsByPath.enumerated() {
+            if index.isMultiple(of: 64) {
+                try Task.checkCancellation()
+            }
+            let (path, flags) = entry
             guard isDescendantPath(path, of: folderPath) else { continue }
 
             let removedFlags = FSEventStreamEventFlags(
@@ -384,13 +414,19 @@ final class FolderMonitorService {
         return (urls, updatedSnapshots)
     }
 
-    nonisolated private static func recursivePDFSnapshots(in folderPath: String) -> [FileSnapshot] {
+    nonisolated private static func recursivePDFSnapshots(in folderPath: String) throws -> [FileSnapshot] {
         let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
-        let urls = ImportPDFDocumentsUseCase.enumeratePDFs(in: folderURL)
+        let urls = try ImportPDFDocumentsUseCase.enumeratePDFs(
+            in: folderURL,
+            cancellationCheck: { try Task.checkCancellation() }
+        )
         var snapshots: [FileSnapshot] = []
         snapshots.reserveCapacity(urls.count)
 
-        for url in urls {
+        for (index, url) in urls.enumerated() {
+            if index.isMultiple(of: 64) {
+                try Task.checkCancellation()
+            }
             let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
             snapshots.append(
                 FileSnapshot(

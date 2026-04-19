@@ -376,7 +376,7 @@ final class DocNestTests: XCTestCase {
         try TestImportFixtures.createPDF(at: nestedFolder.appendingPathComponent("nested-watch.pdf"), text: "Watch")
         try Data("ignore".utf8).write(to: watchRoot.appendingPathComponent("note.txt"))
 
-        let result = FolderMonitorService.scanSnapshots(
+        let result = try FolderMonitorService.scanSnapshots(
             in: watchRoot.path,
             previousSnapshots: [:]
         )
@@ -399,7 +399,7 @@ final class DocNestTests: XCTestCase {
         try FileManager.default.createDirectory(at: nestedFolder, withIntermediateDirectories: true)
         try TestImportFixtures.createPDF(at: nestedPDF, text: "Event")
 
-        let result = FolderMonitorService.applyFileEvents(
+        let result = try FolderMonitorService.applyFileEvents(
             [nestedPDF.path: FSEventStreamEventFlags(kFSEventStreamEventFlagItemCreated)],
             in: watchRoot.path,
             previousSnapshots: [:]

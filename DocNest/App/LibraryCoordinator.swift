@@ -123,6 +123,19 @@ final class LibraryCoordinator {
     private var derivedStateGeneration = 0
     let recentDocumentLimit = 10
 
+    deinit {
+        MainActor.assumeIsolated {
+            activeImportTask?.cancel()
+            activeOCRTask?.cancel()
+            pendingLabelFilterApplyTask?.cancel()
+            pendingDisplayedSelectionTask?.cancel()
+            pendingSearchRecomputeTask?.cancel()
+            pendingDerivedStateTask?.cancel()
+            pendingDisplayedShareURLsTask?.cancel()
+            watchFolderController.tearDown()
+        }
+    }
+
     // MARK: - Convenience selection helpers
 
     var selectedSection: LibrarySection? {
@@ -659,6 +672,16 @@ final class LibraryCoordinator {
         pendingDerivedStateTask?.cancel()
     }
 
+    func tearDown() {
+        cancelPendingLabelFilter()
+        cancelPendingDisplayedSelectionUpdate()
+        cancelPendingSearchRecompute()
+        cancelPendingDerivedStateRefresh()
+        cancelImport()
+        cancelOCR()
+        tearDownWatchFolderMonitoring()
+    }
+
     func syncDisplayedSelectionImmediately() {
         displayedSelectedDocuments = selectedDocuments
         displayedShareURLs = []
@@ -970,6 +993,11 @@ final class LibraryCoordinator {
                 self?.importProgress = ImportProgress(total: total, completed: completed)
             }
 
+            guard !Task.isCancelled else {
+                self?.activeImportTask = nil
+                return
+            }
+
             self?.importProgress = nil
             self?.activeImportTask = nil
 
@@ -998,6 +1026,11 @@ final class LibraryCoordinator {
                 modelContext: modelContext
             ) { [weak self] completed, total, title in
                 self?.ocrProgress = OCRProgress(total: total, completed: completed, currentTitle: title)
+            }
+
+            guard !Task.isCancelled else {
+                self?.activeOCRTask = nil
+                return
             }
 
             self?.ocrProgress = nil
