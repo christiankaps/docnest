@@ -225,6 +225,29 @@ struct AppUpdateInfo: Equatable {
     let assetName: String?
 }
 
+private final class UpdateDownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
+    private let onProgress: @Sendable (Int64, Int64?) async -> Void
+
+    init(onProgress: @escaping @Sendable (Int64, Int64?) async -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        let expectedBytes = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : nil
+        Task {
+            await onProgress(totalBytesWritten, expectedBytes)
+        }
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
+}
+
 @MainActor
 final class AppUpdateService: ObservableObject {
     static let shared = AppUpdateService()
@@ -239,27 +262,200 @@ final class AppUpdateService: ObservableObject {
         case failed(String)
     }
 
+    struct UpdateProgress: Equatable {
+        enum Phase: Equatable {
+            case startingDownload
+            case downloading(bytesReceived: Int64, totalBytes: Int64?)
+            case mountingInstaller
+            case stagingInstaller
+            case verifyingInstaller
+            case launchingInstaller
+        }
+
+        let version: AppReleaseVersion
+        let phase: Phase
+
+        var title: String {
+            switch phase {
+            case .startingDownload, .downloading:
+                return "Downloading Version \(version)"
+            case .mountingInstaller:
+                return "Opening Installer"
+            case .stagingInstaller:
+                return "Staging Update"
+            case .verifyingInstaller:
+                return "Verifying Update"
+            case .launchingInstaller:
+                return "Launching Installer"
+            }
+        }
+
+        var detail: String {
+            switch phase {
+            case .startingDownload:
+                return "Preparing the download for version \(version)."
+            case .downloading(let bytesReceived, let totalBytes):
+                if let totalBytes, totalBytes > 0 {
+                    return "\(Self.byteCountString(bytesReceived)) of \(Self.byteCountString(totalBytes)) downloaded."
+                }
+                if bytesReceived > 0 {
+                    return "\(Self.byteCountString(bytesReceived)) downloaded."
+                }
+                return "Preparing the download for version \(version)."
+            case .mountingInstaller:
+                return "Step 2 of 5. Mounting the downloaded installer image."
+            case .stagingInstaller:
+                return "Step 3 of 5. Copying the new app into a temporary staging area."
+            case .verifyingInstaller:
+                return "Step 4 of 5. Checking the downloaded app before installation."
+            case .launchingInstaller:
+                return "Step 5 of 5. DocNest will relaunch automatically when the installer finishes."
+            }
+        }
+
+        var fractionCompleted: Double? {
+            guard case .downloading(let bytesReceived, let totalBytes) = phase,
+                  let totalBytes,
+                  totalBytes > 0 else {
+                return nil
+            }
+
+            let fraction = Double(bytesReceived) / Double(totalBytes)
+            return min(max(fraction, 0), 1)
+        }
+
+        var statusSummary: String {
+            if let fractionCompleted {
+                return "\(Int((fractionCompleted * 100).rounded()))%"
+            }
+
+            return "\(stepNumber)/\(totalSteps)"
+        }
+
+        private var stepNumber: Int {
+            switch phase {
+            case .startingDownload, .downloading:
+                return 1
+            case .mountingInstaller:
+                return 2
+            case .stagingInstaller:
+                return 3
+            case .verifyingInstaller:
+                return 4
+            case .launchingInstaller:
+                return 5
+            }
+        }
+
+        private var totalSteps: Int { 5 }
+
+        private static let byteCountFormatter: ByteCountFormatter = {
+            let formatter = ByteCountFormatter()
+            formatter.allowedUnits = [.useKB, .useMB, .useGB]
+            formatter.countStyle = .file
+            formatter.includesUnit = true
+            formatter.isAdaptive = true
+            return formatter
+        }()
+
+        private static func byteCountString(_ byteCount: Int64) -> String {
+            byteCountFormatter.string(fromByteCount: byteCount)
+        }
+
+        static func shouldAccept(_ incoming: Phase, over current: Phase?) -> Bool {
+            guard let current else { return true }
+
+            let incomingRank = phaseRank(for: incoming)
+            let currentRank = phaseRank(for: current)
+            guard incomingRank >= currentRank else { return false }
+
+            if incomingRank > currentRank {
+                return true
+            }
+
+            switch (current, incoming) {
+            case (.downloading, .startingDownload):
+                return false
+            case let (.downloading(currentBytes, currentTotal), .downloading(incomingBytes, incomingTotal)):
+                if incomingBytes > currentBytes {
+                    return true
+                }
+                if incomingBytes == currentBytes, currentTotal == nil, incomingTotal != nil {
+                    return true
+                }
+                return false
+            default:
+                return true
+            }
+        }
+
+        private static func phaseRank(for phase: Phase) -> Int {
+            switch phase {
+            case .startingDownload, .downloading:
+                return 0
+            case .mountingInstaller:
+                return 1
+            case .stagingInstaller:
+                return 2
+            case .verifyingInstaller:
+                return 3
+            case .launchingInstaller:
+                return 4
+            }
+        }
+    }
+
     @Published private(set) var status: Status = .idle
+    @Published private(set) var updateProgress: UpdateProgress?
 
-    private let owner = "christiankaps"
-    private let repo = "docnest"
+    private let owner: String
+    private let repo: String
+    private var activeUpdateSessionID: UUID?
 
-    private init() {}
+    init(owner: String = "christiankaps", repo: String = "docnest") {
+        self.owner = owner
+        self.repo = repo
+    }
+
+    func beginUpdateProgressSession(for version: AppReleaseVersion) -> UUID {
+        let sessionID = UUID()
+        activeUpdateSessionID = sessionID
+        updateProgress = UpdateProgress(version: version, phase: .startingDownload)
+        return sessionID
+    }
+
+    func clearUpdateProgressSession() {
+        activeUpdateSessionID = nil
+        updateProgress = nil
+    }
+
+    func applyUpdateProgress(
+        _ phase: UpdateProgress.Phase,
+        version: AppReleaseVersion,
+        sessionID: UUID
+    ) {
+        guard activeUpdateSessionID == sessionID else { return }
+        guard UpdateProgress.shouldAccept(phase, over: updateProgress?.phase) else { return }
+        updateProgress = UpdateProgress(version: version, phase: phase)
+    }
 
     func checkForUpdates(userInitiated: Bool = true) {
         guard !isBusy else { return }
 
+        clearUpdateProgressSession()
         status = .checking
 
         Task {
             do {
                 let info = try await fetchUpdateInfo()
                 if let info {
+                    clearUpdateProgressSession()
                     status = .updateAvailable(info)
                     if userInitiated {
                         presentUpdateAlert(info)
                     }
                 } else if let currentVersion = currentInstalledVersion() {
+                    clearUpdateProgressSession()
                     status = .upToDate(currentVersion)
                     if userInitiated {
                         presentInformationalAlert(
@@ -268,6 +464,7 @@ final class AppUpdateService: ObservableObject {
                         )
                     }
                 } else {
+                    clearUpdateProgressSession()
                     status = .idle
                     if userInitiated {
                         presentInformationalAlert(
@@ -277,6 +474,7 @@ final class AppUpdateService: ObservableObject {
                     }
                 }
             } catch {
+                clearUpdateProgressSession()
                 let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 status = .failed(message)
                 if userInitiated {
@@ -292,18 +490,24 @@ final class AppUpdateService: ObservableObject {
     func installUpdate(_ info: AppUpdateInfo) {
         guard !isBusy else { return }
 
+        let sessionID = beginInstallProgressSession(for: info.latestVersion)
+
         Task {
             do {
-                status = .downloading(info.latestVersion)
                 let preparedInstaller = try await Self.prepareInstaller(
                     for: info,
                     currentAppURL: Bundle.main.bundleURL.standardizedFileURL,
-                    currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier
+                    currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
+                    progressHandler: { [weak self] phase in
+                        await self?.applyUpdateProgress(phase, version: info.latestVersion, sessionID: sessionID)
+                    }
                 )
                 status = .installing(info.latestVersion)
+                applyUpdateProgress(.launchingInstaller, version: info.latestVersion, sessionID: sessionID)
                 try Self.launchInstaller(preparedInstaller)
                 NSApplication.shared.terminate(nil)
             } catch {
+                clearUpdateProgressSession()
                 let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 status = .failed(message)
                 presentInformationalAlert(
@@ -312,6 +516,12 @@ final class AppUpdateService: ObservableObject {
                 )
             }
         }
+    }
+
+    @discardableResult
+    func beginInstallProgressSession(for version: AppReleaseVersion) -> UUID {
+        status = .downloading(version)
+        return beginUpdateProgressSession(for: version)
     }
 
     private func fetchUpdateInfo() async throws -> AppUpdateInfo? {
@@ -396,7 +606,7 @@ final class AppUpdateService: ObservableObject {
         alert.runModal()
     }
 
-    private var isBusy: Bool {
+    var isBusy: Bool {
         switch status {
         case .checking, .downloading, .installing:
             return true
@@ -439,6 +649,12 @@ final class AppUpdateService: ObservableObject {
         let scriptURL: URL
     }
 
+    private struct ProcessExecutionError: LocalizedError {
+        let message: String
+
+        var errorDescription: String? { message }
+    }
+
     private enum UpdateError: LocalizedError {
         case invalidInstalledVersion
         case invalidRemoteVersion(String)
@@ -448,6 +664,7 @@ final class AppUpdateService: ObservableObject {
         case missingInstallerAsset
         case downloadMoveFailed
         case mountFailed(String)
+        case detachFailed(String)
         case mountedVolumeNotFound
         case appBundleNotFound
         case invalidInstallerBundle(String)
@@ -473,6 +690,8 @@ final class AppUpdateService: ObservableObject {
                 return "The downloaded installer could not be staged."
             case .mountFailed(let message):
                 return "The downloaded installer could not be mounted. \(message)"
+            case .detachFailed(let message):
+                return "The downloaded installer could not be unmounted. \(message)"
             case .mountedVolumeNotFound:
                 return "The mounted installer volume could not be located."
             case .appBundleNotFound:
@@ -489,10 +708,13 @@ final class AppUpdateService: ObservableObject {
         }
     }
 
-    private static func prepareInstaller(
+    nonisolated private static let diskImageDetachRetryDelay: TimeInterval = 0.2
+
+    nonisolated private static func prepareInstaller(
         for info: AppUpdateInfo,
         currentAppURL: URL,
-        currentProcessIdentifier: Int32
+        currentProcessIdentifier: Int32,
+        progressHandler: @escaping @Sendable (UpdateProgress.Phase) async -> Void
     ) async throws -> PreparedInstaller {
         let tempRootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("DocNestUpdate-\(UUID().uuidString)", isDirectory: true)
@@ -500,8 +722,10 @@ final class AppUpdateService: ObservableObject {
 
         let installerFileName = info.assetName ?? "DocNest.dmg"
         let downloadedDMGURL = tempRootURL.appendingPathComponent(installerFileName)
-        try await downloadInstaller(from: info.downloadURL, to: downloadedDMGURL)
+        await progressHandler(.startingDownload)
+        try await downloadInstaller(from: info.downloadURL, to: downloadedDMGURL, progressHandler: progressHandler)
 
+        await progressHandler(.mountingInstaller)
         let mountedVolumeURL = try mountDiskImage(at: downloadedDMGURL)
         let stagedAppURL = tempRootURL.appendingPathComponent(currentAppURL.lastPathComponent, isDirectory: true)
         let expectedBundleIdentifier = Bundle.main.bundleIdentifier ?? "com.kaps.docnest"
@@ -512,7 +736,9 @@ final class AppUpdateService: ObservableObject {
                 in: mountedVolumeURL,
                 named: currentAppURL.lastPathComponent
             )
+            await progressHandler(.stagingInstaller)
             try FileManager.default.copyItem(at: mountedAppURL, to: stagedAppURL)
+            await progressHandler(.verifyingInstaller)
             try validateInstalledApp(
                 at: stagedAppURL,
                 expectedAppName: currentAppURL.lastPathComponent,
@@ -524,7 +750,8 @@ final class AppUpdateService: ObservableObject {
             throw error
         }
 
-        try detachDiskImage(at: mountedVolumeURL)
+        // The installer only needs the staged app copy from here forward, so a lingering DMG is a cleanup issue.
+        try? detachDiskImage(at: mountedVolumeURL)
 
         let scriptURL = tempRootURL.appendingPathComponent("install-update.sh")
         let script = installerScript(
@@ -542,10 +769,17 @@ final class AppUpdateService: ObservableObject {
         return PreparedInstaller(scriptURL: scriptURL)
     }
 
-    private static func downloadInstaller(from sourceURL: URL, to destinationURL: URL) async throws {
+    nonisolated private static func downloadInstaller(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        progressHandler: @escaping @Sendable (UpdateProgress.Phase) async -> Void
+    ) async throws {
         var request = URLRequest(url: sourceURL)
         request.setValue("DocNest", forHTTPHeaderField: "User-Agent")
-        let (temporaryURL, _) = try await URLSession.shared.download(for: request)
+        let progressDelegate = UpdateDownloadProgressDelegate { bytesReceived, totalBytes in
+            await progressHandler(.downloading(bytesReceived: bytesReceived, totalBytes: totalBytes))
+        }
+        let (temporaryURL, _) = try await URLSession.shared.download(for: request, delegate: progressDelegate)
 
         do {
             if FileManager.default.fileExists(atPath: destinationURL.path) {
@@ -557,11 +791,26 @@ final class AppUpdateService: ObservableObject {
         }
     }
 
-    private static func mountDiskImage(at diskImageURL: URL) throws -> URL {
-        let output = try runProcess(
-            executablePath: "/usr/bin/hdiutil",
-            arguments: ["attach", "-plist", "-nobrowse", "-noautoopen", diskImageURL.path]
-        )
+    nonisolated private static func mountDiskImage(at diskImageURL: URL) throws -> URL {
+        try mountDiskImage(at: diskImageURL, processRunner: runProcess)
+    }
+
+    nonisolated static func mountDiskImage(
+        at diskImageURL: URL,
+        processRunner: (_ executablePath: String, _ arguments: [String]) throws -> Data
+    ) throws -> URL {
+        let output: Data
+        do {
+            output = try processRunner(
+                "/usr/bin/hdiutil",
+                ["attach", "-plist", "-nobrowse", "-noautoopen", diskImageURL.path]
+            )
+        } catch {
+            throw UpdateError.mountFailed(
+                processFailureMessage(from: error, defaultMessage: "No mount details were returned.")
+            )
+        }
+
         do {
             return try mountedVolumeURL(fromAttachOutput: output)
         } catch {
@@ -570,14 +819,51 @@ final class AppUpdateService: ObservableObject {
         }
     }
 
-    private static func detachDiskImage(at mountedVolumeURL: URL) throws {
-        _ = try runProcess(
-            executablePath: "/usr/bin/hdiutil",
-            arguments: ["detach", mountedVolumeURL.path]
+    nonisolated private static func detachDiskImage(at mountedVolumeURL: URL) throws {
+        try detachDiskImage(
+            at: mountedVolumeURL,
+            processRunner: runProcess,
+            sleep: { Thread.sleep(forTimeInterval: $0) }
         )
     }
 
-    static func mountedVolumeURL(fromAttachOutput output: Data) throws -> URL {
+    nonisolated static func detachDiskImage(
+        at mountedVolumeURL: URL,
+        processRunner: (_ executablePath: String, _ arguments: [String]) throws -> Data,
+        sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+    ) throws {
+        do {
+            _ = try processRunner("/usr/bin/hdiutil", ["detach", mountedVolumeURL.path])
+        } catch let initialError {
+            guard shouldRetryDiskImageDetach(after: initialError) else {
+                throw UpdateError.detachFailed(
+                    processFailureMessage(
+                        from: initialError,
+                        defaultMessage: "The installer disk image could not be detached."
+                    )
+                )
+            }
+
+            // Finder and Spotlight can briefly keep the mounted volume busy after we copy from it.
+            sleep(diskImageDetachRetryDelay)
+
+            do {
+                _ = try processRunner("/usr/bin/hdiutil", ["detach", "-force", mountedVolumeURL.path])
+            } catch let forcedError {
+                throw UpdateError.detachFailed(
+                    processFailureMessage(
+                        from: forcedError,
+                        fallback: processFailureMessage(
+                            from: initialError,
+                            defaultMessage: "The installer disk image could not be detached."
+                        )
+                    )
+                )
+            }
+        }
+    }
+
+    nonisolated static func mountedVolumeURL(fromAttachOutput output: Data) throws -> URL {
         let propertyList = try PropertyListSerialization.propertyList(from: output, format: nil)
         guard let root = propertyList as? [String: Any],
               let entities = root["system-entities"] as? [[String: Any]] else {
@@ -593,7 +879,7 @@ final class AppUpdateService: ObservableObject {
         throw UpdateError.mountedVolumeNotFound
     }
 
-    private static func locateAppBundle(in mountedVolumeURL: URL, named expectedAppName: String) throws -> URL {
+    nonisolated private static func locateAppBundle(in mountedVolumeURL: URL, named expectedAppName: String) throws -> URL {
         let enumerator = FileManager.default.enumerator(
             at: mountedVolumeURL,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -609,7 +895,7 @@ final class AppUpdateService: ObservableObject {
         throw UpdateError.appBundleNotFound
     }
 
-    private static func validateInstalledApp(
+    nonisolated private static func validateInstalledApp(
         at appURL: URL,
         expectedAppName: String,
         expectedBundleIdentifier: String,
@@ -636,21 +922,43 @@ final class AppUpdateService: ObservableObject {
         )
     }
 
-    private static func currentTeamIdentifier(for appURL: URL) -> String? {
+    nonisolated private static func currentTeamIdentifier(for appURL: URL) -> String? {
         try? codesignMetadata(for: appURL).teamIdentifier
     }
 
-    private static func verifyCodeSignature(
+    nonisolated private static func verifyCodeSignature(
         of appURL: URL,
         expectedBundleIdentifier: String,
         expectedTeamIdentifier: String?
     ) throws {
-        _ = try runProcess(
-            executablePath: "/usr/bin/codesign",
-            arguments: ["--verify", "--deep", "--strict", appURL.path]
+        try verifyCodeSignature(
+            of: appURL,
+            expectedBundleIdentifier: expectedBundleIdentifier,
+            expectedTeamIdentifier: expectedTeamIdentifier,
+            processRunner: runProcess,
+            metadataProvider: codesignMetadata
         )
+    }
 
-        let metadata = try codesignMetadata(for: appURL)
+    nonisolated static func verifyCodeSignature(
+        of appURL: URL,
+        expectedBundleIdentifier: String,
+        expectedTeamIdentifier: String?,
+        processRunner: (_ executablePath: String, _ arguments: [String]) throws -> Data,
+        metadataProvider: (_ appURL: URL) throws -> (identifier: String?, teamIdentifier: String?)
+    ) throws {
+        do {
+            _ = try processRunner(
+                "/usr/bin/codesign",
+                ["--verify", "--deep", "--strict", appURL.path]
+            )
+        } catch {
+            throw UpdateError.signatureValidationFailed(
+                processFailureMessage(from: error, defaultMessage: "The app signature could not be verified.")
+            )
+        }
+
+        let metadata = try metadataProvider(appURL)
         if let signingIdentifier = metadata.identifier,
            signingIdentifier != expectedBundleIdentifier {
             throw UpdateError.signatureValidationFailed(
@@ -667,7 +975,7 @@ final class AppUpdateService: ObservableObject {
         }
     }
 
-    private static func codesignMetadata(for appURL: URL) throws -> (identifier: String?, teamIdentifier: String?) {
+    nonisolated private static func codesignMetadata(for appURL: URL) throws -> (identifier: String?, teamIdentifier: String?) {
         let process = Process()
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -698,7 +1006,7 @@ final class AppUpdateService: ObservableObject {
         )
     }
 
-    private static func codesignField(named name: String, in diagnostics: String) -> String? {
+    nonisolated private static func codesignField(named name: String, in diagnostics: String) -> String? {
         for line in diagnostics.split(whereSeparator: \.isNewline) {
             let prefix = "\(name)="
             if line.hasPrefix(prefix) {
@@ -708,7 +1016,39 @@ final class AppUpdateService: ObservableObject {
         return nil
     }
 
-    private static func launchInstaller(_ preparedInstaller: PreparedInstaller) throws {
+    nonisolated private static func processFailureMessage(from error: Error) -> String? {
+        let message: String
+        if let processError = error as? ProcessExecutionError {
+            message = processError.message
+        } else if let localizedDescription = (error as? LocalizedError)?.errorDescription {
+            message = localizedDescription
+        } else {
+            message = error.localizedDescription
+        }
+
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    nonisolated private static func processFailureMessage(from error: Error, defaultMessage: String) -> String {
+        processFailureMessage(from: error) ?? defaultMessage
+    }
+
+    nonisolated private static func processFailureMessage(from error: Error, fallback: String) -> String {
+        processFailureMessage(from: error) ?? fallback
+    }
+
+    nonisolated private static func shouldRetryDiskImageDetach(after error: Error) -> Bool {
+        guard let message = processFailureMessage(from: error)?.lowercased() else {
+            return false
+        }
+
+        return message.contains("resource busy")
+            || message.contains("couldn't unmount")
+            || message.contains("couldnt unmount")
+    }
+
+    nonisolated private static func launchInstaller(_ preparedInstaller: PreparedInstaller) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [preparedInstaller.scriptURL.path]
@@ -722,7 +1062,7 @@ final class AppUpdateService: ObservableObject {
         }
     }
 
-    private static func runProcess(executablePath: String, arguments: [String]) throws -> Data {
+    nonisolated private static func runProcess(executablePath: String, arguments: [String]) throws -> Data {
         let process = Process()
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -739,13 +1079,13 @@ final class AppUpdateService: ObservableObject {
 
         guard process.terminationStatus == 0 else {
             let message = String(data: errorData.isEmpty ? outputData : errorData, encoding: .utf8) ?? executablePath
-            throw UpdateError.mountFailed(message.trimmingCharacters(in: .whitespacesAndNewlines))
+            throw ProcessExecutionError(message: message.trimmingCharacters(in: .whitespacesAndNewlines))
         }
 
         return outputData
     }
 
-    static func installerScript(
+    nonisolated static func installerScript(
         currentPID: Int32,
         stagedAppURL: URL,
         destinationAppURL: URL,
@@ -802,7 +1142,7 @@ final class AppUpdateService: ObservableObject {
         """
     }
 
-    private static func replaceFunctionScript() -> String {
+    nonisolated private static func replaceFunctionScript() -> String {
         """
         install_update() {
           /bin/rm -rf "$DESTINATION_APP.new"
@@ -824,11 +1164,11 @@ final class AppUpdateService: ObservableObject {
         """
     }
 
-    private static func shellQuoted(_ value: String) -> String {
+    nonisolated private static func shellQuoted(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\"'\"'"))'"
     }
 
-    private static func appleScriptQuoted(_ value: String) -> String {
+    nonisolated private static func appleScriptQuoted(_ value: String) -> String {
         let escaped = value
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
@@ -866,7 +1206,12 @@ private struct AboutView: View {
                         updateService.checkForUpdates()
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(updateService.isBusy)
                     .padding(.top, 4)
+
+                    if let progress = updateService.updateProgress {
+                        updateProgressCard(progress)
+                    }
 
                     if let message = updateStatusMessage {
                         Text(message)
@@ -950,6 +1295,45 @@ private struct AboutView: View {
             )
     }
 
+    private func updateProgressCard(_ progress: AppUpdateService.UpdateProgress) -> some View {
+        aboutCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 10) {
+                    if progress.fractionCompleted == nil {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(progress.title)
+                            .font(AppTypography.captionStrong)
+
+                        Text(progress.detail)
+                            .font(AppTypography.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Text(progress.statusSummary)
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                if let fractionCompleted = progress.fractionCompleted {
+                    ProgressView(value: fractionCompleted)
+                        .progressViewStyle(.linear)
+                }
+            }
+        }
+        .transition(.opacity)
+    }
+
     private func loadStatistics() {
         Task { @MainActor in
             statistics = await AboutStatisticsProvider.shared.controller?.libraryStatistics()
@@ -963,9 +1347,11 @@ private struct AboutView: View {
         case .checking:
             return "Checking GitHub releases…"
         case .downloading(let version):
-            return "Downloading version \(version)…"
+            return updateService.updateProgress == nil ? "Downloading version \(version)…" : nil
         case .installing(let version):
-            return "Installing version \(version). DocNest will relaunch automatically."
+            return updateService.updateProgress == nil
+                ? "Installing version \(version). DocNest will relaunch automatically."
+                : nil
         case .upToDate(let version):
             return "Installed version \(version) is current."
         case .updateAvailable(let info):

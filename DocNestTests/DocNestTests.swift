@@ -1739,6 +1739,249 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testAppUpdateProgressFormatsDownloadFraction() {
+        let progress = AppUpdateService.UpdateProgress(
+            version: AppReleaseVersion(string: "2025.4.1")!,
+            phase: .downloading(bytesReceived: 1_024, totalBytes: 2_048)
+        )
+
+        XCTAssertEqual(progress.title, "Downloading Version 2025.4.1")
+        XCTAssertEqual(progress.statusSummary, "50%")
+        XCTAssertEqual(progress.fractionCompleted ?? -1, 0.5, accuracy: 0.0001)
+    }
+
+    @MainActor
+    func testAppUpdateProgressFormatsVerificationStep() {
+        let progress = AppUpdateService.UpdateProgress(
+            version: AppReleaseVersion(string: "2025.4.1")!,
+            phase: .verifyingInstaller
+        )
+
+        XCTAssertEqual(progress.title, "Verifying Update")
+        XCTAssertEqual(progress.statusSummary, "4/5")
+        XCTAssertNil(progress.fractionCompleted)
+        XCTAssertTrue(progress.detail.contains("Step 4 of 5"))
+    }
+
+    @MainActor
+    func testAppUpdateProgressRejectsDownloadAfterLaterStage() {
+        XCTAssertFalse(
+            AppUpdateService.UpdateProgress.shouldAccept(
+                .downloading(bytesReceived: 2_048, totalBytes: 4_096),
+                over: .mountingInstaller
+            )
+        )
+    }
+
+    @MainActor
+    func testAppUpdateProgressRejectsStartingDownloadAfterByteProgress() {
+        XCTAssertFalse(
+            AppUpdateService.UpdateProgress.shouldAccept(
+                .startingDownload,
+                over: .downloading(bytesReceived: 2_048, totalBytes: 4_096)
+            )
+        )
+    }
+
+    @MainActor
+    func testAppUpdateProgressSessionIgnoresUpdatesAfterClear() {
+        let service = AppUpdateService()
+        let version = AppReleaseVersion(string: "2025.4.1")!
+        let sessionID = service.beginUpdateProgressSession(for: version)
+
+        service.clearUpdateProgressSession()
+        service.applyUpdateProgress(.downloading(bytesReceived: 1_024, totalBytes: 2_048), version: version, sessionID: sessionID)
+
+        XCTAssertNil(service.updateProgress)
+    }
+
+    @MainActor
+    func testAppUpdateProgressSessionIgnoresRegressiveDownloadUpdate() {
+        let service = AppUpdateService()
+        let version = AppReleaseVersion(string: "2025.4.1")!
+        let sessionID = service.beginUpdateProgressSession(for: version)
+
+        service.applyUpdateProgress(.mountingInstaller, version: version, sessionID: sessionID)
+        service.applyUpdateProgress(.downloading(bytesReceived: 2_048, totalBytes: 4_096), version: version, sessionID: sessionID)
+
+        XCTAssertEqual(service.updateProgress?.phase, .mountingInstaller)
+        service.clearUpdateProgressSession()
+    }
+
+    @MainActor
+    func testAppUpdateProgressSessionIgnoresUpdatesFromOlderSession() {
+        let service = AppUpdateService()
+        let oldVersion = AppReleaseVersion(string: "2025.4.1")!
+        let newVersion = AppReleaseVersion(string: "2025.5")!
+        let oldSessionID = service.beginUpdateProgressSession(for: oldVersion)
+        _ = service.beginUpdateProgressSession(for: newVersion)
+
+        service.applyUpdateProgress(.downloading(bytesReceived: 1_024, totalBytes: 2_048), version: oldVersion, sessionID: oldSessionID)
+
+        XCTAssertEqual(service.updateProgress?.version, newVersion)
+        XCTAssertEqual(service.updateProgress?.phase, .startingDownload)
+        service.clearUpdateProgressSession()
+    }
+
+    @MainActor
+    func testAppUpdateBeginInstallProgressSessionMarksServiceBusyBeforePublishingProgress() {
+        let service = AppUpdateService()
+        let version = AppReleaseVersion(string: "2025.5")!
+
+        let sessionID = service.beginInstallProgressSession(for: version)
+
+        XCTAssertEqual(service.status, .downloading(version))
+        XCTAssertTrue(service.isBusy)
+        XCTAssertEqual(service.updateProgress?.version, version)
+        XCTAssertEqual(service.updateProgress?.phase, .startingDownload)
+
+        service.clearUpdateProgressSession()
+        service.applyUpdateProgress(.mountingInstaller, version: version, sessionID: sessionID)
+        XCTAssertNil(service.updateProgress)
+    }
+
+    @MainActor
+    func testAppUpdateMountDiskImageReportsAttachFailure() {
+        XCTAssertThrowsError(
+            try AppUpdateService.mountDiskImage(
+                at: URL(fileURLWithPath: "/tmp/DocNest.dmg"),
+                processRunner: { _, _ in
+                    throw NSError(
+                        domain: "DocNestTests",
+                        code: 5,
+                        userInfo: [NSLocalizedDescriptionKey: "hdiutil: attach failed"]
+                    )
+                }
+            )
+        ) { error in
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertEqual(
+                message,
+                "The downloaded installer could not be mounted. hdiutil: attach failed"
+            )
+        }
+    }
+
+    @MainActor
+    func testAppUpdateDetachDiskImageRetriesWithForceWhenVolumeIsBusy() throws {
+        var recordedArguments: [[String]] = []
+
+        try AppUpdateService.detachDiskImage(
+            at: URL(fileURLWithPath: "/Volumes/DocNest", isDirectory: true),
+            processRunner: { executablePath, arguments in
+                XCTAssertEqual(executablePath, "/usr/bin/hdiutil")
+                recordedArguments.append(arguments)
+
+                if recordedArguments.count == 1 {
+                    throw NSError(
+                        domain: "DocNestTests",
+                        code: 16,
+                        userInfo: [NSLocalizedDescriptionKey: "hdiutil: couldn't unmount disk23"]
+                    )
+                }
+
+                return Data()
+            },
+            sleep: { _ in }
+        )
+
+        XCTAssertEqual(
+            recordedArguments,
+            [
+                ["detach", "/Volumes/DocNest"],
+                ["detach", "-force", "/Volumes/DocNest"]
+            ]
+        )
+    }
+
+    @MainActor
+    func testAppUpdateDetachDiskImageReportsDetachFailureAfterForcedRetry() {
+        XCTAssertThrowsError(
+            try AppUpdateService.detachDiskImage(
+                at: URL(fileURLWithPath: "/Volumes/DocNest", isDirectory: true),
+                processRunner: { _, arguments in
+                    if arguments.contains("-force") {
+                        throw NSError(
+                            domain: "DocNestTests",
+                            code: 5,
+                            userInfo: [NSLocalizedDescriptionKey: "hdiutil: couldn't unmount disk23"]
+                        )
+                    }
+
+                    throw NSError(
+                        domain: "DocNestTests",
+                        code: 16,
+                        userInfo: [NSLocalizedDescriptionKey: "hdiutil: resource busy"]
+                    )
+                },
+                sleep: { _ in }
+            )
+        ) { error in
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertEqual(
+                message,
+                "The downloaded installer could not be unmounted. hdiutil: couldn't unmount disk23"
+            )
+        }
+    }
+
+    @MainActor
+    func testAppUpdateDetachDiskImageDoesNotForceForNonBusyFailures() {
+        var recordedArguments: [[String]] = []
+
+        XCTAssertThrowsError(
+            try AppUpdateService.detachDiskImage(
+                at: URL(fileURLWithPath: "/Volumes/DocNest", isDirectory: true),
+                processRunner: { _, arguments in
+                    recordedArguments.append(arguments)
+                    throw NSError(
+                        domain: "DocNestTests",
+                        code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "hdiutil: no such image"]
+                    )
+                },
+                sleep: { _ in }
+            )
+        ) { error in
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertEqual(
+                message,
+                "The downloaded installer could not be unmounted. hdiutil: no such image"
+            )
+        }
+
+        XCTAssertEqual(recordedArguments, [["detach", "/Volumes/DocNest"]])
+    }
+
+    @MainActor
+    func testAppUpdateVerifyCodeSignatureReportsVerificationFailure() {
+        XCTAssertThrowsError(
+            try AppUpdateService.verifyCodeSignature(
+                of: URL(fileURLWithPath: "/tmp/DocNest.app", isDirectory: true),
+                expectedBundleIdentifier: "com.kaps.docnest",
+                expectedTeamIdentifier: nil,
+                processRunner: { _, _ in
+                    throw NSError(
+                        domain: "DocNestTests",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "code object is not signed at all"]
+                    )
+                },
+                metadataProvider: { _ in
+                    XCTFail("Metadata should not be requested when signature verification fails.")
+                    return (identifier: nil, teamIdentifier: nil)
+                }
+            )
+        ) { error in
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertEqual(
+                message,
+                "The downloaded update could not be verified. code object is not signed at all"
+            )
+        }
+    }
+
+    @MainActor
     func testAppUpdateInstallerScriptContainsReplaceAndRelaunchSteps() {
         let script = AppUpdateService.installerScript(
             currentPID: 1234,
