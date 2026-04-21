@@ -285,16 +285,18 @@ enum ImportPDFDocumentsUseCase {
         return "Downloaded.pdf"
     }
 
-    private static func parseFilenameFromContentDisposition(_ header: String) -> String? {
-        // Match filename*=UTF-8''name or filename="name" or filename=name
-        let patterns: [String] = [
+    private static let contentDispositionFilenameRegexes: [NSRegularExpression] = {
+        let patterns = [
             "filename\\*=(?:UTF-8|utf-8)''(.+?)(?:;|$)",
             "filename=\"(.+?)\"",
             "filename=([^;\\s]+)"
         ]
-        for pattern in patterns {
-            if let regex = try? NSRegularExpression(pattern: pattern),
-               let match = regex.firstMatch(in: header, range: NSRange(header.startIndex..., in: header)),
+        return patterns.compactMap { try? NSRegularExpression(pattern: $0) }
+    }()
+
+    private static func parseFilenameFromContentDisposition(_ header: String) -> String? {
+        for regex in contentDispositionFilenameRegexes {
+            if let match = regex.firstMatch(in: header, range: NSRange(header.startIndex..., in: header)),
                match.numberOfRanges > 1,
                let range = Range(match.range(at: 1), in: header) {
                 let filename = String(header[range]).removingPercentEncoding ?? String(header[range])

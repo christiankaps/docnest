@@ -723,6 +723,7 @@ private struct BatchLabelState {
     }
 }
 
+#if DEBUG
 private enum DocumentInspectorPreviewData {
     @MainActor
     static func make() -> (container: ModelContainer, document: DocumentRecord) {
@@ -756,3 +757,4 @@ private enum DocumentInspectorPreviewData {
         .environment(LibraryCoordinator())
         .modelContainer(previewData.container)
 }
+#endif

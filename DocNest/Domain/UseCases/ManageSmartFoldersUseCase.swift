@@ -55,16 +55,7 @@ enum ManageSmartFoldersUseCase {
     }
 
     private static func normalizedName(from rawName: String) throws -> String {
-        let collapsed = rawName
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-
-        guard !collapsed.isEmpty else {
-            throw SmartFolderValidationError.emptyName
-        }
-
-        return collapsed
+        try StringNormalization.nonEmptyCollapsedWhitespace(rawName, emptyError: SmartFolderValidationError.emptyName)
     }
 }
 

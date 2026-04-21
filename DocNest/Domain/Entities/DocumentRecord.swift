@@ -53,7 +53,10 @@ extension DocumentRecord {
     var formattedFileSize: String {
         ByteCountFormatter.documentFileSize.string(fromByteCount: fileSize)
     }
+}
 
+#if DEBUG
+extension DocumentRecord {
     static func makeSamples(labels: (finance: LabelTag, tax: LabelTag, contracts: LabelTag)) -> [DocumentRecord] {
         [
             DocumentRecord(
@@ -89,6 +92,7 @@ extension DocumentRecord {
         ]
     }
 }
+#endif
 
 private extension ByteCountFormatter {
     static let documentFileSize: ByteCountFormatter = {

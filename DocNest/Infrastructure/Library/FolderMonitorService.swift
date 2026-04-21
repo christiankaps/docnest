@@ -94,6 +94,10 @@ final class FolderMonitorService {
         monitors[id] != nil
     }
 
+    var monitoredIDs: Set<UUID> {
+        Set(monitors.keys)
+    }
+
     // MARK: - Status
 
     func folderExists(at path: String) -> Bool {

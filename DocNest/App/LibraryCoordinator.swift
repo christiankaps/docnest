@@ -648,10 +648,9 @@ final class LibraryCoordinator {
             }
         }
 
-        // Stop monitors for watch folders that have been deleted
         let currentIDs = Set(allWatchFolders.map(\.id))
-        for folder in allWatchFolders where !currentIDs.contains(folder.id) {
-            folderMonitorService.stopMonitoring(id: folder.id)
+        for monitoredID in folderMonitorService.monitoredIDs where !currentIDs.contains(monitoredID) {
+            folderMonitorService.stopMonitoring(id: monitoredID)
         }
 
         recomputeWatchFolderStatuses()

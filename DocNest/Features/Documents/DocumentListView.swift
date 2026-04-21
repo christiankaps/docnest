@@ -1137,6 +1137,7 @@ private struct DocumentListStatusBar: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: DocumentRecord.self, configurations: config)
@@ -1156,6 +1157,7 @@ private struct DocumentListStatusBar: View {
         .environment(ThumbnailCache())
         .modelContainer(container)
 }
+#endif
 
 // MARK: - Document Grouping
 
