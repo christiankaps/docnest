@@ -10,6 +10,7 @@
 		0C0958A98ED0BC8389BBA0C9 /* DocumentRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF537CE863340AB823C51D5C /* DocumentRecord.swift */; };
 		2423CFECF69765FB09B4592A /* DocumentListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051CE3481269CA75C84B0B72 /* DocumentListView.swift */; };
 		3B85F44C2EB7738FBD586818 /* DeferredSelectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C271308AF16C589CE96C8B /* DeferredSelectionState.swift */; };
+		0412772DFA454654BC687BBF /* StringNormalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19559D6E004F46599D8D9CCF /* StringNormalization.swift */; };
 		3C5C703826BEB50F7BCFF836 /* DocNestApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B34DF5ACFF5069169049C6 /* DocNestApp.swift */; };
 		3EB178A6D0FFD0F4CB64DA1D /* AppTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29A4179D6FD2BD0370A1E9A7 /* AppTypography.swift */; };
 		3F363A692F6A0A9B008A3A41 /* AboutWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F363A682F6A0A9B008A3A41 /* AboutWindowController.swift */; };
@@ -121,6 +122,7 @@
 		83474F7BD44082F27FE0A810 /* SearchFocusCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFocusCommand.swift; sourceTree = "<group>"; };
 		83D472DA0CBD4F25911DA461 /* DocNestUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestUITests.swift; sourceTree = "<group>"; };
 		A1C271308AF16C589CE96C8B /* DeferredSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeferredSelectionState.swift; sourceTree = "<group>"; };
+		19559D6E004F46599D8D9CCF /* StringNormalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringNormalization.swift; sourceTree = "<group>"; };
 		A28DA505FA162562D9E4D07F /* DocNest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DocNest.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5E121E80E607DB634883795 /* LabelChip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelChip.swift; sourceTree = "<group>"; };
 		A7258C57A6B80E1813F14EF9 /* DeleteDocumentsUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteDocumentsUseCase.swift; sourceTree = "<group>"; };
@@ -293,6 +295,7 @@
 			children = (
 				EC92D622E6EF259A9AF5A669 /* AppSplitViewLayout.swift */,
 				A1C271308AF16C589CE96C8B /* DeferredSelectionState.swift */,
+				19559D6E004F46599D8D9CCF /* StringNormalization.swift */,
 				EA07191F675258A004D68388 /* ResizeHandleCursorState.swift */,
 				83474F7BD44082F27FE0A810 /* SearchFocusCommand.swift */,
 				384308B1EF0740E0C4F3A350 /* SearchToolbarField.swift */,
@@ -476,6 +479,7 @@
 				77424B1901611FDF26B6EBA6 /* AppSplitViewLayout.swift in Sources */,
 				3EB178A6D0FFD0F4CB64DA1D /* AppTypography.swift in Sources */,
 				3B85F44C2EB7738FBD586818 /* DeferredSelectionState.swift in Sources */,
+				0412772DFA454654BC687BBF /* StringNormalization.swift in Sources */,
 				EE27DB42A08FCADC935448C0 /* DeleteDocumentsUseCase.swift in Sources */,
 				3F908CD62F6E037F00CE6FC4 /* ManageLabelGroupsUseCase.swift in Sources */,
 				3C5C703826BEB50F7BCFF836 /* DocNestApp.swift in Sources */,

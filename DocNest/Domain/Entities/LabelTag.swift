@@ -50,6 +50,7 @@ final class LabelTag {
     }
 }
 
+#if DEBUG
 extension LabelTag {
     static func makeSamples() -> (finance: LabelTag, tax: LabelTag, contracts: LabelTag) {
         let finance = LabelTag(name: "Finance", colorName: LabelColor.green.rawValue, sortOrder: 0)
@@ -58,3 +59,4 @@ extension LabelTag {
         return (finance, tax, contracts)
     }
 }
+#endif

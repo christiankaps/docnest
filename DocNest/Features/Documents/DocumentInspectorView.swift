@@ -986,6 +986,7 @@ private struct BatchLabelState {
     }
 }
 
+#if DEBUG
 private enum DocumentInspectorPreviewData {
     @MainActor
     static func make() -> (container: ModelContainer, document: DocumentRecord)? {
@@ -1023,3 +1024,4 @@ private enum DocumentInspectorPreviewData {
         ContentUnavailableView("Preview unavailable", systemImage: "exclamationmark.triangle")
     }
 }
+#endif

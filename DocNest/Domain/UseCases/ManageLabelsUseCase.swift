@@ -89,10 +89,27 @@ enum ManageLabelsUseCase {
     }
 
     static func update(_ label: LabelTag, name: String, color: LabelColor, icon: String?, groupID: UUID?, using modelContext: ModelContext) throws {
-        let renamedLabel = try rename(label, to: name, using: modelContext)
-        try changeColor(of: renamedLabel, to: color, using: modelContext)
-        try changeIcon(of: renamedLabel, to: icon, using: modelContext)
-        try assignToGroup(renamedLabel, groupID: groupID, using: modelContext)
+        let normalizedName = try normalizedLabelName(from: name)
+
+        let targetLabel: LabelTag
+        if let existing = try existingLabel(named: normalizedName, using: modelContext),
+           existing.persistentModelID != label.persistentModelID {
+            for document in Array(label.documents) {
+                _ = assign(existing, to: document)
+                document.labels.removeAll { $0.persistentModelID == label.persistentModelID }
+            }
+            modelContext.delete(label)
+            targetLabel = existing
+        } else {
+            label.name = normalizedName
+            targetLabel = label
+        }
+
+        targetLabel.labelColor = color
+        targetLabel.icon = icon
+        targetLabel.groupID = groupID
+
+        try modelContext.save()
     }
 
     static func changeColor(of label: LabelTag, to color: LabelColor, using modelContext: ModelContext) throws {
@@ -144,16 +161,7 @@ enum ManageLabelsUseCase {
     }
 
     private static func normalizedLabelName(from rawName: String) throws -> String {
-        let collapsedWhitespace = rawName
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-
-        guard !collapsedWhitespace.isEmpty else {
-            throw LabelValidationError.emptyName
-        }
-
-        return collapsedWhitespace
+        try StringNormalization.nonEmptyCollapsedWhitespace(rawName, emptyError: LabelValidationError.emptyName)
     }
 
     @discardableResult

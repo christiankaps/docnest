@@ -1392,12 +1392,14 @@ private struct DocumentListStatusBar: View {
     }
 }
 
+#if DEBUG
 #Preview {
     return DocumentListView()
         .environment(LibraryCoordinator())
         .environment(ThumbnailCache())
         .modelContainer(PreviewData.documentListContainer)
 }
+#endif
 
 // MARK: - Document Grouping
 

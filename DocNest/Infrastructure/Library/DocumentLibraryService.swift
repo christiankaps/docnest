@@ -747,18 +747,18 @@ enum DocumentLibraryService {
 }
 
 private extension JSONEncoder {
-    static var prettyPrinted: JSONEncoder {
+    static let prettyPrinted: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         return encoder
-    }
+    }()
 }
 
 private extension JSONDecoder {
-    static var libraryManifest: JSONDecoder {
+    static let libraryManifest: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
-    }
+    }()
 }

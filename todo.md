@@ -100,3 +100,28 @@ Findings from comprehensive codebase analysis. Sorted by priority (bugs/correctn
 
 - [x] **Missing accessibility hints on drag-and-drop targets**
   - Fixed: Added `.accessibilityHint` to label sidebar drop targets describing the drop action.
+
+---
+
+## Priority 7 — Findings from `docs/code-quality-analysis.md`
+
+- [x] **Dead loop in `refreshWatchFolderMonitors`** (`LibraryCoordinator.swift:~651`)
+  - Fixed: The teardown loop iterated over `allWatchFolders` using an ID set built from the same array, so it could never find a missing ID. Now iterates over `folderMonitorService.monitoredIDs` and stops any monitor whose folder ID is no longer in `allWatchFolders`. Added `monitoredIDs` accessor to `FolderMonitorService`.
+
+- [x] **Duplicated `normalizedName` across 4 use cases**
+  - Fixed: Extracted `StringNormalization.nonEmptyCollapsedWhitespace(_:emptyError:)` helper in `Shared/StringNormalization.swift`. All four use cases (`ManageLabelsUseCase`, `ManageLabelGroupsUseCase`, `ManageSmartFoldersUseCase`, `ManageWatchFoldersUseCase`) delegate to the shared helper.
+
+- [x] **`static var` computed properties re-allocate JSONEncoder/JSONDecoder** (`DocumentLibraryService.swift:291-306`)
+  - Fixed: Converted `prettyPrinted`/`libraryManifest` from computed `static var` to stored `static let` backed by closures. One shared instance per call site.
+
+- [x] **`ManageLabelsUseCase.update` saves four times for one operation**
+  - Fixed: Inlined mutations (normalize/merge, color, icon, group) and collapsed to a single `modelContext.save()` at the end.
+
+- [x] **Regex patterns compiled on every call** (`ImportPDFDocumentsUseCase.swift:~290`)
+  - Fixed: Hoisted the three content-disposition filename patterns into a `static let` array of `NSRegularExpression` values, compiled once at first access.
+
+- [x] **`DocumentRecord.makeSamples` / `LabelTag.makeSamples` ship in Release binaries**
+  - Fixed: Wrapped both factories (and the dependent `DocumentInspectorPreviewData` helper and corresponding `#Preview` blocks) in `#if DEBUG` so the preview/sample code is excluded from Release builds.
+
+- [ ] **`Diagnostics` directory created but unused** (`DocumentLibraryService.swift:43`)
+  - Kept: `docs/requirements.md:403` specifies `Diagnostics/import-log.json` as a planned layout. Keeping the directory reserved until the feature lands.

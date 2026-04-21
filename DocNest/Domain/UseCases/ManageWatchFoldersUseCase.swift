@@ -78,16 +78,7 @@ enum ManageWatchFoldersUseCase {
     }
 
     private static func normalizedName(from rawName: String) throws -> String {
-        let collapsed = rawName
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-
-        guard !collapsed.isEmpty else {
-            throw WatchFolderValidationError.emptyName
-        }
-
-        return collapsed
+        try StringNormalization.nonEmptyCollapsedWhitespace(rawName, emptyError: WatchFolderValidationError.emptyName)
     }
 
     private static func validate(folderPath: String, libraryURL: URL?) throws {
