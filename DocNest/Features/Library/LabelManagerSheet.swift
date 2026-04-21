@@ -5,6 +5,7 @@ struct LabelManagerSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(LibraryCoordinator.self) private var coordinator
+    var showsDoneButton = true
 
     // MARK: - Selection state
 
@@ -83,27 +84,26 @@ struct LabelManagerSheet: View {
         editorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var isEmbeddedInSettings: Bool {
+        !showsDoneButton
+    }
+
     // MARK: - Body
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-
-            HStack(spacing: 0) {
-                labelListPanel
-                    .frame(width: 260)
-
-                Divider()
-
-                editorPanel
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Group {
+            if isEmbeddedInSettings {
+                contentPanels
+            } else {
+                VStack(spacing: 18) {
+                    header
+                    contentPanels
+                    footer
+                }
+                .padding(20)
+                .frame(minWidth: 660, minHeight: 480)
             }
-
-            Divider()
-            footer
         }
-        .frame(width: 660, height: 480)
         .alert("New Group", isPresented: $isCreatingGroup) {
             TextField("Group name", text: $newGroupName)
             Button("Create") { createGroup() }
@@ -127,19 +127,53 @@ struct LabelManagerSheet: View {
         }
     }
 
+    private var contentPanels: some View {
+        HStack(spacing: 0) {
+            labelListPanel
+                .frame(width: 260)
+                .background(panelSurface)
+
+            Rectangle()
+                .fill(Color.primary.opacity(0.05))
+                .frame(width: 1)
+                .padding(.vertical, isEmbeddedInSettings ? 0 : 12)
+
+            editorPanel
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(panelSurface)
+        }
+        .background(
+            Group {
+                if isEmbeddedInSettings {
+                    Color(nsColor: .windowBackgroundColor)
+                } else {
+                    Color.clear
+                }
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: isEmbeddedInSettings ? 0 : 14, style: .continuous))
+    }
+
     // MARK: - Header
 
     private var header: some View {
-        HStack {
-            Text("Label Manager")
-                .font(.headline)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Labels")
+                    .font(AppTypography.settingsTitle)
 
+                Text("Organize labels and groups for the current library. Changes here update the sidebar and document workflows immediately.")
+                    .font(AppTypography.settingsSubtitle)
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
 
-            Button("Done") {
-                dismiss()
+            if showsDoneButton {
+                Button("Done") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
             }
-            .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
@@ -151,6 +185,7 @@ struct LabelManagerSheet: View {
         Group {
             if ungroupedLabels.isEmpty && sortedGroups.isEmpty {
                 ContentUnavailableView("No Labels", systemImage: "tag", description: Text("Click + to create a label."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: $selectedLabelIDs) {
                     if !ungroupedLabels.isEmpty {
@@ -158,6 +193,7 @@ struct LabelManagerSheet: View {
                             ForEach(ungroupedLabels) { label in
                                 labelRow(for: label)
                                     .tag(label.id)
+                                    .listRowBackground(Color.clear)
                             }
                         }
                     }
@@ -167,6 +203,7 @@ struct LabelManagerSheet: View {
                             ForEach(labelsInGroup(group)) { label in
                                 labelRow(for: label)
                                     .tag(label.id)
+                                    .listRowBackground(Color.clear)
                             }
                         } header: {
                             groupHeader(for: group)
@@ -174,6 +211,7 @@ struct LabelManagerSheet: View {
                     }
                 }
                 .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
                 .onChange(of: selectedLabelIDs) { _, newIDs in
                     if isCreatingLabel { return }
                     loadEditorFromSelection()
@@ -187,16 +225,17 @@ struct LabelManagerSheet: View {
             if let icon = label.icon, !icon.isEmpty {
                 Text(icon)
                     .font(.system(size: 12))
-                    .frame(width: 14, alignment: .center)
+                    .frame(width: 18, alignment: .center)
             } else {
                 Circle()
                     .fill(label.labelColor.color)
                     .frame(width: 10, height: 10)
-                    .frame(width: 14)
+                    .frame(width: 18)
             }
             Text(label.name)
                 .lineLimit(1)
         }
+        .padding(.vertical, 4)
         .contextMenu {
             Button("Delete", role: .destructive) {
                 deletionTarget = .labels([label.id])
@@ -214,6 +253,8 @@ struct LabelManagerSheet: View {
                     .onExitCommand { cancelGroupRename() }
             } else {
                 Text(group.name)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
         }
         .contextMenu {
@@ -237,17 +278,38 @@ struct LabelManagerSheet: View {
     @ViewBuilder
     private var editorPanel: some View {
         if isCreatingLabel {
-            createLabelEditor
+            editorContainer(
+                title: "New Label",
+                subtitle: "Create a label with a name, color, optional emoji, and group."
+            ) {
+                createLabelEditor
+            }
         } else if selectedLabelIDs.count > 1 {
-            bulkActionsPanel
+            editorContainer(
+                title: "Bulk Actions",
+                subtitle: "Apply group changes or remove multiple labels at once."
+            ) {
+                bulkActionsPanel
+            }
         } else if singleSelectedLabel != nil {
-            singleLabelEditor
+            editorContainer(
+                title: "Label Details",
+                subtitle: "Update the selected label and its grouping immediately."
+            ) {
+                singleLabelEditor
+            }
         } else {
-            ContentUnavailableView(
-                "Select a Label",
-                systemImage: "tag",
-                description: Text("Select a label to edit, or click + to create a new one.")
-            )
+            editorContainer(
+                title: "Select a Label",
+                subtitle: "Choose a label from the list to edit it, or create a new one."
+            ) {
+                ContentUnavailableView(
+                    "Select a Label",
+                    systemImage: "tag",
+                    description: Text("Select a label to edit, or click + to create a new one.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
     }
 
@@ -282,6 +344,7 @@ struct LabelManagerSheet: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        .padding(12)
     }
 
     // MARK: - Create label editor
@@ -329,6 +392,7 @@ struct LabelManagerSheet: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        .padding(12)
     }
 
     // MARK: - Bulk actions panel
@@ -381,6 +445,7 @@ struct LabelManagerSheet: View {
         .onAppear {
             bulkGroupID = nil
         }
+        .padding(20)
     }
 
     // MARK: - Shared editor components
@@ -428,20 +493,26 @@ struct LabelManagerSheet: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Menu {
-                Button("New Label") {
-                    beginCreateLabel(inGroup: nil)
-                }
-                Button("New Group") {
-                    newGroupName = ""
-                    isCreatingGroup = true
-                }
+            Button {
+                beginCreateLabel(inGroup: nil)
             } label: {
                 Image(systemName: "plus")
                     .frame(width: 24, height: 24)
             }
-            .menuStyle(.borderlessButton)
+            .buttonStyle(.borderless)
             .fixedSize()
+            .help("New Label")
+
+            Button {
+                newGroupName = ""
+                isCreatingGroup = true
+            } label: {
+                Image(systemName: "folder.badge.plus")
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.borderless)
+            .fixedSize()
+            .help("New Group")
 
             Button {
                 deletionTarget = .labels(selectedLabelIDs)
@@ -456,8 +527,54 @@ struct LabelManagerSheet: View {
 
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+    }
+
+    private var panelSurface: some View {
+        Group {
+            if isEmbeddedInSettings {
+                Color(nsColor: .windowBackgroundColor)
+            } else {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+                    )
+            }
+        }
+    }
+
+    private func editorContainer<Content: View>(
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, isEmbeddedInSettings ? 14 : 16)
+            .padding(.bottom, 8)
+
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(
+            Group {
+                if isEmbeddedInSettings {
+                    Color(nsColor: .windowBackgroundColor)
+                } else {
+                    Color.clear
+                }
+            }
+        )
     }
 
     // MARK: - Actions

@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct QuickLabelPickerView: View {
     @Environment(LibraryCoordinator.self) private var coordinator
@@ -6,6 +7,8 @@ struct QuickLabelPickerView: View {
 
     @State private var searchText = ""
     @State private var highlightedIndex = 0
+    @State private var preparedAssignmentCounts: [PersistentIdentifier: Int] = [:]
+    @State private var preparedDisplayItems: [DisplayItem] = []
     @FocusState private var isSearchFieldFocused: Bool
 
     // MARK: - Derived Data
@@ -22,42 +25,8 @@ struct QuickLabelPickerView: View {
         coordinator.allLabelGroups
     }
 
-    /// When filtering, return a flat list of matching labels.
-    /// When search is empty, return all labels in display order (ungrouped first, then grouped).
     private var displayItems: [DisplayItem] {
-        if !searchText.isEmpty {
-            let query = searchText
-            let matching = allLabels.filter {
-                $0.name.localizedCaseInsensitiveContains(query)
-            }
-            return matching.map { .label($0) }
-        }
-
-        var items: [DisplayItem] = []
-
-        // Ungrouped labels first
-        let ungrouped = allLabels.filter { $0.groupID == nil }
-        for label in ungrouped {
-            items.append(.label(label))
-        }
-
-        // Then each group with header
-        let sortedGroups = allGroups.sorted {
-            $0.sortOrder != $1.sortOrder
-                ? $0.sortOrder < $1.sortOrder
-                : $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
-
-        for group in sortedGroups {
-            let groupLabels = allLabels.filter { $0.groupID == group.id }
-            guard !groupLabels.isEmpty else { continue }
-            items.append(.groupHeader(group))
-            for label in groupLabels {
-                items.append(.label(label))
-            }
-        }
-
-        return items
+        preparedDisplayItems
     }
 
     /// Only selectable (label) items, for keyboard navigation.
@@ -69,12 +38,38 @@ struct QuickLabelPickerView: View {
 
     private func assignmentState(for label: LabelTag) -> LabelAssignmentState {
         guard !selectedDocuments.isEmpty else { return .none }
-        let assignedCount = selectedDocuments.filter { doc in
-            doc.labels.contains { $0.persistentModelID == label.persistentModelID }
-        }.count
+        let assignedCount = selectedAssignmentCounts[label.persistentModelID, default: 0]
         if assignedCount == selectedDocuments.count { return .all }
         if assignedCount > 0 { return .partial }
         return .none
+    }
+
+    private var selectedAssignmentCounts: [PersistentIdentifier: Int] {
+        preparedAssignmentCounts
+    }
+
+    private var labelFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(allLabels.count)
+        for label in allLabels {
+            hasher.combine(label.persistentModelID)
+            hasher.combine(label.name)
+            hasher.combine(label.icon)
+            hasher.combine(label.sortOrder)
+            hasher.combine(label.groupID)
+        }
+        return hasher.finalize()
+    }
+
+    private var labelGroupFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(allGroups.count)
+        for group in allGroups {
+            hasher.combine(group.persistentModelID)
+            hasher.combine(group.name)
+            hasher.combine(group.sortOrder)
+        }
+        return hasher.finalize()
     }
 
     // MARK: - Body
@@ -91,10 +86,24 @@ struct QuickLabelPickerView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.2), radius: 16, y: 8)
         .onAppear {
+            refreshPreparedState()
             highlightedIndex = selectableIndices.first ?? 0
             isSearchFieldFocused = true
         }
         .onChange(of: searchText) {
+            refreshPreparedState()
+            highlightedIndex = selectableIndices.first ?? 0
+        }
+        .onChange(of: coordinator.selectedDocumentIDs) {
+            refreshPreparedState()
+            highlightedIndex = selectableIndices.first ?? 0
+        }
+        .onChange(of: labelFingerprint) {
+            refreshPreparedState()
+            highlightedIndex = selectableIndices.first ?? 0
+        }
+        .onChange(of: labelGroupFingerprint) {
+            refreshPreparedState()
             highlightedIndex = selectableIndices.first ?? 0
         }
         .onKeyPress(.upArrow) {
@@ -153,6 +162,7 @@ struct QuickLabelPickerView: View {
                                         .contentShape(Rectangle())
                                         .onTapGesture {
                                             coordinator.toggleLabel(label, on: selectedDocuments)
+                                            refreshPreparedState()
                                         }
                                 }
                             }
@@ -240,6 +250,41 @@ struct QuickLabelPickerView: View {
     private func toggleHighlightedLabel() {
         guard case .label(let label) = displayItems[safe: highlightedIndex] else { return }
         coordinator.toggleLabel(label, on: selectedDocuments)
+        refreshPreparedState()
+    }
+
+    private func refreshPreparedState() {
+        preparedAssignmentCounts = selectedDocuments.reduce(into: [:]) { counts, document in
+            for label in document.labels {
+                counts[label.persistentModelID, default: 0] += 1
+            }
+        }
+
+        if !searchText.isEmpty {
+            let query = searchText
+            preparedDisplayItems = Array(allLabels.lazy
+                .filter { $0.name.localizedCaseInsensitiveContains(query) }
+                .map(DisplayItem.label))
+            return
+        }
+
+        let groupedLabels = Dictionary(grouping: allLabels, by: \.groupID)
+        var items = groupedLabels[nil, default: []].map(DisplayItem.label)
+
+        let sortedGroups = allGroups.sorted {
+            $0.sortOrder != $1.sortOrder
+                ? $0.sortOrder < $1.sortOrder
+                : $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+
+        for group in sortedGroups {
+            let groupLabels = groupedLabels[group.id, default: []]
+            guard !groupLabels.isEmpty else { continue }
+            items.append(.groupHeader(group))
+            items.append(contentsOf: groupLabels.map(DisplayItem.label))
+        }
+
+        preparedDisplayItems = items
     }
 }
 

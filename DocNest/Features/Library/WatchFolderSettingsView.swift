@@ -6,71 +6,78 @@ struct WatchFolderSettingsView: View {
     @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    var showsDoneButton = true
 
     @State private var editorConfig: WatchFolderEditorConfig?
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text("Watch Folders")
-                .font(.headline)
-                .padding(.top, 16)
-                .padding(.bottom, 4)
-
-            Text("Watched folders are monitored for new PDFs, which are automatically imported into the library.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
-
-            if coordinator.allWatchFolders.isEmpty {
-                Spacer()
-                ContentUnavailableView {
-                    Label("No Watch Folders", systemImage: "eye.slash")
-                } description: {
-                    Text("Add a folder to start automatically importing PDFs.")
-                }
-                Spacer()
-            } else {
-                List {
-                    ForEach(coordinator.allWatchFolders) { folder in
-                        WatchFolderRow(
-                            folder: folder,
-                            status: coordinator.watchFolderStatuses[folder.id] ?? .paused,
-                            onEdit: { editorConfig = WatchFolderEditorConfig(mode: .edit(folder)) },
-                            onToggleEnabled: { toggleEnabled(folder) },
-                            onRevealInFinder: { revealInFinder(folder) },
-                            onDelete: { deleteWatchFolder(folder) }
-                        )
-                    }
-                }
-                .listStyle(.inset(alternatesRowBackgrounds: true))
-            }
-
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
+                Text("Monitored folders import new PDFs automatically.")
+                    .font(AppTypography.settingsSubtitle)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
                 Button {
                     promptAndAddWatchFolder()
                 } label: {
-                    Label("Add Folder\u{2026}", systemImage: "plus")
+                    Label("Add Folder", systemImage: "plus")
                 }
-
-                Spacer()
-
-                Button("Done") {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
+                .buttonStyle(.bordered)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+
+            Group {
+                if coordinator.allWatchFolders.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Watch Folders", systemImage: "eye.slash")
+                    } description: {
+                        Text("Add a folder to start automatically importing PDFs.")
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(settingsPaneSurface)
+                } else {
+                    List {
+                        ForEach(coordinator.allWatchFolders) { folder in
+                            WatchFolderRow(
+                                folder: folder,
+                                status: coordinator.watchFolderStatuses[folder.id] ?? .paused,
+                                onEdit: { editorConfig = WatchFolderEditorConfig(mode: .edit(folder)) },
+                                onToggleEnabled: { toggleEnabled(folder) },
+                                onRevealInFinder: { revealInFinder(folder) },
+                                onDelete: { deleteWatchFolder(folder) }
+                            )
+                            .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                        }
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(settingsPaneSurface)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if showsDoneButton {
+                HStack {
+                    Spacer()
+
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                }
+                .padding(.horizontal, 16)
+            }
         }
-        .frame(width: 520, height: 420)
+        .padding(.bottom, showsDoneButton ? 16 : 0)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(item: $editorConfig) { config in
-            WatchFolderEditorSheet(
-                config: config,
-                allLabels: coordinator.allLabels
-            )
+            WatchFolderEditorSheet(config: config)
         }
         .alert("Watch Folder Error", isPresented: errorBinding) {
             Button("OK", role: .cancel) {
@@ -79,6 +86,10 @@ struct WatchFolderSettingsView: View {
         } message: {
             Text(errorMessage ?? "Unknown error.")
         }
+    }
+
+    private var settingsPaneSurface: some View {
+        Color(nsColor: showsDoneButton ? .controlBackgroundColor : .windowBackgroundColor)
     }
 
     private var errorBinding: Binding<Bool> {
@@ -161,18 +172,26 @@ private struct WatchFolderRow: View {
         HStack(spacing: 10) {
             if let icon = folder.icon, !icon.isEmpty {
                 Text(icon)
-                    .font(.title2)
-                    .frame(width: 28)
+                    .font(.title3)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.primary.opacity(0.05))
+                    )
             } else {
                 Image(systemName: "folder.circle.fill")
-                    .font(.title2)
+                    .font(.title3)
                     .foregroundStyle(.tint)
-                    .frame(width: 28)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.accentColor.opacity(0.10))
+                    )
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(folder.name)
-                    .fontWeight(.medium)
+                    .font(.body.weight(.medium))
 
                 Text(folder.folderPath)
                     .font(.caption)
@@ -191,8 +210,15 @@ private struct WatchFolderRow: View {
                     .font(.caption)
                     .foregroundStyle(statusColor)
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(statusColor.opacity(0.10))
+            )
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .contentShape(Rectangle())
         .contextMenu {
             Button("Edit\u{2026}") { onEdit() }

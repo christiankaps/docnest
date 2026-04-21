@@ -2,6 +2,11 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+/// The root window content for an open DocNest library.
+///
+/// `RootView` owns the live `LibraryCoordinator` and wires SwiftData query
+/// results, focused-value commands, drag-and-drop, paste/import actions, and
+/// split-view presentation into the open-library experience.
 struct RootView: View {
     let libraryURL: URL
     @ObservedObject var librarySession: LibrarySessionController
@@ -9,6 +14,7 @@ struct RootView: View {
     @State private var coordinator = LibraryCoordinator()
     @State private var thumbnailCache = ThumbnailCache()
     @State private var quickLook = QuickLookCoordinator()
+    @State private var inspectorVisibilityProgress = 1.0
 
     @Environment(\.modelContext) private var modelContext
 
@@ -38,30 +44,50 @@ struct RootView: View {
                 .frame(minWidth: AppSplitViewLayout.documentListMinWidth)
 
             Divider()
+                .opacity(inspectorDividerOpacity)
 
             DocumentInspectorView(
-                documents: coordinator.selectedDocuments,
-                libraryURL: libraryURL
+                documents: coordinator.displayedSelectedDocuments,
+                libraryURL: libraryURL,
+                isTransitioningSelection: coordinator.isInspectorSelectionPending
             )
-            .frame(width: AppSplitViewLayout.inspectorWidth)
+            .frame(width: inspectorWidth)
+            .opacity(inspectorContentOpacity)
+            .clipped()
+            .allowsHitTesting(!coordinator.isInspectorCollapsed)
+            .accessibilityHidden(coordinator.isInspectorCollapsed)
+            .compositingGroup()
         }
-        .padding([.top, .bottom, .trailing], AppSplitViewLayout.windowContentInset)
+        .animation(.easeInOut(duration: 0.16), value: inspectorVisibilityProgress)
+        .background(Color(nsColor: .windowBackgroundColor))
         .environment(coordinator)
         .environment(thumbnailCache)
         .environment(quickLook)
         .toolbar { toolbarContent }
         .modifier(RootViewImportModifier(coordinator: coordinator))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
-        .modifier(RootViewChangeHandlers(coordinator: coordinator, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders))
+        .modifier(RootViewChangeHandlers(coordinator: coordinator, thumbnailCache: thumbnailCache, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders))
         .focusedSceneValue(\.exportDocumentsAction) {
-            coordinator.exportDocuments(coordinator.selectedDocuments)
+            coordinator.exportDocuments(coordinator.displayedSelectedDocuments)
         }
         .focusedSceneValue(\.pasteDocumentsAction) {
             pasteDocumentsFromPasteboard()
         }
+        .focusedSceneValue(\.selectAllDocumentsAction) {
+            selectAllFilteredDocuments()
+        }
+        .focusedSceneValue(\.toggleInspectorAction) {
+            coordinator.isInspectorCollapsed.toggle()
+        }
+        .focusedSceneValue(\.isInspectorCollapsed, coordinator.isInspectorCollapsed)
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
+            inspectorVisibilityProgress = coordinator.isInspectorCollapsed ? 0 : 1
+            AppSettingsController.shared.setActiveLibraryContext(
+                coordinator: coordinator,
+                modelContainer: librarySession.modelContainer
+            )
             coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders)
             coordinator.runOCRBackfill(documents: allDocuments, libraryURL: libraryURL, modelContext: modelContext)
             coordinator.setupWatchFolderMonitoring()
@@ -77,6 +103,21 @@ struct RootView: View {
                 coordinator.importDocuments(from: pending)
             }
         }
+        .onChange(of: coordinator.isInspectorCollapsed) { _, isCollapsed in
+            inspectorVisibilityProgress = isCollapsed ? 0 : 1
+        }
+    }
+
+    private var inspectorWidth: Double {
+        AppSplitViewLayout.inspectorWidth * inspectorVisibilityProgress
+    }
+
+    private var inspectorContentOpacity: Double {
+        max(0, min(1, inspectorVisibilityProgress * 1.2))
+    }
+
+    private var inspectorDividerOpacity: Double {
+        max(0, min(1, inspectorVisibilityProgress))
     }
 
     private var documentListPanel: some View {
@@ -106,10 +147,11 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: coordinator.isQuickLabelPickerPresented)
+        .background(Color(nsColor: .windowBackgroundColor))
         .background { QuickLookPanelResponder(coordinator: quickLook) }
         .onDrop(of: [.fileURL], delegate: FileImportDropDelegate(coordinator: coordinator))
-        .onChange(of: coordinator.cachedShareURLs) {
-            quickLook.previewURLs = coordinator.cachedShareURLs
+        .onChange(of: coordinator.displayedShareURLs) {
+            quickLook.previewURLs = coordinator.displayedShareURLs
             quickLook.reloadIfVisible()
         }
     }
@@ -122,7 +164,7 @@ struct RootView: View {
                     text: Bindable(coordinator).searchText,
                     focusRequestToken: coordinator.searchFocusRequestToken
                 )
-                .frame(width: 280)
+                .frame(width: 300)
 
                 if let progress = coordinator.importProgress {
                     ImportProgressIndicator(progress: progress) {
@@ -144,11 +186,11 @@ struct RootView: View {
             Button {
                 coordinator.isImporting = true
             } label: {
-                Label("Import", systemImage: "plus")
+                Label("Import PDFs", systemImage: "plus")
             }
         }
 
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItem(placement: .secondaryAction) {
             Picker("View", selection: Bindable(coordinator).documentListViewMode) {
                 Image(systemName: "list.bullet")
                     .accessibilityLabel("List view")
@@ -162,12 +204,24 @@ struct RootView: View {
             .help("Switch between list and thumbnail view")
         }
 
-        ToolbarItem(placement: .primaryAction) {
-            ShareLink(items: coordinator.cachedShareURLs) {
+        ToolbarItem(placement: .secondaryAction) {
+            ShareLink(items: coordinator.displayedShareURLs) {
                 Label("Share", systemImage: "square.and.arrow.up")
             }
-            .disabled(coordinator.cachedShareURLs.isEmpty)
+            .disabled(coordinator.displayedShareURLs.isEmpty)
             .help("Share selected documents")
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                coordinator.isInspectorCollapsed.toggle()
+            } label: {
+                Label(
+                    coordinator.isInspectorCollapsed ? "Show Details" : "Hide Details",
+                    systemImage: "sidebar.right"
+                )
+            }
+            .help("Toggle details column (Control-D)")
         }
     }
 
@@ -196,6 +250,12 @@ struct RootView: View {
         coordinator.importDocuments(from: urls)
     }
 
+    private func selectAllFilteredDocuments() {
+        coordinator.beginSelectionInteraction()
+        let documents = coordinator.filteredDocuments
+        coordinator.selectedDocumentIDs = Set(documents.map(\.persistentModelID))
+    }
+
 }
 
 private struct RootViewImportModifier: ViewModifier {
@@ -205,7 +265,7 @@ private struct RootViewImportModifier: ViewModifier {
         content
             .fileImporter(
                 isPresented: Bindable(coordinator).isImporting,
-                allowedContentTypes: [.pdf, .zip],
+                allowedContentTypes: [.pdf, .zip, .folder],
                 allowsMultipleSelection: true
             ) { result in
                 switch result {
@@ -317,43 +377,25 @@ private struct RootViewDialogsModifier: ViewModifier {
             .onDeleteCommand {
                 coordinator.deleteSelectedDocumentsFromKeyboard()
             }
-            .sheet(isPresented: Bindable(coordinator).isLabelManagerPresented) {
-                LabelManagerSheet()
-                    .environment(coordinator)
-            }
-            .sheet(isPresented: Bindable(coordinator).isWatchFolderSettingsPresented) {
-                WatchFolderSettingsView()
-                    .environment(coordinator)
-            }
     }
 }
 
 private struct RootViewChangeHandlers: ViewModifier {
     let coordinator: LibraryCoordinator
+    let thumbnailCache: ThumbnailCache
     let allDocuments: [DocumentRecord]
     let allLabels: [LabelTag]
     let allSmartFolders: [SmartFolder]
     let allLabelGroups: [LabelGroup]
     let allWatchFolders: [WatchFolder]
 
-    /// Lightweight fingerprint that changes when documents are added, removed,
-    /// trashed/restored, or have their labels modified -- covering mutations
-    /// that `allDocuments.count` alone would miss.
-    private var documentFingerprint: Int {
-        var hasher = Hasher()
-        for document in allDocuments {
-            hasher.combine(document.persistentModelID)
-            hasher.combine(document.trashedAt)
-            hasher.combine(document.labels.count)
-        }
-        return hasher.finalize()
-    }
-
     private var labelFingerprint: Int {
         var hasher = Hasher()
+        hasher.combine(allLabels.count)
         for label in allLabels {
             hasher.combine(label.persistentModelID)
             hasher.combine(label.name)
+            hasher.combine(label.sortOrder)
             hasher.combine(label.groupID)
         }
         return hasher.finalize()
@@ -361,17 +403,22 @@ private struct RootViewChangeHandlers: ViewModifier {
 
     private var smartFolderFingerprint: Int {
         var hasher = Hasher()
+        hasher.combine(allSmartFolders.count)
         for folder in allSmartFolders {
             hasher.combine(folder.persistentModelID)
             hasher.combine(folder.name)
-            hasher.combine(folder.labelIDs)
+            hasher.combine(folder.icon)
             hasher.combine(folder.sortOrder)
+            for labelID in folder.labelIDs {
+                hasher.combine(labelID)
+            }
         }
         return hasher.finalize()
     }
 
     private var labelGroupFingerprint: Int {
         var hasher = Hasher()
+        hasher.combine(allLabelGroups.count)
         for group in allLabelGroups {
             hasher.combine(group.persistentModelID)
             hasher.combine(group.name)
@@ -382,35 +429,31 @@ private struct RootViewChangeHandlers: ViewModifier {
 
     private var watchFolderFingerprint: Int {
         var hasher = Hasher()
+        hasher.combine(allWatchFolders.count)
         for folder in allWatchFolders {
             hasher.combine(folder.persistentModelID)
             hasher.combine(folder.name)
+            hasher.combine(folder.icon)
             hasher.combine(folder.folderPath)
             hasher.combine(folder.isEnabled)
-            hasher.combine(folder.labelIDs)
             hasher.combine(folder.sortOrder)
+            for labelID in folder.labelIDs {
+                hasher.combine(labelID)
+            }
         }
         return hasher.finalize()
     }
 
-    private func reingest() {
-        coordinator.ingest(
-            allDocuments: allDocuments,
-            allLabels: allLabels,
-            allSmartFolders: allSmartFolders,
-            allLabelGroups: allLabelGroups,
-            allWatchFolders: allWatchFolders
-        )
-    }
-
     func body(content: Content) -> some View {
         content
-            .modifier(ChangeHandlersNotifications(coordinator: coordinator))
+            .modifier(ChangeHandlersNotifications(coordinator: coordinator, thumbnailCache: thumbnailCache))
             .modifier(ChangeHandlersData(
                 coordinator: coordinator,
-                reingest: reingest,
+                allDocuments: allDocuments,
                 allLabels: allLabels,
-                documentFingerprint: documentFingerprint,
+                allSmartFolders: allSmartFolders,
+                allLabelGroups: allLabelGroups,
+                allWatchFolders: allWatchFolders,
                 labelFingerprint: labelFingerprint,
                 smartFolderFingerprint: smartFolderFingerprint,
                 labelGroupFingerprint: labelGroupFingerprint,
@@ -421,6 +464,7 @@ private struct RootViewChangeHandlers: ViewModifier {
 
 private struct ChangeHandlersNotifications: ViewModifier {
     let coordinator: LibraryCoordinator
+    let thumbnailCache: ThumbnailCache
 
     func body(content: Content) -> some View {
         content
@@ -433,30 +477,34 @@ private struct ChangeHandlersNotifications: ViewModifier {
                 coordinator.isQuickLabelPickerPresented = true
             }
             .onReceive(NotificationCenter.default.publisher(for: .docNestLabelManager)) { _ in
-                coordinator.isLabelManagerPresented = true
+                AppSettingsController.shared.show(.labels)
             }
             .onReceive(NotificationCenter.default.publisher(for: .docNestWatchFolderSettings)) { _ in
-                coordinator.isWatchFolderSettingsPresented = true
+                AppSettingsController.shared.show(.watchFolders)
             }
             .onDisappear {
-                coordinator.cancelPendingLabelFilter()
-                coordinator.tearDownWatchFolderMonitoring()
+                coordinator.tearDown()
+                thumbnailCache.cancelAllInFlightTasks()
+                AppSettingsController.shared.clearActiveLibraryContext()
             }
             .onChange(of: coordinator.labelFilterSelection.visualSelection) { _, newSelection in
                 coordinator.scheduleLabelFilterApply(immediately: newSelection.isEmpty)
             }
             .onChange(of: coordinator.sidebarSelection) {
+                coordinator.cancelPendingSearchRecompute()
                 coordinator.recomputeFilteredDocuments()
                 coordinator.pruneSelectedDocumentIDs()
             }
             .onChange(of: coordinator.searchText) {
-                coordinator.recomputeFilteredDocuments()
-                coordinator.pruneSelectedDocumentIDs()
+                coordinator.scheduleSearchRecompute()
             }
             .onChange(of: coordinator.selectedDocumentIDs) {
                 coordinator.recomputeSelectedDocuments()
+                coordinator.scheduleSelectionVisualResponseLog()
+                coordinator.scheduleDisplayedSelectionUpdate()
             }
             .onChange(of: coordinator.labelFilterSelection.appliedSelection) {
+                coordinator.cancelPendingSearchRecompute()
                 coordinator.recomputeFilteredDocuments()
                 coordinator.pruneSelectedDocumentIDs()
             }
@@ -465,32 +513,88 @@ private struct ChangeHandlersNotifications: ViewModifier {
 
 private struct ChangeHandlersData: ViewModifier {
     let coordinator: LibraryCoordinator
-    let reingest: () -> Void
+    let allDocuments: [DocumentRecord]
     let allLabels: [LabelTag]
-    let documentFingerprint: Int
+    let allSmartFolders: [SmartFolder]
+    let allLabelGroups: [LabelGroup]
+    let allWatchFolders: [WatchFolder]
     let labelFingerprint: Int
     let smartFolderFingerprint: Int
     let labelGroupFingerprint: Int
     let watchFolderFingerprint: Int
+    @State private var pendingDocumentRefreshTask: Task<Void, Never>?
+    @State private var pendingMetadataRefreshTask: Task<Void, Never>?
+    @State private var pendingWatchFolderRefreshTask: Task<Void, Never>?
+
+    private func scheduleDocumentRefresh(allowWhenMetadataRefreshPending: Bool = true) {
+        pendingDocumentRefreshTask?.cancel()
+        pendingDocumentRefreshTask = Task { @MainActor in
+            defer { pendingDocumentRefreshTask = nil }
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            guard allowWhenMetadataRefreshPending
+                || (pendingMetadataRefreshTask == nil && pendingWatchFolderRefreshTask == nil) else {
+                return
+            }
+            coordinator.syncDocuments(allDocuments)
+        }
+    }
+
+    private func scheduleMetadataRefresh(syncLabels: Bool = false) {
+        pendingMetadataRefreshTask?.cancel()
+        pendingMetadataRefreshTask = Task { @MainActor in
+            defer { pendingMetadataRefreshTask = nil }
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+
+            coordinator.syncDocuments(allDocuments, recompute: false)
+
+            if syncLabels {
+                coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
+            }
+
+            coordinator.syncMetadata(
+                labels: allLabels,
+                smartFolders: allSmartFolders,
+                labelGroups: allLabelGroups
+            )
+        }
+    }
+
+    private func scheduleWatchFolderRefresh() {
+        pendingWatchFolderRefreshTask?.cancel()
+        pendingWatchFolderRefreshTask = Task { @MainActor in
+            defer { pendingWatchFolderRefreshTask = nil }
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            coordinator.syncWatchFolders(allWatchFolders)
+        }
+    }
 
     func body(content: Content) -> some View {
         content
-            .onChange(of: documentFingerprint) {
-                reingest()
+            .onChange(of: allDocuments.count) {
+                scheduleDocumentRefresh()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+                scheduleDocumentRefresh(allowWhenMetadataRefreshPending: false)
             }
             .onChange(of: labelFingerprint) {
-                coordinator.syncLabelFilterSelections(Set(allLabels.map(\.persistentModelID)))
-                reingest()
+                scheduleMetadataRefresh(syncLabels: true)
             }
             .onChange(of: smartFolderFingerprint) {
-                reingest()
+                scheduleMetadataRefresh()
             }
             .onChange(of: labelGroupFingerprint) {
-                reingest()
+                scheduleMetadataRefresh()
             }
             .onChange(of: watchFolderFingerprint) {
-                reingest()
-                coordinator.refreshWatchFolderMonitors()
+                scheduleWatchFolderRefresh()
+            }
+            .onDisappear {
+                pendingDocumentRefreshTask?.cancel()
+                pendingMetadataRefreshTask?.cancel()
+                pendingWatchFolderRefreshTask?.cancel()
             }
     }
 }

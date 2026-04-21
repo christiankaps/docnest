@@ -22,13 +22,15 @@ enum DocumentLabelDragPayload {
 
 enum DocumentDragHelper {
     /// Builds the internal payload string for dragging documents.
-    static func internalPayload(for document: DocumentRecord, selectedIDs: Set<PersistentIdentifier>, filteredDocuments: [DocumentRecord]) -> String {
+    static func internalPayload(
+        for document: DocumentRecord,
+        selectedIDs: Set<PersistentIdentifier>,
+        selectedDocumentIDsToDrag: [UUID]
+    ) -> String {
         let documentIDsToDrag: [UUID]
 
         if selectedIDs.contains(document.persistentModelID) {
-            documentIDsToDrag = filteredDocuments
-                .filter { selectedIDs.contains($0.persistentModelID) }
-                .map(\.id)
+            documentIDsToDrag = selectedDocumentIDsToDrag
         } else {
             documentIDsToDrag = [document.id]
         }
@@ -66,6 +68,20 @@ enum DocumentListViewMode: String, CaseIterable {
 }
 
 struct DocumentListView: View {
+    struct ArrowNavigationStep {
+        let nextID: PersistentIdentifier
+        let selectedIDs: Set<PersistentIdentifier>
+    }
+
+    private struct SortSnapshot: Sendable {
+        let documentID: UUID
+        let title: String
+        let importedAt: Date
+        let documentDate: Date?
+        let pageCount: Int
+        let fileSize: Int64
+    }
+
     private struct OptionalColumnVisibility {
         var imported: Bool
         var created: Bool
@@ -81,6 +97,7 @@ struct DocumentListView: View {
     private let documentColumnMinWidth = 260.0
     private let listColumnSpacing = 10.0
     private let listHorizontalPadding = 24.0
+    private let listPanelBackground = Color(nsColor: .windowBackgroundColor)
 
     @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(QuickLookCoordinator.self) private var quickLook
@@ -89,10 +106,14 @@ struct DocumentListView: View {
     @State private var selectionAnchor: PersistentIdentifier?
     @State private var renamingDocumentID: PersistentIdentifier?
     @State private var renamingTitle = ""
+    @FocusState private var focusedRenameDocumentID: PersistentIdentifier?
     @State private var sortColumn: SortColumn = .importedAt
     @State private var sortDirection: SortDirection = .descending
     @State private var cachedSortedDocuments: [DocumentRecord] = []
+    @State private var cachedSortedDocumentIndices: [PersistentIdentifier: Int] = [:]
     @State private var cachedGroupedDocuments: [DocumentGroup] = []
+    @State private var pendingSortedDocumentsDebounceTask: Task<Void, Never>?
+    @State private var pendingSortedDocumentsTask: Task<Void, Never>?
     @AppStorage("docListGroupMode") private var groupMode: DocumentGroupMode = .none
     @State private var availableListWidth = AppSplitViewLayout.documentListIdealWidth
     @AppStorage("docListThumbnailSize") private var thumbnailSize = 160.0
@@ -110,19 +131,56 @@ struct DocumentListView: View {
     private func recomputeSortedDocuments() {
         let column = sortColumn
         let direction = sortDirection
-        cachedSortedDocuments = coordinator.filteredDocuments.sorted { lhs, rhs in
-            let comparison = compare(lhs, rhs, for: column)
-            if comparison == .orderedSame {
-                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-            }
-
-            if direction == .ascending {
-                return comparison == .orderedAscending
-            }
-
-            return comparison == .orderedDescending
+        let snapshots = coordinator.filteredDocuments.map {
+            SortSnapshot(
+                documentID: $0.id,
+                title: $0.title,
+                importedAt: $0.importedAt,
+                documentDate: $0.documentDate,
+                pageCount: $0.pageCount,
+                fileSize: $0.fileSize
+            )
         }
-        cachedGroupedDocuments = groupMode.group(cachedSortedDocuments)
+
+        pendingSortedDocumentsTask?.cancel()
+        pendingSortedDocumentsTask = Task(priority: .userInitiated) {
+            let sortedIDs = snapshots.sorted { lhs, rhs in
+                let comparison = Self.compare(lhs, rhs, for: column)
+                if comparison == .orderedSame {
+                    return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+                }
+
+                if direction == .ascending {
+                    return comparison == .orderedAscending
+                }
+
+                return comparison == .orderedDescending
+            }
+            .map(\.documentID)
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard !Task.isCancelled else { return }
+                let documentsByID = Dictionary(uniqueKeysWithValues: coordinator.filteredDocuments.map { ($0.id, $0) })
+                cachedSortedDocuments = sortedIDs.compactMap { documentsByID[$0] }
+                cachedSortedDocumentIndices = Dictionary(
+                    uniqueKeysWithValues: cachedSortedDocuments.enumerated().map { ($0.element.persistentModelID, $0.offset) }
+                )
+                cachedGroupedDocuments = groupMode == .none ? [] : groupMode.group(cachedSortedDocuments)
+                pendingSortedDocumentsTask = nil
+            }
+        }
+    }
+
+    private func scheduleSortedDocumentsRecompute() {
+        pendingSortedDocumentsDebounceTask?.cancel()
+        pendingSortedDocumentsDebounceTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            recomputeSortedDocuments()
+            pendingSortedDocumentsDebounceTask = nil
+        }
     }
 
     private var effectiveOptionalColumns: OptionalColumnVisibility {
@@ -169,8 +227,16 @@ struct DocumentListView: View {
         return visibility
     }
 
+    private var visibleDocumentsInOrder: [DocumentRecord] {
+        if groupMode == .none {
+            return cachedSortedDocuments
+        }
+        return cachedGroupedDocuments.flatMap(\.documents)
+    }
+
     var body: some View {
         let documents = cachedSortedDocuments
+        let visibleDocuments = visibleDocumentsInOrder
         VStack(spacing: 0) {
             if documents.isEmpty || coordinator.documentListViewMode != .list {
                 listHeader
@@ -198,12 +264,13 @@ struct DocumentListView: View {
         }
         .focusable()
         .focusEffectDisabled()
+        .background(listPanelBackground)
         .onKeyPress(.space) {
             quickLook.togglePreview()
             return .handled
         }
         .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow]) { keyPress in
-            handleArrowKey(keyPress, in: documents)
+            handleArrowKey(keyPress, in: visibleDocuments)
         }
         .background {
             GeometryReader { proxy in
@@ -217,19 +284,28 @@ struct DocumentListView: View {
             }
         }
         .onAppear {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
         }
         .onChange(of: coordinator.filteredDocuments) {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
+        }
+        .onChange(of: coordinator.filteredDocumentsVersion) {
+            scheduleSortedDocumentsRecompute()
         }
         .onChange(of: sortColumn) {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
         }
         .onChange(of: sortDirection) {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
         }
         .onChange(of: groupMode) {
-            recomputeSortedDocuments()
+            scheduleSortedDocumentsRecompute()
+        }
+        .onDisappear {
+            pendingSortedDocumentsDebounceTask?.cancel()
+            pendingSortedDocumentsTask?.cancel()
+            pendingSortedDocumentsDebounceTask = nil
+            pendingSortedDocumentsTask = nil
         }
     }
 
@@ -304,21 +380,28 @@ struct DocumentListView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
         .background {
-            Color(nsColor: .windowBackgroundColor)
-                .overlay(Color.secondary.opacity(0.08))
+            Rectangle()
+                .fill(Color(nsColor: .windowBackgroundColor))
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.06))
+                        .frame(height: 0.5)
+                }
         }
     }
 
     private func listContent(_ sortedDocs: [DocumentRecord]) -> some View {
-        ScrollViewReader { proxy in
+        let visibleDocs = visibleDocumentsInOrder
+
+        return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                     if groupMode == .none {
                         Section {
                             ForEach(Array(sortedDocs.enumerated()), id: \.element.persistentModelID) { index, document in
-                                documentListRow(document: document, index: index, allDocs: sortedDocs)
+                                documentListRow(document: document, index: index, allDocs: visibleDocs)
                             }
                         } header: {
                             listHeader
@@ -331,12 +414,12 @@ struct DocumentListView: View {
                         ForEach(Array(cachedGroupedDocuments.enumerated()), id: \.element.id) { _, group in
                             Section {
                                 ForEach(Array(group.documents.enumerated()), id: \.element.persistentModelID) { index, document in
-                                    documentListRow(document: document, index: index, allDocs: sortedDocs)
+                                    documentListRow(document: document, index: index, allDocs: visibleDocs)
                                 }
                             } header: {
                                 HStack {
                                     Text(group.label)
-                                        .font(AppTypography.sectionTitle)
+                                        .font(AppTypography.sectionLabel)
                                         .foregroundStyle(.secondary)
                                     Spacer()
                                     Text("\(group.documents.count)")
@@ -344,11 +427,16 @@ struct DocumentListView: View {
                                         .foregroundStyle(.tertiary)
                                 }
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 5)
+                                .padding(.vertical, 6)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background {
-                                    Color(nsColor: .windowBackgroundColor)
-                                        .overlay(Color.secondary.opacity(0.05))
+                                    Rectangle()
+                                        .fill(Color(nsColor: .windowBackgroundColor))
+                                        .overlay(alignment: .bottom) {
+                                            Rectangle()
+                                                .fill(Color.primary.opacity(0.04))
+                                                .frame(height: 0.5)
+                                        }
                                 }
                             }
                         }
@@ -366,19 +454,15 @@ struct DocumentListView: View {
     private func documentListRow(document: DocumentRecord, index: Int, allDocs: [DocumentRecord]) -> some View {
         let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
 
-        documentRow(for: document)
+        documentRow(for: document, dragPayload: dragPayload(for: document))
             .padding(.horizontal, 12)
             .background(rowBackground(index: index, isSelected: isSelected))
             .contentShape(Rectangle())
             .id(document.persistentModelID)
-            .onTapGesture(count: 2) {
-                openQuickLook(for: document)
-            }
-            .onTapGesture {
+            .highPriorityGesture(TapGesture().onEnded {
                 handleRowTap(document: document, in: allDocs)
-            }
+            })
             .contextMenu { documentContextMenu(for: document) }
-            .draggable(dragPayload(for: document))
             .dropDestination(for: String.self) { items, _ in
                 guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
                     return false
@@ -409,6 +493,7 @@ struct DocumentListView: View {
     }
 
     private func handleRowTap(document: DocumentRecord, in sortedDocs: [DocumentRecord]) {
+        coordinator.beginSelectionInteraction()
         let id = document.persistentModelID
         let modifiers = NSEvent.modifierFlags
 
@@ -439,9 +524,9 @@ struct DocumentListView: View {
 
     private func rowBackground(index: Int, isSelected: Bool) -> Color {
         if isSelected {
-            return Color.accentColor.opacity(0.18)
+            return Color.accentColor.opacity(0.11)
         }
-        return index.isMultiple(of: 2) ? Color.clear : Color.secondary.opacity(0.06)
+        return index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.012)
     }
 
     private func thumbnailContent(_ sortedDocs: [DocumentRecord]) -> some View {
@@ -459,17 +544,15 @@ struct DocumentListView: View {
                             isRenaming: renamingDocumentID == document.persistentModelID,
                             renamingTitle: $renamingTitle,
                             onCommitRename: { commitRename(for: document) },
-                            onCancelRename: { cancelRename() }
+                            onCancelRename: { cancelRename() },
+                            onBeginRename: { beginRename(for: document) },
+                            dragPayload: dragPayload(for: document)
                         )
                         .id(document.persistentModelID)
-                        .onTapGesture(count: 2) {
-                            openQuickLook(for: document)
-                        }
-                        .onTapGesture {
+                        .highPriorityGesture(TapGesture().onEnded {
                             handleRowTap(document: document, in: sortedDocs)
-                        }
+                        })
                         .contextMenu { documentContextMenu(for: document) }
-                        .draggable(dragPayload(for: document))
                         .accessibilityLabel("\(document.title), PDF document")
                     }
                 }
@@ -480,15 +563,15 @@ struct DocumentListView: View {
     }
 
     @ViewBuilder
-    private func documentRow(for document: DocumentRecord) -> some View {
+    private func documentRow(for document: DocumentRecord, dragPayload: String) -> some View {
         HStack(alignment: .center, spacing: 10) {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.accentColor.opacity(0.12))
+                    .fill(isSelectedDocument(document) ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.035))
                     .frame(width: 30, height: 30)
                     .overlay {
                         Image(systemName: "doc.richtext")
-                            .foregroundStyle(.tint)
+                            .foregroundStyle(isSelectedDocument(document) ? Color.accentColor : Color.secondary)
                             .font(AppTypography.listTitle)
                     }
 
@@ -497,12 +580,17 @@ struct DocumentListView: View {
                         TextField("Title", text: $renamingTitle)
                             .font(AppTypography.listTitle)
                             .textFieldStyle(.plain)
+                            .focused($focusedRenameDocumentID, equals: document.persistentModelID)
                             .onSubmit { commitRename(for: document) }
                             .onExitCommand { cancelRename() }
                     } else {
                         Text(document.title)
                             .font(AppTypography.listTitle)
                             .lineLimit(1)
+                            .onTapGesture(count: 2) {
+                                guard canBeginRename(for: document) else { return }
+                                beginRename(for: document)
+                            }
                     }
                 }
             }
@@ -512,6 +600,7 @@ struct DocumentListView: View {
                 Text(document.importedAt, format: .dateTime.year().month().day())
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: importedColumnWidth, alignment: .leading)
+                    .allowsHitTesting(false)
             }
 
             if effectiveOptionalColumns.created {
@@ -525,18 +614,21 @@ struct DocumentListView: View {
                 }
                 .font(AppTypography.listMeta.monospacedDigit())
                 .frame(width: createdColumnWidth, alignment: .leading)
+                .allowsHitTesting(false)
             }
 
             if effectiveOptionalColumns.pages {
                 Text("\(document.pageCount)")
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: pagesColumnWidth, alignment: .leading)
+                    .allowsHitTesting(false)
             }
 
             if effectiveOptionalColumns.size {
                 Text(document.formattedFileSize)
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: sizeColumnWidth, alignment: .leading)
+                    .allowsHitTesting(false)
             }
 
             if effectiveOptionalColumns.labels {
@@ -546,24 +638,48 @@ struct DocumentListView: View {
                 .frame(width: labelsColumnWidth, alignment: .leading)
             }
 
+            dragHandle(payload: dragPayload)
+
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
+    }
+
+    private func dragHandle(payload: String) -> some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.tertiary)
+            .frame(width: 16, height: 20)
+            .contentShape(Rectangle())
+            .help("Drag document")
+            .draggable(payload)
+    }
+
+    private func isSelectedDocument(_ document: DocumentRecord) -> Bool {
+        coordinator.selectedDocumentIDs.contains(document.persistentModelID)
     }
 
     private func onRemoveLabelFromDocument(_ label: LabelTag, _ document: DocumentRecord) {
         coordinator.toggleLabel(label, on: [document])
     }
 
-    private func contextMenuDocuments(for document: DocumentRecord) -> [DocumentRecord] {
+    private func resolvedStoredFileURL(for document: DocumentRecord) -> URL? {
+        guard let path = document.storedFilePath, let libraryURL = coordinator.libraryURL else {
+            return nil
+        }
+
+        return DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
+    }
+
+    private func actionTargetDocuments(for document: DocumentRecord) -> [DocumentRecord] {
         if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
-            return coordinator.filteredDocuments.filter { coordinator.selectedDocumentIDs.contains($0.persistentModelID) }
+            return coordinator.immediateSelectionDocuments
         }
         return [document]
     }
 
     @ViewBuilder
     private func documentContextMenu(for document: DocumentRecord) -> some View {
-        let targets = contextMenuDocuments(for: document)
+        let targets = actionTargetDocuments(for: document)
 
         if coordinator.isBinSelected {
             Button("Restore") {
@@ -618,6 +734,12 @@ struct DocumentListView: View {
                 coordinator.reExtractText(for: targets, libraryURL: libraryURL, modelContext: modelContext)
             }
 
+            Button("Re-extract Date") {
+                guard let modelContext = coordinator.modelContext else { return }
+                coordinator.reExtractDocumentDate(for: targets, modelContext: modelContext)
+            }
+            .disabled(targets.allSatisfy { $0.fullText == nil || $0.fullText?.isEmpty == true })
+
             Divider()
 
             Button("Move to Bin") {
@@ -635,19 +757,14 @@ struct DocumentListView: View {
     }
 
     private func dropTargetDocuments(for document: DocumentRecord) -> [DocumentRecord] {
-        if coordinator.selectedDocumentIDs.contains(document.persistentModelID) {
-            return coordinator.filteredDocuments.filter {
-                coordinator.selectedDocumentIDs.contains($0.persistentModelID)
-            }
-        }
-        return [document]
+        actionTargetDocuments(for: document)
     }
 
     private func dragPayload(for document: DocumentRecord) -> String {
         DocumentDragHelper.internalPayload(
             for: document,
             selectedIDs: coordinator.selectedDocumentIDs,
-            filteredDocuments: coordinator.filteredDocuments
+            selectedDocumentIDsToDrag: coordinator.selectedDocumentIDsToDrag
         )
     }
 
@@ -655,48 +772,28 @@ struct DocumentListView: View {
         guard !coordinator.isQuickLabelPickerPresented else { return .ignored }
         guard !sortedDocs.isEmpty else { return .ignored }
 
-        let ids = sortedDocs.map(\.persistentModelID)
-        let isShift = keyPress.modifiers.contains(.shift)
-
-        // Find the current cursor position — the last navigated-to item.
-        let currentIndex: Int? = if let anchor = selectionAnchor, let index = ids.firstIndex(of: anchor) {
-            index
-        } else if let first = coordinator.selectedDocumentIDs.first(where: { ids.contains($0) }) {
-            ids.firstIndex(of: first)
-        } else {
-            nil
-        }
-
-        let delta: Int
-        switch keyPress.key {
-        case .upArrow, .leftArrow:
-            delta = -1
-        case .downArrow, .rightArrow:
-            delta = 1
-        default:
+        guard let step = Self.arrowNavigationStep(
+            key: keyPress.key,
+            anchor: selectionAnchor,
+            selectedDocumentIDs: coordinator.selectedDocumentIDs,
+            orderedSelectedDocumentIDs: sortedDocs
+                .map(\.persistentModelID)
+                .filter { coordinator.selectedDocumentIDs.contains($0) },
+            visibleDocuments: sortedDocs,
+            extendSelection: keyPress.modifiers.contains(.shift)
+        ) else {
             return .ignored
         }
 
-        let nextIndex: Int
-        if let currentIndex {
-            nextIndex = min(max(currentIndex + delta, 0), ids.count - 1)
-        } else {
-            nextIndex = delta > 0 ? 0 : ids.count - 1
+        guard let nextDocument = sortedDocs.first(where: { $0.persistentModelID == step.nextID }) else {
+            return .ignored
         }
+        coordinator.beginSelectionInteraction()
+        coordinator.selectedDocumentIDs = step.selectedIDs
+        selectionAnchor = step.nextID
+        scrollProxy?.scrollTo(step.nextID, anchor: nil)
 
-        let nextID = ids[nextIndex]
-
-        if isShift {
-            // Extend selection to include the next item
-            coordinator.selectedDocumentIDs.insert(nextID)
-        } else {
-            coordinator.selectedDocumentIDs = [nextID]
-        }
-        selectionAnchor = nextID
-        scrollProxy?.scrollTo(nextID, anchor: nil)
-
-        let nextDocument = sortedDocs[nextIndex]
-        if let url = originalFileURL(for: nextDocument) {
+        if let url = resolvedStoredFileURL(for: nextDocument) {
             quickLook.previewURLs = [url]
         }
         quickLook.reloadIfVisible()
@@ -705,8 +802,9 @@ struct DocumentListView: View {
     }
 
     private func openQuickLook(for document: DocumentRecord) {
+        coordinator.beginSelectionInteraction()
         coordinator.selectedDocumentIDs = [document.persistentModelID]
-        if let url = originalFileURL(for: document) {
+        if let url = resolvedStoredFileURL(for: document) {
             quickLook.previewURLs = [url]
         }
         quickLook.togglePreview()
@@ -715,6 +813,9 @@ struct DocumentListView: View {
     private func beginRename(for document: DocumentRecord) {
         renamingTitle = document.title
         renamingDocumentID = document.persistentModelID
+        Task { @MainActor in
+            focusedRenameDocumentID = document.persistentModelID
+        }
     }
 
     private func commitRename(for document: DocumentRecord) {
@@ -740,6 +841,7 @@ struct DocumentListView: View {
 
         do {
             try modelContext.save()
+            coordinator.recomputeFilteredDocuments()
         } catch {
             // Roll back to keep database and filesystem consistent
             document.title = previousTitle
@@ -748,10 +850,20 @@ struct DocumentListView: View {
         }
 
         renamingDocumentID = nil
+        focusedRenameDocumentID = nil
     }
 
     private func cancelRename() {
         renamingDocumentID = nil
+        focusedRenameDocumentID = nil
+    }
+
+    private func canBeginRename(for document: DocumentRecord) -> Bool {
+        guard renamingDocumentID == nil else { return false }
+        guard coordinator.selectedDocumentIDs.count == 1,
+              coordinator.selectedDocumentIDs.contains(document.persistentModelID) else { return false }
+        let disallowedModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
+        return NSEvent.modifierFlags.intersection(disallowedModifiers).isEmpty
     }
 
     private func sortButton(_ title: String, column: SortColumn) -> some View {
@@ -784,6 +896,21 @@ struct DocumentListView: View {
         case .importedAt:
             lhs.importedAt.compare(rhs.importedAt)
         case .documentDate:
+            Self.compareOptionalDates(lhs.documentDate, rhs.documentDate)
+        case .pageCount:
+            Self.compareIntegers(lhs.pageCount, rhs.pageCount)
+        case .fileSize:
+            Self.compareIntegers(lhs.fileSize, rhs.fileSize)
+        }
+    }
+
+    nonisolated private static func compare(_ lhs: SortSnapshot, _ rhs: SortSnapshot, for column: SortColumn) -> ComparisonResult {
+        switch column {
+        case .title:
+            lhs.title.localizedCaseInsensitiveCompare(rhs.title)
+        case .importedAt:
+            lhs.importedAt.compare(rhs.importedAt)
+        case .documentDate:
             compareOptionalDates(lhs.documentDate, rhs.documentDate)
         case .pageCount:
             compareIntegers(lhs.pageCount, rhs.pageCount)
@@ -792,7 +919,7 @@ struct DocumentListView: View {
         }
     }
 
-    private func compareOptionalDates(_ lhs: Date?, _ rhs: Date?) -> ComparisonResult {
+    nonisolated private static func compareOptionalDates(_ lhs: Date?, _ rhs: Date?) -> ComparisonResult {
         switch (lhs, rhs) {
         case let (left?, right?):
             return left.compare(right)
@@ -805,7 +932,7 @@ struct DocumentListView: View {
         }
     }
 
-    private func compareIntegers<T: BinaryInteger>(_ lhs: T, _ rhs: T) -> ComparisonResult {
+    nonisolated private static func compareIntegers<T: BinaryInteger>(_ lhs: T, _ rhs: T) -> ComparisonResult {
         if lhs < rhs {
             return .orderedAscending
         }
@@ -815,6 +942,71 @@ struct DocumentListView: View {
         }
 
         return .orderedSame
+    }
+
+    static func documentIndicesByPersistentID(for documents: [DocumentRecord]) -> [PersistentIdentifier: Int] {
+        Dictionary(uniqueKeysWithValues: documents.enumerated().map { ($0.element.persistentModelID, $0.offset) })
+    }
+
+    static func arrowNavigationCurrentIndex(
+        anchor: PersistentIdentifier?,
+        selectedDocumentIDs: Set<PersistentIdentifier>,
+        orderedSelectedDocumentIDs: [PersistentIdentifier],
+        visibleDocumentIndices: [PersistentIdentifier: Int]
+    ) -> Int? {
+        if let anchor, let index = visibleDocumentIndices[anchor] {
+            return index
+        }
+
+        if let firstOrderedSelected = orderedSelectedDocumentIDs.first(where: { visibleDocumentIndices[$0] != nil }) {
+            return visibleDocumentIndices[firstOrderedSelected]
+        }
+
+        if let firstSelected = selectedDocumentIDs.first(where: { visibleDocumentIndices[$0] != nil }) {
+            return visibleDocumentIndices[firstSelected]
+        }
+
+        return nil
+    }
+
+    static func arrowNavigationStep(
+        key: KeyEquivalent,
+        anchor: PersistentIdentifier?,
+        selectedDocumentIDs: Set<PersistentIdentifier>,
+        orderedSelectedDocumentIDs: [PersistentIdentifier],
+        visibleDocuments: [DocumentRecord],
+        extendSelection: Bool
+    ) -> ArrowNavigationStep? {
+        guard !visibleDocuments.isEmpty else { return nil }
+
+        let visibleDocumentIndices = documentIndicesByPersistentID(for: visibleDocuments)
+        let currentIndex = arrowNavigationCurrentIndex(
+            anchor: anchor,
+            selectedDocumentIDs: selectedDocumentIDs,
+            orderedSelectedDocumentIDs: orderedSelectedDocumentIDs,
+            visibleDocumentIndices: visibleDocumentIndices
+        )
+
+        let delta: Int
+        switch key {
+        case .upArrow, .leftArrow:
+            delta = -1
+        case .downArrow, .rightArrow:
+            delta = 1
+        default:
+            return nil
+        }
+
+        let nextIndex: Int
+        if let currentIndex {
+            nextIndex = min(max(currentIndex + delta, 0), visibleDocuments.count - 1)
+        } else {
+            nextIndex = delta > 0 ? 0 : visibleDocuments.count - 1
+        }
+
+        let nextID = visibleDocuments[nextIndex].persistentModelID
+        let selectedIDs = extendSelection ? selectedDocumentIDs.union([nextID]) : [nextID]
+        return ArrowNavigationStep(nextID: nextID, selectedIDs: selectedIDs)
     }
 }
 
@@ -903,21 +1095,21 @@ private struct DocumentLabelStrip: View {
     let labels: [LabelTag]
     var onRemove: ((LabelTag) -> Void)?
 
-    private var sortedLabels: [LabelTag] {
-        labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
-    private var visibleLabels: [LabelTag] {
-        Array(sortedLabels.prefix(2))
-    }
-
-    private var hiddenLabelCount: Int {
-        max(sortedLabels.count - visibleLabels.count, 0)
-    }
+    private let sortedLabels: [LabelTag]
+    private let visibleLabels: [LabelTag]
+    private let hiddenLabelCount: Int
 
     init(labels: [LabelTag], onRemove: ((LabelTag) -> Void)? = nil) {
         self.labels = labels
         self.onRemove = onRemove
+        self.sortedLabels = labels.sorted {
+            if $0.sortOrder == $1.sortOrder {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.sortOrder < $1.sortOrder
+        }
+        self.visibleLabels = Array(self.sortedLabels.prefix(2))
+        self.hiddenLabelCount = max(labels.count - self.visibleLabels.count, 0)
     }
 
     var body: some View {
@@ -980,39 +1172,95 @@ private struct DocumentThumbnailCell: View {
     @Binding var renamingTitle: String
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
+    var onBeginRename: () -> Void
+    let dragPayload: String
 
     @Environment(ThumbnailCache.self) private var thumbnailCache
+    @FocusState private var isRenameFieldFocused: Bool
+
+    private let badgeLabels: [LabelTag]
+    private let badgeOverflowCount: Int
+    private let miniBarLabels: [LabelTag]
+    private let miniBarOverflowCount: Int
+
+    init(
+        document: DocumentRecord,
+        libraryURL: URL?,
+        size: Double,
+        isSelected: Bool,
+        isRenaming: Bool,
+        renamingTitle: Binding<String>,
+        onCommitRename: @escaping () -> Void,
+        onCancelRename: @escaping () -> Void,
+        onBeginRename: @escaping () -> Void,
+        dragPayload: String
+    ) {
+        self.document = document
+        self.libraryURL = libraryURL
+        self.size = size
+        self.isSelected = isSelected
+        self.isRenaming = isRenaming
+        self._renamingTitle = renamingTitle
+        self.onCommitRename = onCommitRename
+        self.onCancelRename = onCancelRename
+        self.onBeginRename = onBeginRename
+        self.dragPayload = dragPayload
+
+        let sortedLabels = document.labels.sorted {
+            if $0.sortOrder == $1.sortOrder {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.sortOrder < $1.sortOrder
+        }
+        self.badgeLabels = Array(sortedLabels.prefix(4))
+        self.badgeOverflowCount = max(sortedLabels.count - self.badgeLabels.count, 0)
+        self.miniBarLabels = Array(sortedLabels.prefix(2))
+        self.miniBarOverflowCount = max(sortedLabels.count - self.miniBarLabels.count, 0)
+    }
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             thumbnailImage
                 .frame(width: size, height: size * 1.3)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(alignment: .bottomTrailing) {
                     if !document.labels.isEmpty {
                         labelBadges
-                            .padding(4)
+                            .padding(6)
                     }
                 }
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(
+                            isSelected ? Color.accentColor.opacity(0.72) : Color.primary.opacity(0.08),
+                            lineWidth: isSelected ? 1.5 : 0.8
+                        )
                 )
 
             if isRenaming {
                 TextField("Title", text: $renamingTitle)
                     .font(AppTypography.labelChip)
                     .textFieldStyle(.plain)
+                    .focused($isRenameFieldFocused)
                     .multilineTextAlignment(.center)
                     .frame(width: size)
                     .onSubmit { onCommitRename() }
                     .onExitCommand { onCancelRename() }
+                    .onAppear {
+                        isRenameFieldFocused = true
+                    }
             } else {
                 Text(document.title)
                     .font(AppTypography.labelChip)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .frame(width: size)
+                    .onTapGesture(count: 2) {
+                        guard isSelected else { return }
+                        let disallowedModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
+                        guard NSEvent.modifierFlags.intersection(disallowedModifiers).isEmpty else { return }
+                        onBeginRename()
+                    }
             }
 
             if !isRenaming, !document.labels.isEmpty {
@@ -1020,27 +1268,33 @@ private struct DocumentThumbnailCell: View {
                     .frame(width: size)
                     .clipped()
             }
+
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 22, height: 18)
+                .contentShape(Rectangle())
+                .help("Drag document")
+                .draggable(dragPayload)
         }
-        .padding(4)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.05) : Color.clear)
         )
     }
 
     private var labelBadges: some View {
-        let sorted = document.labels.sorted { $0.sortOrder < $1.sortOrder }
-        let visible = Array(sorted.prefix(4))
-        let extra = sorted.count - visible.count
         return HStack(spacing: -2) {
-            ForEach(visible) { label in
+            ForEach(badgeLabels) { label in
                 Circle()
                     .fill(label.labelColor.color)
                     .frame(width: 10, height: 10)
                     .overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1))
             }
-            if extra > 0 {
-                Text("+\(extra)")
+            if badgeOverflowCount > 0 {
+                Text("+\(badgeOverflowCount)")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.leading, 4)
@@ -1048,19 +1302,16 @@ private struct DocumentThumbnailCell: View {
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 2)
-        .background(Capsule().fill(.black.opacity(0.5)))
+        .background(Capsule().fill(.regularMaterial))
     }
 
     private var miniLabelBar: some View {
-        let sorted = document.labels.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        let visible = Array(sorted.prefix(2))
-        let extra = sorted.count - visible.count
         return HStack(spacing: 4) {
-            ForEach(visible) { label in
+            ForEach(miniBarLabels) { label in
                 LabelChip(name: label.name, color: label.labelColor, icon: label.icon, size: .compact)
             }
-            if extra > 0 {
-                Text("+\(extra)")
+            if miniBarOverflowCount > 0 {
+                Text("+\(miniBarOverflowCount)")
                     .font(AppTypography.labelChip)
                     .foregroundStyle(.secondary)
             }
@@ -1073,20 +1324,23 @@ private struct DocumentThumbnailCell: View {
         if let path = document.storedFilePath,
            let libraryURL {
             let targetSize = CGSize(width: size * 2, height: size * 2.6)
+            let _ = thumbnailCache.isObserved(storedFilePath: path, size: targetSize)
             if let image = thumbnailCache.thumbnail(for: path, libraryURL: libraryURL, size: targetSize) {
                 Image(nsImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: .fit)
+                    .padding(8)
+                    .background(Color(nsColor: .textBackgroundColor))
             } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.secondary.opacity(0.08))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(.thinMaterial)
                     .overlay {
                         ProgressView()
                     }
             }
         } else {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.secondary.opacity(0.08))
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(.thinMaterial)
                 .overlay {
                     Image(systemName: "doc.richtext")
                         .font(.system(size: size * 0.25))
@@ -1122,8 +1376,9 @@ private struct DocumentListStatusBar: View {
             }
         }
         .padding(.horizontal, 12)
-        .frame(height: 24)
+        .frame(height: 22)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var summaryText: String {
@@ -1139,23 +1394,10 @@ private struct DocumentListStatusBar: View {
 
 #if DEBUG
 #Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: DocumentRecord.self, configurations: config)
-
-    let labels = LabelTag.makeSamples()
-    container.mainContext.insert(labels.finance)
-    container.mainContext.insert(labels.tax)
-    container.mainContext.insert(labels.contracts)
-
-    let samples = DocumentRecord.makeSamples(labels: labels)
-    for sample in samples {
-        container.mainContext.insert(sample)
-    }
-
     return DocumentListView()
         .environment(LibraryCoordinator())
         .environment(ThumbnailCache())
-        .modelContainer(container)
+        .modelContainer(PreviewData.documentListContainer)
 }
 #endif
 
@@ -1232,4 +1474,25 @@ enum DocumentGroupMode: String, CaseIterable {
             return (label, sortKey)
         }
     }
+}
+
+@MainActor
+private enum PreviewData {
+    static let documentListContainer: ModelContainer = {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        do {
+            let container = try ModelContainer(for: DocumentRecord.self, configurations: configuration)
+            let labels = LabelTag.makeSamples()
+            container.mainContext.insert(labels.finance)
+            container.mainContext.insert(labels.tax)
+            container.mainContext.insert(labels.contracts)
+
+            for sample in DocumentRecord.makeSamples(labels: labels) {
+                container.mainContext.insert(sample)
+            }
+            return container
+        } catch {
+            preconditionFailure("Failed to create DocumentListView preview container: \(error)")
+        }
+    }()
 }

@@ -6,6 +6,8 @@ APP_NAME="DocNest"
 SCHEME="DocNest"
 PROJECT="DocNest.xcodeproj"
 CONFIGURATION="Release"
+RELEASE_VERSION="${RELEASE_VERSION:-}"
+BUILD_NUMBER="${BUILD_NUMBER:-1}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -30,15 +32,24 @@ mkdir -p "$BUILD_DIR"
 
 # ─── Archive ─────────────────────────────────────────────────────
 step "Archiving $APP_NAME ($CONFIGURATION)"
-xcodebuild \
-    -project "$PROJECT_DIR/$PROJECT" \
-    -scheme "$SCHEME" \
-    -configuration "$CONFIGURATION" \
-    -archivePath "$ARCHIVE_PATH" \
-    archive \
-    SKIP_INSTALL=NO \
-    BUILD_LIBRARY_FOR_DISTRIBUTION=NO \
-    | tail -3
+XCODEBUILD_ARGS=(
+    -project "$PROJECT_DIR/$PROJECT"
+    -scheme "$SCHEME"
+    -configuration "$CONFIGURATION"
+    -archivePath "$ARCHIVE_PATH"
+    archive
+    SKIP_INSTALL=NO
+    BUILD_LIBRARY_FOR_DISTRIBUTION=NO
+)
+
+if [ -n "$RELEASE_VERSION" ]; then
+    XCODEBUILD_ARGS+=(
+        "MARKETING_VERSION=$RELEASE_VERSION"
+        "CURRENT_PROJECT_VERSION=$BUILD_NUMBER"
+    )
+fi
+
+xcodebuild "${XCODEBUILD_ARGS[@]}" | tail -3
 
 # Verify the archive produced an app
 APP_PATH="$ARCHIVE_PATH/Products/Applications/$APP_NAME.app"

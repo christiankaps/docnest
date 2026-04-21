@@ -1,6 +1,13 @@
 import Foundation
 
+/// Maps imported documents onto stable storage paths inside `Originals/`.
+///
+/// Storage layout is intentionally hidden behind this service so filename rules,
+/// collision handling, and relative-path semantics stay consistent across import,
+/// rename, export, and deletion workflows.
 enum DocumentStorageService {
+    /// Copies an imported source file into the library's managed storage area and
+    /// returns the stored file's path relative to the library root.
     static func copyToStorage(
         from sourceURL: URL,
         title: String,
@@ -76,8 +83,18 @@ enum DocumentStorageService {
         FileManager.default.fileExists(atPath: fileURL(for: path, libraryURL: libraryURL).path)
     }
 
+    static func fileExistsAsync(at path: String, libraryURL: URL) async -> Bool {
+        await Task.detached(priority: .utility) {
+            FileManager.default.fileExists(
+                atPath: fileURL(for: path, libraryURL: libraryURL).path
+            )
+        }.value
+    }
+
     // MARK: - Private helpers
 
+    /// Buckets stored originals by import year and month to avoid a single large
+    /// flat directory inside the library package.
     private static func storageDirectory(for importedAt: Date, libraryURL: URL) -> URL {
         let components = Calendar.current.dateComponents([.year, .month], from: importedAt)
         let year = String(components.year ?? 0)

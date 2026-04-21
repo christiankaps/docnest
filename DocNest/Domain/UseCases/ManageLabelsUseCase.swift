@@ -171,16 +171,19 @@ enum ManageLabelsUseCase {
         }
 
         document.labels.append(label)
-        document.labels.sort {
-            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
         return true
     }
 
     @discardableResult
     private static func assign(_ label: LabelTag, to documents: [DocumentRecord]) -> Bool {
         documents.reduce(false) { didChange, document in
-            assign(label, to: document) || didChange
+            let changed = assign(label, to: document)
+            if changed, document.labels.count > 1 {
+                document.labels.sort {
+                    $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
+            }
+            return changed || didChange
         }
     }
 

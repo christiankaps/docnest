@@ -1,7 +1,13 @@
 import AppKit
+import OSLog
 import SwiftUI
 import SwiftData
 
+// The application entry point for DocNest lives in this file.
+//
+// It owns process-wide concerns such as scene setup, menu configuration,
+// focused-value command wiring, library-session restoration, and app-level
+// routing of Services and open-URL events into the currently active library session.
 // MARK: - Focused Value for Library Session
 
 private struct LibrarySessionKey: FocusedValueKey {
@@ -14,6 +20,18 @@ private struct ExportDocumentsActionKey: FocusedValueKey {
 
 private struct PasteDocumentsActionKey: FocusedValueKey {
     typealias Value = () -> Void
+}
+
+private struct SelectAllDocumentsActionKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
+private struct ToggleInspectorActionKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
+private struct InspectorCollapsedStateKey: FocusedValueKey {
+    typealias Value = Bool
 }
 
 extension FocusedValues {
@@ -31,31 +49,180 @@ extension FocusedValues {
         get { self[PasteDocumentsActionKey.self] }
         set { self[PasteDocumentsActionKey.self] = newValue }
     }
+
+    var selectAllDocumentsAction: (() -> Void)? {
+        get { self[SelectAllDocumentsActionKey.self] }
+        set { self[SelectAllDocumentsActionKey.self] = newValue }
+    }
+
+    var toggleInspectorAction: (() -> Void)? {
+        get { self[ToggleInspectorActionKey.self] }
+        set { self[ToggleInspectorActionKey.self] = newValue }
+    }
+
+    var isInspectorCollapsed: Bool? {
+        get { self[InspectorCollapsedStateKey.self] }
+        set { self[InspectorCollapsedStateKey.self] = newValue }
+    }
 }
 
 // MARK: - App Delegate
 
 private final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var menuCleanupTimer: Timer?
+    private var menuCleanupDeadline: Date?
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        removeUnwantedEditMenuItems()
+        startMenuCleanupPass()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        startMenuCleanupPass()
+    }
+
+    func applicationWillResignActive(_ notification: Notification) {
+        stopMenuCleanupTimer()
+    }
+
+    private func configureMainMenu() {
+        removeUnwantedMenuItems()
+        normalizeMenusRecursively()
         removeEmptyMenus()
     }
 
-    /// Removes system-injected Edit menu items that are not relevant for this app.
-    private func removeUnwantedEditMenuItems() {
+    private func startMenuCleanupPass() {
+        configureMainMenu()
+
+        menuCleanupDeadline = Date().addingTimeInterval(5)
+        if menuCleanupTimer == nil {
+            menuCleanupTimer = Timer.scheduledTimer(
+                withTimeInterval: 0.5,
+                repeats: true
+            ) { [weak self] _ in
+                guard let self else { return }
+                self.configureMainMenu()
+
+                if let deadline = self.menuCleanupDeadline, Date() >= deadline {
+                    self.stopMenuCleanupTimer()
+                }
+            }
+        }
+    }
+
+    private func stopMenuCleanupTimer() {
+        menuCleanupTimer?.invalidate()
+        menuCleanupTimer = nil
+        menuCleanupDeadline = nil
+    }
+
+    /// Removes system-injected menu items that are not relevant for this app.
+    private func removeUnwantedMenuItems() {
         guard let mainMenu = NSApplication.shared.mainMenu else { return }
-        let unwantedTitles: Set<String> = ["Writing Tools", "AutoFill"]
-        for menuItem in mainMenu.items {
-            guard let submenu = menuItem.submenu else { continue }
-            for item in submenu.items where unwantedTitles.contains(item.title) {
-                submenu.removeItem(item)
+        let unwantedExactTitles: Set<String> = [
+            "Writing Tools",
+            "Schreibwerkzeuge",
+            "AutoFill",
+            "Spelling and Grammar",
+            "Rechtschreibung und Grammatik",
+            "Substitutions",
+            "Ersetzungen",
+            "Transformations",
+            "Umwandlungen",
+            "Speech",
+            "Sprachausgabe",
+            "Start Dictation…",
+            "Diktat starten…",
+            "Emoji & Symbols",
+            "Emoji und Symbole",
+            "Toolbar",
+            "Show Toolbar",
+            "Hide Toolbar",
+            "Customize Toolbar…",
+            "Show Sidebar",
+            "Hide Sidebar"
+        ]
+        let unwantedTitleFragments = [
+            "Writing Tools",
+            "Schreibwerkzeuge"
+        ]
+        removeMenuItems(
+            in: mainMenu,
+            matchingExactTitles: unwantedExactTitles,
+            containingTitleFragments: unwantedTitleFragments
+        )
+
+        if let formatMenuItem = mainMenu.items.first(where: { $0.title == "Format" }) {
+            mainMenu.removeItem(formatMenuItem)
+        }
+    }
+
+    private func removeMenuItems(
+        in menu: NSMenu,
+        matchingExactTitles exactTitles: Set<String>,
+        containingTitleFragments titleFragments: [String]
+    ) {
+        for item in menu.items.reversed() {
+            if let submenu = item.submenu {
+                removeMenuItems(
+                    in: submenu,
+                    matchingExactTitles: exactTitles,
+                    containingTitleFragments: titleFragments
+                )
+            }
+
+            let matchesExactTitle = exactTitles.contains(item.title)
+            let matchesTitleFragment = titleFragments.contains { fragment in
+                item.title.localizedCaseInsensitiveContains(fragment)
+            }
+
+            if matchesExactTitle || matchesTitleFragment {
+                menu.removeItem(item)
+            }
+        }
+    }
+
+    /// Removes empty items and repeated/edge separators so partially replaced
+    /// SwiftUI command groups do not leave visual debris in the menu bar.
+    private func normalizeMenusRecursively() {
+        guard let mainMenu = NSApplication.shared.mainMenu else { return }
+        normalize(menu: mainMenu)
+    }
+
+    private func normalize(menu: NSMenu) {
+        for item in menu.items {
+            if let submenu = item.submenu {
+                normalize(menu: submenu)
+            }
+        }
+
+        var previousWasSeparator = true
+        for item in menu.items.reversed() {
+            let submenuIsEmpty = item.submenu.map { submenu in
+                submenu.items.allSatisfy(\.isSeparatorItem)
+            } ?? false
+
+            let isEmptyLeafItem = !item.isSeparatorItem
+                && item.submenu == nil
+                && item.action == nil
+                && item.keyEquivalent.isEmpty
+                && item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+            if submenuIsEmpty || isEmptyLeafItem {
+                menu.removeItem(item)
+                continue
+            }
+
+            if item.isSeparatorItem {
+                if previousWasSeparator {
+                    menu.removeItem(item)
+                }
+                previousWasSeparator = true
+            } else {
+                previousWasSeparator = false
             }
         }
     }
@@ -63,9 +230,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Removes top-level menus that have no meaningful content.
     private func removeEmptyMenus() {
         guard let mainMenu = NSApplication.shared.mainMenu else { return }
-        let unwantedMenus: Set<String> = ["Format", "View", "Help"]
+        let removableMenus: Set<String> = ["File", "Edit", "Format", "View", "Window", "Help"]
         mainMenu.items.removeAll { item in
-            guard unwantedMenus.contains(item.title) else { return false }
+            guard removableMenus.contains(item.title) else { return false }
             let realItems = item.submenu?.items.filter { !$0.isSeparatorItem } ?? []
             return realItems.isEmpty
         }
@@ -79,6 +246,9 @@ struct DocNestApp: App {
     @FocusedValue(\.librarySession) private var librarySession
     @FocusedValue(\.exportDocumentsAction) private var exportDocumentsAction
     @FocusedValue(\.pasteDocumentsAction) private var pasteDocumentsAction
+    @FocusedValue(\.selectAllDocumentsAction) private var selectAllDocumentsAction
+    @FocusedValue(\.toggleInspectorAction) private var toggleInspectorAction
+    @FocusedValue(\.isInspectorCollapsed) private var isInspectorCollapsed
 
     /// Kept alive for the lifetime of the app so macOS can invoke the service.
     private let servicesProvider = ServicesProvider()
@@ -114,7 +284,10 @@ struct DocNestApp: App {
             DocNestMenuCommands(
                 librarySession: librarySession,
                 exportDocumentsAction: exportDocumentsAction,
-                pasteDocumentsAction: pasteDocumentsAction
+                pasteDocumentsAction: pasteDocumentsAction,
+                selectAllDocumentsAction: selectAllDocumentsAction,
+                toggleInspectorAction: toggleInspectorAction,
+                isInspectorCollapsed: isInspectorCollapsed
             )
         }
     }
@@ -122,17 +295,20 @@ struct DocNestApp: App {
 
 // MARK: - Menu Commands
 
-/// Suppresses unused system-injected menus (View, Format, Help) and empty
-/// standard command groups (Undo/Redo, Save, Print).
+/// Suppresses unused system-injected command groups so the menu bar only shows
+/// actions DocNest actually supports.
 struct SuppressUnusedMenuCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .undoRedo) { }
         CommandGroup(replacing: .saveItem) { }
         CommandGroup(replacing: .printItem) { }
+        CommandGroup(replacing: .newItem) { }
+        CommandGroup(replacing: .systemServices) { }
+        CommandGroup(replacing: .windowArrangement) { }
+        CommandGroup(replacing: .windowSize) { }
         CommandGroup(replacing: .sidebar) { }
         CommandGroup(replacing: .toolbar) { }
         CommandGroup(replacing: .textFormatting) { }
-        CommandGroup(replacing: .help) { }
     }
 }
 
@@ -141,6 +317,9 @@ struct DocNestMenuCommands: Commands {
     let librarySession: LibrarySessionController?
     let exportDocumentsAction: (() -> Void)?
     let pasteDocumentsAction: (() -> Void)?
+    let selectAllDocumentsAction: (() -> Void)?
+    let toggleInspectorAction: (() -> Void)?
+    let isInspectorCollapsed: Bool?
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
@@ -148,6 +327,26 @@ struct DocNestMenuCommands: Commands {
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 AboutWindowController.shared.showWindow(nil)
             }
+
+            Button("Check for Updates…") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                AppUpdateService.shared.checkForUpdates()
+            }
+
+            Divider()
+
+            Button("DocNest Help") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                HelpWindowController.shared.showWindow(nil)
+            }
+            .keyboardShortcut("?", modifiers: [.command, .shift])
+        }
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings…") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                AppSettingsController.shared.show()
+            }
+            .keyboardShortcut(",", modifiers: [.command])
         }
         CommandGroup(replacing: .newItem) {
             Button("Create Library") {
@@ -194,16 +393,25 @@ struct DocNestMenuCommands: Commands {
             }
             .keyboardShortcut("l", modifiers: [.command])
 
-            Divider()
-
-            Button("Manage Labels\u{2026}") {
-                NotificationCenter.default.post(name: .docNestLabelManager, object: nil)
+            Button("Select All") {
+                selectAllDocumentsAction?()
             }
-            .keyboardShortcut("l", modifiers: [.command, .shift])
-
-            Button("Watch Folders\u{2026}") {
-                NotificationCenter.default.post(name: .docNestWatchFolderSettings, object: nil)
+            .keyboardShortcut("a", modifiers: [.command])
+            .disabled(selectAllDocumentsAction == nil)
+        }
+        CommandGroup(replacing: .help) {
+            Button("DocNest Help") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                HelpWindowController.shared.showWindow(nil)
             }
+            .keyboardShortcut("?", modifiers: [.command, .shift])
+        }
+        CommandMenu("View") {
+            Button(isInspectorCollapsed == true ? "Show Details" : "Hide Details") {
+                toggleInspectorAction?()
+            }
+            .keyboardShortcut("d", modifiers: [.control])
+            .disabled(toggleInspectorAction == nil)
         }
     }
 }
@@ -250,6 +458,15 @@ private struct AppRootView: View {
         }
     }
 
+    @ViewBuilder
+    private func appearanceMenuLabel(for mode: AppearanceMode) -> some View {
+        if appearanceMode == mode {
+            Label(mode.label, systemImage: "checkmark")
+        } else {
+            Text(mode.label)
+        }
+    }
+
     var body: some View {
         Group {
             if let libraryURL = librarySession.selectedLibraryURL,
@@ -277,12 +494,7 @@ private struct AppRootView: View {
                         Button {
                             appearanceMode = mode
                         } label: {
-                            HStack {
-                                Text(mode.label)
-                                if appearanceMode == mode {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
+                            appearanceMenuLabel(for: mode)
                         }
                     }
                 } label: {
@@ -436,7 +648,15 @@ private struct AppRootView: View {
 }
 
 @MainActor
+/// Owns the currently selected library session across app launches.
+///
+/// The session controller bridges app lifecycle events and library access:
+/// it restores the last valid library, creates or opens new libraries, holds
+/// the active `ModelContainer`, and queues import URLs until a library becomes
+/// available.
 final class LibrarySessionController: ObservableObject {
+    private static let logger = Logger(subsystem: "com.kaps.docnest", category: "LibrarySession")
+    private static let isRunningUnderTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     @Published private(set) var selectedLibraryURL: URL?
     @Published private(set) var modelContainer: ModelContainer?
     @Published var libraryErrorMessage: String?
@@ -446,6 +666,8 @@ final class LibrarySessionController: ObservableObject {
     private static let lockHeartbeatInterval: TimeInterval = 30
 
     private var terminationObserver: Any?
+    private var activeLibraryAccessSession: DocumentLibraryService.LibraryAccessSession?
+    private var integrityRefreshTask: Task<Void, Never>?
 
     func queueImportURLs(_ urls: [URL]) {
         pendingImportURLs.append(contentsOf: urls)
@@ -458,12 +680,16 @@ final class LibrarySessionController: ObservableObject {
     }
 
     func restorePersistedLibrary() {
-        guard selectedLibraryURL == nil,
-              let persistedLibraryURL = DocumentLibraryService.restorePersistedLibraryURL() else {
+        guard !Self.isRunningUnderTests else {
             return
         }
 
-        openValidatedLibrary(at: persistedLibraryURL)
+        guard selectedLibraryURL == nil,
+              let accessSession = DocumentLibraryService.restorePersistedLibraryAccess() else {
+            return
+        }
+
+        openValidatedLibrary(accessSession)
     }
 
     func createLibrary() {
@@ -473,7 +699,7 @@ final class LibrarySessionController: ObservableObject {
 
         do {
             let libraryURL = try DocumentLibraryService.createLibrary(at: url)
-            try openLibrary(at: libraryURL)
+            openValidatedLibrary(DocumentLibraryService.accessLibrary(at: libraryURL))
         } catch {
             libraryErrorMessage = error.localizedDescription
         }
@@ -484,42 +710,88 @@ final class LibrarySessionController: ObservableObject {
             return
         }
 
-        openValidatedLibrary(at: url)
+        openValidatedLibrary(DocumentLibraryService.accessLibrary(at: url))
     }
 
     func openLibraryFromFinder(_ url: URL) {
-        openValidatedLibrary(at: url)
+        openValidatedLibrary(DocumentLibraryService.accessLibrary(at: url))
     }
 
     func closeLibrary() {
+        integrityRefreshTask?.cancel()
+        integrityRefreshTask = nil
         stopLockHeartbeat()
         if let url = selectedLibraryURL {
             DocumentLibraryService.releaseLock(for: url)
         }
+        if let accessSession = activeLibraryAccessSession,
+           accessSession.startedAccessingSecurityScope {
+            accessSession.url.stopAccessingSecurityScopedResource()
+        }
+        activeLibraryAccessSession = nil
         selectedLibraryURL = nil
         modelContainer = nil
     }
 
-    private func openValidatedLibrary(at url: URL) {
+    private func openValidatedLibrary(_ accessSession: DocumentLibraryService.LibraryAccessSession) {
         do {
-            let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: url)
-            try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
+            let packageRepair = try DocumentLibraryService.repairLibraryPackageIfNeeded(at: accessSession.url)
+            let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: accessSession.url)
+            let migration = try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
             try DocumentLibraryService.acquireLock(for: validatedURL)
-            try openLibrary(at: validatedURL)
+            try openLibrary(
+                DocumentLibraryService.LibraryAccessSession(
+                    url: validatedURL,
+                    startedAccessingSecurityScope: accessSession.startedAccessingSecurityScope
+                ),
+                manifest: DocumentLibraryManifest(
+                    formatVersion: migration.toFormatVersion,
+                    createdAt: manifest.createdAt
+                ),
+                migration: migration,
+                packageRepair: packageRepair
+            )
         } catch {
-            closeLibrary()
-            DocumentLibraryService.persistLibraryURL(nil)
+            if accessSession.startedAccessingSecurityScope {
+                accessSession.url.stopAccessingSecurityScopedResource()
+            }
             libraryErrorMessage = error.localizedDescription
         }
     }
 
-    private func openLibrary(at libraryURL: URL) throws {
-        modelContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
-        selectedLibraryURL = libraryURL
-        DocumentLibraryService.persistLibraryURL(libraryURL)
+    private func openLibrary(
+        _ accessSession: DocumentLibraryService.LibraryAccessSession,
+        manifest: DocumentLibraryManifest,
+        migration: LibraryMigrationResult,
+        packageRepair: LibraryRepairResult
+    ) throws {
+        let container = try DocumentLibraryService.openModelContainer(for: accessSession.url)
+        if let currentURL = selectedLibraryURL,
+           currentURL != accessSession.url {
+            closeLibrary()
+        }
+        modelContainer = container
+        selectedLibraryURL = accessSession.url
+        activeLibraryAccessSession = accessSession
+        DocumentLibraryService.persistLibraryURL(accessSession.url)
         libraryErrorMessage = nil
-        startLockHeartbeat(for: libraryURL)
-        observeAppTermination(for: libraryURL)
+        startLockHeartbeat(for: accessSession.url)
+        observeAppTermination(for: accessSession.url)
+        integrityRefreshTask?.cancel()
+        integrityRefreshTask = Task { [libraryURL = accessSession.url, manifest, migration, packageRepair] in
+            do {
+                _ = try await DocumentLibraryService.refreshIntegrityArtifacts(
+                    for: libraryURL,
+                    manifest: manifest,
+                    migration: migration,
+                    packageRepair: packageRepair
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                Self.logger.error("Failed to refresh integrity artifacts: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     // MARK: - Lock Heartbeat

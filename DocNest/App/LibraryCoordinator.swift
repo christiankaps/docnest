@@ -32,8 +32,26 @@ enum WatchFolderStatus {
 
 @MainActor
 @Observable
+/// Central UI-state coordinator for the open-library experience.
+///
+/// The coordinator sits between persisted SwiftData models and SwiftUI views.
+/// It owns transient interaction state such as selection, filters, progress,
+/// summary messages, derived sidebar counts, and watch-folder wiring while
+/// delegating business behavior to dedicated use cases and services.
 final class LibraryCoordinator {
     private static let performanceLogger = Logger(subsystem: "com.kaps.docnest", category: "performance")
+
+    private struct DerivedStateResult: Sendable {
+        let filteredDocumentIDs: [UUID]
+        let smartFolderCounts: [UUID: Int]
+        let sectionCounts: [LibrarySection: Int]
+        let labelCounts: [UUID: Int]
+    }
+
+    private enum DerivedSidebarSelection: Sendable {
+        case section(LibrarySection)
+        case smartFolder(UUID)
+    }
 
     // MARK: - Injected dependencies (set once by RootView)
     var libraryURL: URL?
@@ -55,6 +73,7 @@ final class LibraryCoordinator {
     var isQuickLabelPickerPresented = false
     var isLabelManagerPresented = false
     var isWatchFolderSettingsPresented = false
+    var isInspectorCollapsed = false
     var labelFilterSelection = DeferredSelectionState<PersistentIdentifier>()
 
     // MARK: - OCR state
@@ -71,16 +90,51 @@ final class LibraryCoordinator {
     private(set) var activeDocuments: [DocumentRecord] = []
     private(set) var trashedDocuments: [DocumentRecord] = []
     private(set) var filteredDocuments: [DocumentRecord] = []
+    private(set) var filteredDocumentsVersion = 0
     private(set) var selectedDocuments: [DocumentRecord] = []
-    private(set) var cachedShareURLs: [URL] = []
+    private(set) var displayedSelectedDocuments: [DocumentRecord] = []
+    private(set) var displayedShareURLs: [URL] = []
+    private(set) var selectedDocumentIDsToDrag: [UUID] = []
     private(set) var sidebarCounts = LibrarySidebarCounts.empty
+    private(set) var existingContentHashes: Set<String> = []
+    private var labelsByUUID: [UUID: LabelTag] = [:]
+    private var labelUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
+    private var smartFoldersByPersistentID: [PersistentIdentifier: SmartFolder] = [:]
+    private var documentUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
+    private var documentByUUID: [UUID: DocumentRecord] = [:]
+    private var filteredDocumentByPersistentID: [PersistentIdentifier: DocumentRecord] = [:]
+    private var filteredDocumentOrderByPersistentID: [PersistentIdentifier: Int] = [:]
+    private var activeDocumentSnapshots: [SearchDocumentsUseCase.Snapshot] = []
+    private var trashedDocumentSnapshots: [SearchDocumentsUseCase.Snapshot] = []
 
     // MARK: - Internal
     private var activeImportTask: Task<Void, Never>?
-    private let folderMonitorService = FolderMonitorService()
+    private let watchFolderController = WatchFolderController()
     private var pendingLabelFilterApplyTask: Task<Void, Never>?
+    private var pendingDisplayedSelectionTask: Task<Void, Never>?
+    private var pendingSearchRecomputeTask: Task<Void, Never>?
+    private var pendingDerivedStateTask: Task<Void, Never>?
+    private var pendingDisplayedShareURLsTask: Task<Void, Never>?
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
+    private let displayedSelectionDelay: Duration = .milliseconds(65)
+    private let searchRecomputeDelay: Duration = .milliseconds(85)
+    private var lastSelectionInteractionStart: TimeInterval?
+    private var isImmediateDisplayedSelectionPending = false
+    private var derivedStateGeneration = 0
     let recentDocumentLimit = 10
+
+    deinit {
+        MainActor.assumeIsolated {
+            activeImportTask?.cancel()
+            activeOCRTask?.cancel()
+            pendingLabelFilterApplyTask?.cancel()
+            pendingDisplayedSelectionTask?.cancel()
+            pendingSearchRecomputeTask?.cancel()
+            pendingDerivedStateTask?.cancel()
+            pendingDisplayedShareURLsTask?.cancel()
+            watchFolderController.tearDown()
+        }
+    }
 
     // MARK: - Convenience selection helpers
 
@@ -98,6 +152,14 @@ final class LibraryCoordinator {
         sidebarSelection == .section(.bin)
     }
 
+    var isInspectorSelectionPending: Bool {
+        selectedDocumentIDs != Set(displayedSelectedDocuments.map(\.persistentModelID))
+    }
+
+    var immediateSelectionDocuments: [DocumentRecord] {
+        selectedDocuments
+    }
+
     /// Whether the current interactive label filter selection exactly matches a smart folder's labels.
     func labelFilterMatchesSmartFolder(_ folder: SmartFolder) -> Bool {
         guard selectedSmartFolderID == nil else { return false }
@@ -111,7 +173,7 @@ final class LibraryCoordinator {
     /// When a smart folder is selected, this reflects the folder's labels instead of the interactive filter.
     var effectiveHighlightedLabelIDs: Set<PersistentIdentifier> {
         if let folderID = selectedSmartFolderID,
-           let folder = allSmartFolders.first(where: { $0.persistentModelID == folderID }) {
+           let folder = smartFoldersByPersistentID[folderID] {
             return resolvedLabelPersistentIDs(from: folder.labelIDs)
         }
         return labelFilterSelection.visualSelection
@@ -119,125 +181,375 @@ final class LibraryCoordinator {
 
     // MARK: - Data ingestion
 
+    /// Synchronizes the latest queried SwiftData models into coordinator-managed
+    /// UI state and recomputes all derived views when needed.
     func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag], allSmartFolders: [SmartFolder] = [], allLabelGroups: [LabelGroup] = [], allWatchFolders: [WatchFolder] = []) {
-        self.allLabels = allLabels
-        self.allSmartFolders = allSmartFolders
-        self.allLabelGroups = allLabelGroups
-        self.allWatchFolders = allWatchFolders
+        syncMetadata(labels: allLabels, smartFolders: allSmartFolders, labelGroups: allLabelGroups, recompute: false)
+        syncWatchFolders(allWatchFolders, refreshMonitors: false)
+        syncDocuments(allDocuments, recompute: true)
+    }
+
+    func syncDocuments(_ allDocuments: [DocumentRecord], recompute: Bool = true) {
+        documentUUIDByPersistentID = Dictionary(uniqueKeysWithValues: allDocuments.map { ($0.persistentModelID, $0.id) })
+        documentByUUID = Dictionary(uniqueKeysWithValues: allDocuments.map { ($0.id, $0) })
 
         var active: [DocumentRecord] = []
         var trashed: [DocumentRecord] = []
+        var activeSnapshots: [SearchDocumentsUseCase.Snapshot] = []
+        var trashedSnapshots: [SearchDocumentsUseCase.Snapshot] = []
+        active.reserveCapacity(allDocuments.count)
+        trashed.reserveCapacity(min(allDocuments.count / 8, allDocuments.count))
+        activeSnapshots.reserveCapacity(allDocuments.count)
+        trashedSnapshots.reserveCapacity(min(allDocuments.count / 8, allDocuments.count))
+
         for document in allDocuments {
+            let snapshot = SearchDocumentsUseCase.Snapshot(
+                documentID: document.id,
+                labelIDs: Set(document.labels.map(\.id)),
+                title: document.title,
+                originalFileName: document.originalFileName,
+                labelNames: document.labels.map(\.name),
+                fullText: document.fullText
+            )
             if document.trashedAt == nil {
                 active.append(document)
+                activeSnapshots.append(snapshot)
             } else {
                 trashed.append(document)
+                trashedSnapshots.append(snapshot)
             }
         }
+
         activeDocuments = active
         trashedDocuments = trashed
-
-        recomputeSmartFolderCounts()
-        recomputeFilteredDocuments()
+        activeDocumentSnapshots = activeSnapshots
+        trashedDocumentSnapshots = trashedSnapshots
+        existingContentHashes = Set(allDocuments.lazy.map(\.contentHash))
         recomputeSelectedDocuments()
+
+        if recompute {
+            recomputeFilteredDocuments()
+        }
+    }
+
+    func syncMetadata(
+        labels: [LabelTag],
+        smartFolders: [SmartFolder],
+        labelGroups: [LabelGroup],
+        recompute: Bool = true
+    ) {
+        allLabels = labels
+        allSmartFolders = smartFolders
+        allLabelGroups = labelGroups
+        labelsByUUID = Dictionary(uniqueKeysWithValues: labels.map { ($0.id, $0) })
+        labelUUIDByPersistentID = Dictionary(uniqueKeysWithValues: labels.map { ($0.persistentModelID, $0.id) })
+        smartFoldersByPersistentID = Dictionary(uniqueKeysWithValues: smartFolders.map { ($0.persistentModelID, $0) })
+
+        if recompute {
+            recomputeFilteredDocuments()
+        }
+    }
+
+    func syncWatchFolders(_ watchFolders: [WatchFolder], refreshMonitors: Bool = true) {
+        allWatchFolders = watchFolders
+        if refreshMonitors {
+            refreshWatchFolderMonitors()
+        }
     }
 
     // MARK: - Recomputation
 
+    /// Rebuilds the document list, sidebar counts, and label counts from the
+    /// current selection, filter, and search state.
+    ///
+    /// The expensive filtering work happens off the main actor and is guarded
+    /// by generation checks so stale computations do not overwrite newer UI state.
     func recomputeFilteredDocuments() {
         #if DEBUG
         let startTime = Date().timeIntervalSinceReferenceDate
         #endif
 
-        let sectionDocuments = sectionScopedDocuments
+        pendingDerivedStateTask?.cancel()
+        derivedStateGeneration += 1
+        let generation = derivedStateGeneration
 
-        if selectedSmartFolderID != nil {
-            // Smart folder already applied its own query + label filter
-            filteredDocuments = sectionDocuments
-        } else {
-            filteredDocuments = SearchDocumentsUseCase.filter(
-                sectionDocuments,
-                query: searchText,
-                selectedLabelIDs: labelFilterSelection.appliedSelection
-            )
-        }
-
-        recomputeSidebarCounts(sectionDocuments: sectionDocuments)
-
-        #if DEBUG
-        debugLogFilterTiming(
-            startTime: startTime,
-            sourceCount: sectionDocuments.count,
-            filteredCount: filteredDocuments.count,
-            queryLength: searchText.count,
-            activeLabelFilters: labelFilterSelection.appliedSelection.count
+        let selectedLabelUUIDs = resolvedLabelUUIDs(from: labelFilterSelection.appliedSelection)
+        let sidebarSelection = derivedSidebarSelection
+        let smartFolderLabelUUIDs = Dictionary(
+            uniqueKeysWithValues: allSmartFolders.map { ($0.id, Set($0.labelIDs)) }
         )
-        #endif
-    }
+        let allLabelIDs = allLabels.map(\.id)
+        let recentLimit = recentDocumentLimit
+        let query = searchText
+        let activeSnapshots = activeDocumentSnapshots
+        let trashedSnapshots = trashedDocumentSnapshots
 
-    private var sectionScopedDocuments: [DocumentRecord] {
-        switch sidebarSelection {
-        case .section(.allDocuments):
-            activeDocuments
-        case .section(.recent):
-            Array(activeDocuments.prefix(recentDocumentLimit))
-        case .section(.needsLabels):
-            activeDocuments.filter { $0.labels.isEmpty }
-        case .section(.bin):
-            trashedDocuments
-        case .smartFolder(let folderID):
-            smartFolderDocuments(for: folderID)
-        }
-    }
+        pendingDerivedStateTask = Task(priority: .userInitiated) { [weak self] in
+            let result: DerivedStateResult
+            do {
+                result = try Self.buildDerivedState(
+                    sidebarSelection: sidebarSelection,
+                    query: query,
+                    selectedLabelUUIDs: selectedLabelUUIDs,
+                    activeDocuments: activeSnapshots,
+                    trashedDocuments: trashedSnapshots,
+                    smartFolderLabelUUIDs: smartFolderLabelUUIDs,
+                    allLabelIDs: allLabelIDs,
+                    recentLimit: recentLimit
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
 
-    private func smartFolderDocuments(for folderID: PersistentIdentifier) -> [DocumentRecord] {
-        guard let folder = allSmartFolders.first(where: { $0.persistentModelID == folderID }) else {
-            return []
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard let self else { return }
+                guard !Task.isCancelled else { return }
+                guard self.derivedStateGeneration == generation else { return }
+
+                self.smartFolderCounts = Dictionary(uniqueKeysWithValues: self.allSmartFolders.map { folder in
+                    (folder.persistentModelID, result.smartFolderCounts[folder.id, default: 0])
+                })
+                self.filteredDocuments = result.filteredDocumentIDs.compactMap { self.documentByUUID[$0] }
+                self.filteredDocumentsVersion &+= 1
+                self.sidebarCounts = LibrarySidebarCounts(
+                    sectionCounts: result.sectionCounts,
+                    labelCounts: Dictionary(uniqueKeysWithValues: self.allLabels.map { label in
+                        (label.persistentModelID, result.labelCounts[label.id, default: 0])
+                    })
+                )
+                self.rebuildFilteredDocumentLookups()
+                self.pruneSelectedDocumentIDs()
+
+                #if DEBUG
+                self.debugLogFilterTiming(
+                    startTime: startTime,
+                    sourceCount: Self.derivedSourceCount(
+                        for: sidebarSelection,
+                        activeCount: activeSnapshots.count,
+                        trashedCount: trashedSnapshots.count,
+                        recentLimit: recentLimit,
+                        activeDocuments: activeSnapshots,
+                        smartFolderLabelUUIDs: smartFolderLabelUUIDs
+                    ),
+                    filteredCount: self.filteredDocuments.count,
+                    queryLength: query.count,
+                    activeLabelFilters: self.labelFilterSelection.appliedSelection.count
+                )
+                #endif
+            }
         }
-        let labelPIDs = resolvedLabelPersistentIDs(from: folder.labelIDs)
-        return SearchDocumentsUseCase.filter(
-            activeDocuments,
-            query: "",
-            selectedLabelIDs: labelPIDs
-        )
     }
 
     private func resolvedLabelPersistentIDs(from uuids: [UUID]) -> Set<PersistentIdentifier> {
         var result = Set<PersistentIdentifier>()
         for uuid in uuids {
-            if let label = allLabels.first(where: { $0.id == uuid }) {
+            if let label = labelsByUUID[uuid] {
                 result.insert(label.persistentModelID)
             }
         }
         return result
     }
 
-    private func recomputeSmartFolderCounts() {
-        var counts: [PersistentIdentifier: Int] = [:]
-        for folder in allSmartFolders {
-            let labelPIDs = resolvedLabelPersistentIDs(from: folder.labelIDs)
-            counts[folder.persistentModelID] = SearchDocumentsUseCase.filter(
-                activeDocuments,
-                query: "",
-                selectedLabelIDs: labelPIDs
-            ).count
-        }
-        smartFolderCounts = counts
+    private func resolvedLabelUUIDs(from persistentIDs: Set<PersistentIdentifier>) -> Set<UUID> {
+        Set(persistentIDs.compactMap { labelUUIDByPersistentID[$0] })
     }
 
-    private func recomputeSidebarCounts(sectionDocuments: [DocumentRecord]) {
-        sidebarCounts = LibrarySidebarCounts(
+    private var derivedSidebarSelection: DerivedSidebarSelection {
+        switch sidebarSelection {
+        case .section(let section):
+            .section(section)
+        case .smartFolder(let persistentID):
+            if let folder = smartFoldersByPersistentID[persistentID] {
+                .smartFolder(folder.id)
+            } else {
+                .section(.allDocuments)
+            }
+        }
+    }
+
+    nonisolated private static func buildDerivedState(
+        sidebarSelection: DerivedSidebarSelection,
+        query: String,
+        selectedLabelUUIDs: Set<UUID>,
+        activeDocuments: [SearchDocumentsUseCase.Snapshot],
+        trashedDocuments: [SearchDocumentsUseCase.Snapshot],
+        smartFolderLabelUUIDs: [UUID: Set<UUID>],
+        allLabelIDs: [UUID],
+        recentLimit: Int
+    ) throws -> DerivedStateResult {
+        let sectionDocuments: [SearchDocumentsUseCase.Snapshot]
+
+        switch sidebarSelection {
+        case .section(.allDocuments):
+            sectionDocuments = activeDocuments
+        case .section(.recent):
+            sectionDocuments = Array(activeDocuments.prefix(recentLimit))
+        case .section(.needsLabels):
+            sectionDocuments = activeDocuments.filter { $0.labelIDs.isEmpty }
+        case .section(.bin):
+            sectionDocuments = trashedDocuments
+        case .smartFolder(let folderID):
+            let folderLabels = smartFolderLabelUUIDs[folderID] ?? []
+            sectionDocuments = try SearchDocumentsUseCase.filter(
+                activeDocuments,
+                query: "",
+                selectedLabelIDs: folderLabels
+            )
+        }
+
+        let filteredDocuments: [SearchDocumentsUseCase.Snapshot]
+        switch sidebarSelection {
+        case .smartFolder:
+            filteredDocuments = sectionDocuments
+        case .section:
+            filteredDocuments = try SearchDocumentsUseCase.filter(
+                sectionDocuments,
+                query: query,
+                selectedLabelIDs: selectedLabelUUIDs
+            )
+        }
+
+        let smartFolderCounts = computeSmartFolderCounts(
             activeDocuments: activeDocuments,
-            trashedCount: trashedDocuments.count,
-            labels: allLabels,
-            recentLimit: recentDocumentLimit,
-            labelSourceDocuments: sectionDocuments,
-            activeLabelFilterIDs: labelFilterSelection.appliedSelection
+            smartFolderLabelUUIDs: smartFolderLabelUUIDs
+        )
+
+        var needsLabelsCount = 0
+        for document in activeDocuments where document.labelIDs.isEmpty {
+            needsLabelsCount += 1
+        }
+
+        var labelCounts = Dictionary(uniqueKeysWithValues: allLabelIDs.map { ($0, 0) })
+        for (index, document) in sectionDocuments.enumerated() {
+            if index.isMultiple(of: 64) {
+                try Task.checkCancellation()
+            }
+            let matchesOtherFilters = selectedLabelUUIDs.allSatisfy { document.labelIDs.contains($0) }
+            guard matchesOtherFilters else { continue }
+
+            for labelID in document.labelIDs {
+                labelCounts[labelID, default: 0] += 1
+            }
+        }
+
+        return DerivedStateResult(
+            filteredDocumentIDs: filteredDocuments.map(\.documentID),
+            smartFolderCounts: smartFolderCounts,
+            sectionCounts: [
+                .allDocuments: activeDocuments.count,
+                .recent: min(activeDocuments.count, recentLimit),
+                .needsLabels: needsLabelsCount,
+                .bin: trashedDocuments.count
+            ],
+            labelCounts: labelCounts
+        )
+    }
+
+    nonisolated private static func derivedSourceCount(
+        for selection: DerivedSidebarSelection,
+        activeCount: Int,
+        trashedCount: Int,
+        recentLimit: Int,
+        activeDocuments: [SearchDocumentsUseCase.Snapshot],
+        smartFolderLabelUUIDs: [UUID: Set<UUID>]
+    ) -> Int {
+        switch selection {
+        case .section(.allDocuments):
+            return activeCount
+        case .section(.recent):
+            return min(activeCount, recentLimit)
+        case .section(.needsLabels):
+            return activeDocuments.filter { $0.labelIDs.isEmpty }.count
+        case .section(.bin):
+            return trashedCount
+        case .smartFolder(let folderID):
+            let labelIDs = smartFolderLabelUUIDs[folderID] ?? []
+            return (try? SearchDocumentsUseCase.filter(
+                activeDocuments,
+                query: "",
+                selectedLabelIDs: labelIDs
+            ))?.count ?? 0
+        }
+    }
+
+    nonisolated private static func computeSmartFolderCounts(
+        activeDocuments: [SearchDocumentsUseCase.Snapshot],
+        smartFolderLabelUUIDs: [UUID: Set<UUID>]
+    ) -> [UUID: Int] {
+        guard !smartFolderLabelUUIDs.isEmpty else { return [:] }
+
+        var counts = Dictionary(uniqueKeysWithValues: smartFolderLabelUUIDs.keys.map { ($0, 0) })
+        var candidateFoldersByLabelID: [UUID: [UUID]] = [:]
+        var requiredLabelCounts: [UUID: Int] = [:]
+        var emptyFolderIDs: [UUID] = []
+
+        for (folderID, labelIDs) in smartFolderLabelUUIDs {
+            requiredLabelCounts[folderID] = labelIDs.count
+            if labelIDs.isEmpty {
+                emptyFolderIDs.append(folderID)
+                continue
+            }
+
+            for labelID in labelIDs {
+                candidateFoldersByLabelID[labelID, default: []].append(folderID)
+            }
+        }
+
+        if !emptyFolderIDs.isEmpty {
+            for folderID in emptyFolderIDs {
+                counts[folderID] = activeDocuments.count
+            }
+        }
+
+        for (index, document) in activeDocuments.enumerated() {
+            if index.isMultiple(of: 64) && Task.isCancelled {
+                return counts
+            }
+            guard !document.labelIDs.isEmpty else { continue }
+
+            var matchedRequirements: [UUID: Int] = [:]
+            for labelID in document.labelIDs {
+                guard let folderIDs = candidateFoldersByLabelID[labelID] else { continue }
+                for folderID in folderIDs {
+                    matchedRequirements[folderID, default: 0] += 1
+                }
+            }
+
+            for (folderID, matchedCount) in matchedRequirements {
+                if matchedCount == requiredLabelCounts[folderID] {
+                    counts[folderID, default: 0] += 1
+                }
+            }
+        }
+
+        return counts
+    }
+
+    private func rebuildFilteredDocumentLookups() {
+        filteredDocumentByPersistentID = Dictionary(
+            uniqueKeysWithValues: filteredDocuments.map { ($0.persistentModelID, $0) }
+        )
+        filteredDocumentOrderByPersistentID = Dictionary(
+            uniqueKeysWithValues: filteredDocuments.enumerated().map { ($0.element.persistentModelID, $0.offset) }
         )
     }
 
     func recomputeSelectedDocuments() {
-        let explicitSelection = filteredDocuments.filter { selectedDocumentIDs.contains($0.persistentModelID) }
+        let knownSelectionIDs = Set(
+            selectedDocumentIDs.filter { documentUUIDByPersistentID[$0] != nil }
+        )
+        if knownSelectionIDs != selectedDocumentIDs {
+            selectedDocumentIDs = knownSelectionIDs
+        }
+
+        let explicitSelection = selectedDocumentIDs.compactMap { selectedDocument(for: $0) }
+            .sorted {
+                compareSelectionOrder($0, $1)
+            }
 
         if !explicitSelection.isEmpty {
             selectedDocuments = explicitSelection
@@ -250,7 +562,34 @@ final class LibraryCoordinator {
                 selectedDocumentIDs = []
             }
         }
-        cachedShareURLs = shareableFileURLs(from: selectedDocuments)
+        selectedDocumentIDsToDrag = selectedDocuments.compactMap { documentUUIDByPersistentID[$0.persistentModelID] }
+    }
+
+    private func selectedDocument(for persistentID: PersistentIdentifier) -> DocumentRecord? {
+        if let filteredDocument = filteredDocumentByPersistentID[persistentID] {
+            return filteredDocument
+        }
+
+        guard let documentID = documentUUIDByPersistentID[persistentID] else {
+            return nil
+        }
+
+        return documentByUUID[documentID]
+    }
+
+    private func compareSelectionOrder(_ lhs: DocumentRecord, _ rhs: DocumentRecord) -> Bool {
+        let leftIndex = filteredDocumentOrderByPersistentID[lhs.persistentModelID] ?? .max
+        let rightIndex = filteredDocumentOrderByPersistentID[rhs.persistentModelID] ?? .max
+        if leftIndex != rightIndex {
+            return leftIndex < rightIndex
+        }
+
+        let titleComparison = lhs.title.localizedCaseInsensitiveCompare(rhs.title)
+        if titleComparison != .orderedSame {
+            return titleComparison == .orderedAscending
+        }
+
+        return lhs.importedAt < rhs.importedAt
     }
 
     func pruneSelectedDocumentIDs() {
@@ -284,6 +623,126 @@ final class LibraryCoordinator {
         pendingLabelFilterApplyTask?.cancel()
     }
 
+    /// Coalesces inspector and passive share updates so row highlighting can update immediately on click.
+    func scheduleDisplayedSelectionUpdate() {
+        pendingDisplayedSelectionTask?.cancel()
+
+        if isImmediateDisplayedSelectionPending {
+            isImmediateDisplayedSelectionPending = false
+            syncDisplayedSelectionImmediately()
+            return
+        }
+
+        pendingDisplayedSelectionTask = Task { @MainActor in
+            try? await Task.sleep(for: displayedSelectionDelay)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            syncDisplayedSelectionImmediately()
+        }
+    }
+
+    func cancelPendingDisplayedSelectionUpdate() {
+        pendingDisplayedSelectionTask?.cancel()
+        pendingDisplayedShareURLsTask?.cancel()
+    }
+
+    /// Debounces text search updates to keep typing and row highlighting responsive.
+    func scheduleSearchRecompute() {
+        pendingSearchRecomputeTask?.cancel()
+        pendingSearchRecomputeTask = Task { @MainActor in
+            try? await Task.sleep(for: searchRecomputeDelay)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            recomputeFilteredDocuments()
+            pruneSelectedDocumentIDs()
+        }
+    }
+
+    func cancelPendingSearchRecompute() {
+        pendingSearchRecomputeTask?.cancel()
+    }
+
+    func cancelPendingDerivedStateRefresh() {
+        pendingDerivedStateTask?.cancel()
+    }
+
+    func tearDown() {
+        cancelPendingLabelFilter()
+        cancelPendingDisplayedSelectionUpdate()
+        cancelPendingSearchRecompute()
+        cancelPendingDerivedStateRefresh()
+        cancelImport()
+        cancelOCR()
+        tearDownWatchFolderMonitoring()
+    }
+
+    func syncDisplayedSelectionImmediately() {
+        displayedSelectedDocuments = selectedDocuments
+        displayedShareURLs = []
+        resolveDisplayedShareURLs(for: displayedSelectedDocuments)
+        logDisplayedSelectionCommit()
+    }
+
+    private func resolveDisplayedShareURLs(for documents: [DocumentRecord]) {
+        pendingDisplayedShareURLsTask?.cancel()
+
+        guard let libraryURL else {
+            displayedShareURLs = []
+            return
+        }
+
+        let candidates = documents.compactMap { document -> (UUID, String)? in
+            guard let path = document.storedFilePath else { return nil }
+            return (document.id, path)
+        }
+
+        pendingDisplayedShareURLsTask = Task(priority: .utility) { [weak self] in
+            var resolvedURLs: [URL] = []
+            resolvedURLs.reserveCapacity(candidates.count)
+
+            for (_, path) in candidates {
+                guard !Task.isCancelled else { return }
+                let exists = await DocumentStorageService.fileExistsAsync(at: path, libraryURL: libraryURL)
+                guard exists else { continue }
+                resolvedURLs.append(DocumentStorageService.fileURL(for: path, libraryURL: libraryURL))
+            }
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard let self else { return }
+                guard !Task.isCancelled else { return }
+                let currentIDs = self.displayedSelectedDocuments.map(\.id)
+                let targetIDs = candidates.map(\.0)
+                guard currentIDs == targetIDs else { return }
+                self.displayedShareURLs = resolvedURLs
+            }
+        }
+    }
+
+    func beginSelectionInteraction() {
+        lastSelectionInteractionStart = Date().timeIntervalSinceReferenceDate
+        isImmediateDisplayedSelectionPending = true
+    }
+
+    func scheduleSelectionVisualResponseLog() {
+        let startTime = lastSelectionInteractionStart
+        Task { @MainActor in
+            await Task.yield()
+            guard let startTime else { return }
+            let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
+            Self.performanceLogger.log(
+                "[Performance][SelectionVisual] count=\(self.selectedDocumentIDs.count) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
+            )
+        }
+    }
+
     func syncLabelFilterSelections(_ availableIDs: Set<PersistentIdentifier>) {
         pendingLabelFilterApplyTask?.cancel()
         labelFilterSelection.syncAvailableSelections(availableIDs)
@@ -295,6 +754,7 @@ final class LibraryCoordinator {
         guard let modelContext else { return }
         do {
             try DeleteDocumentsUseCase.restoreFromBin([document], using: modelContext)
+            recomputeFilteredDocuments()
         } catch {
             importSummaryMessage = error.localizedDescription
         }
@@ -304,6 +764,7 @@ final class LibraryCoordinator {
         guard let modelContext else { return }
         do {
             try DeleteDocumentsUseCase.restoreFromBin(trashedDocuments, using: modelContext)
+            recomputeFilteredDocuments()
         } catch {
             importSummaryMessage = error.localizedDescription
         }
@@ -318,6 +779,7 @@ final class LibraryCoordinator {
                 libraryURL: libraryURL,
                 using: modelContext
             )
+            recomputeFilteredDocuments()
         } catch {
             importSummaryMessage = error.localizedDescription
         }
@@ -327,6 +789,7 @@ final class LibraryCoordinator {
         guard let modelContext else { return }
         do {
             try DeleteDocumentsUseCase.moveToBin(documents, using: modelContext)
+            recomputeFilteredDocuments()
         } catch {
             importSummaryMessage = error.localizedDescription
         }
@@ -350,6 +813,7 @@ final class LibraryCoordinator {
             } else {
                 try ManageLabelsUseCase.assign(label, to: documents, using: modelContext)
             }
+            recomputeFilteredDocuments()
         } catch {
             importSummaryMessage = error.localizedDescription
         }
@@ -361,12 +825,13 @@ final class LibraryCoordinator {
         let activeDocuments = documents.filter { $0.trashedAt == nil }
         guard !activeDocuments.isEmpty else { return false }
 
-        guard let label = allLabels.first(where: { $0.id == labelID }) else {
+        guard let label = labelsByUUID[labelID] else {
             return false
         }
 
         do {
             try ManageLabelsUseCase.assign(label, to: activeDocuments, using: modelContext)
+            recomputeFilteredDocuments()
             return true
         } catch {
             importSummaryMessage = error.localizedDescription
@@ -440,7 +905,8 @@ final class LibraryCoordinator {
     func confirmDroppedLabelAssignment(allDocuments: [DocumentRecord]) {
         guard let modelContext,
               let pending = pendingDroppedLabelAssignment,
-              let label = allLabels.first(where: { $0.persistentModelID == pending.labelID }) else {
+              let labelUUID = labelUUIDByPersistentID[pending.labelID],
+              let label = labelsByUUID[labelUUID] else {
             pendingDroppedLabelAssignment = nil
             return
         }
@@ -463,6 +929,7 @@ final class LibraryCoordinator {
         do {
             try ManageLabelsUseCase.assign(label, to: missingAssignments, using: modelContext)
             pendingDroppedLabelAssignment = nil
+            recomputeFilteredDocuments()
         } catch {
             pendingDroppedLabelAssignment = nil
             importSummaryMessage = error.localizedDescription
@@ -488,6 +955,7 @@ final class LibraryCoordinator {
             } else {
                 try DeleteDocumentsUseCase.moveToBin(explicitSelection, using: modelContext)
             }
+            recomputeFilteredDocuments()
         } catch {
             importSummaryMessage = error.localizedDescription
         }
@@ -500,7 +968,7 @@ final class LibraryCoordinator {
 
         let activeFilterLabels: [LabelTag]
         if let folderID = selectedSmartFolderID,
-           let folder = allSmartFolders.first(where: { $0.persistentModelID == folderID }) {
+           let folder = smartFoldersByPersistentID[folderID] {
             let folderLabelUUIDs = Set(folder.labelIDs)
             activeFilterLabels = allLabels.filter { folderLabelUUIDs.contains($0.id) }
         } else {
@@ -511,14 +979,23 @@ final class LibraryCoordinator {
 
         importProgress = ImportProgress(total: 0, completed: 0)
 
+        // Manual imports and drop/paste/service imports all converge here so
+        // they share progress reporting, active-filter label assignment, and
+        // summary-message behavior.
         activeImportTask = Task { @MainActor [weak self] in
             let importResult = await ImportPDFDocumentsUseCase.execute(
                 urls: urls,
                 into: libraryURL,
                 autoAssignLabels: activeFilterLabels,
+                existingContentHashes: self?.existingContentHashes ?? [],
                 using: modelContext
             ) { [weak self] completed, total in
                 self?.importProgress = ImportProgress(total: total, completed: completed)
+            }
+
+            guard !Task.isCancelled else {
+                self?.activeImportTask = nil
+                return
             }
 
             self?.importProgress = nil
@@ -527,6 +1004,7 @@ final class LibraryCoordinator {
             if importResult.hasUserMessage {
                 self?.importSummaryMessage = importResult.summaryMessage
             }
+            self?.recomputeFilteredDocuments()
         }
     }
 
@@ -550,8 +1028,14 @@ final class LibraryCoordinator {
                 self?.ocrProgress = OCRProgress(total: total, completed: completed, currentTitle: title)
             }
 
+            guard !Task.isCancelled else {
+                self?.activeOCRTask = nil
+                return
+            }
+
             self?.ocrProgress = nil
             self?.activeOCRTask = nil
+            self?.recomputeFilteredDocuments()
         }
     }
 
@@ -572,21 +1056,24 @@ final class LibraryCoordinator {
         }
     }
 
+    func reExtractDocumentDate(for documents: [DocumentRecord], modelContext: ModelContext) {
+        guard !documents.isEmpty else { return }
+        for document in documents {
+            if let text = document.fullText, !text.isEmpty,
+               let extracted = DocumentDateExtractor.extractDate(from: text) {
+                document.documentDate = extracted
+            } else {
+                document.documentDate = document.importedAt
+            }
+        }
+        try? modelContext.save()
+        recomputeFilteredDocuments()
+    }
+
     func cancelOCR() {
         activeOCRTask?.cancel()
         activeOCRTask = nil
         ocrProgress = nil
-    }
-
-    func shareableFileURLs(from documents: [DocumentRecord]) -> [URL] {
-        guard let libraryURL else { return [] }
-        return documents.compactMap { document in
-            guard let path = document.storedFilePath,
-                  DocumentStorageService.fileExists(at: path, libraryURL: libraryURL) else {
-                return nil
-            }
-            return DocumentStorageService.fileURL(for: path, libraryURL: libraryURL)
-        }
     }
 
     // MARK: - Smart folder helpers
@@ -613,6 +1100,7 @@ final class LibraryCoordinator {
                     try ManageLabelsUseCase.assign(label, to: needsAssignment, using: modelContext)
                 }
             }
+            recomputeFilteredDocuments()
             return true
         } catch {
             importSummaryMessage = error.localizedDescription
@@ -621,43 +1109,28 @@ final class LibraryCoordinator {
     }
 
     func prefillLabelIDsForNewSmartFolder() -> [UUID] {
-        labelFilterSelection.appliedSelection.compactMap { persistentID in
-            allLabels.first(where: { $0.persistentModelID == persistentID })?.id
-        }
+        labelFilterSelection.appliedSelection.compactMap { labelUUIDByPersistentID[$0] }
     }
 
     // MARK: - Watch folder monitoring
 
+    /// Sets up callbacks so watch-folder detections re-enter the same import
+    /// pipeline used by manual imports.
     func setupWatchFolderMonitoring() {
-        folderMonitorService.onNewPDFsDetected = { [weak self] urls, labelIDs in
+        watchFolderController.onImportRequested = { [weak self] urls, labelIDs in
             self?.importFromWatchFolder(urls: urls, labelIDs: labelIDs)
         }
         refreshWatchFolderMonitors()
     }
 
     func refreshWatchFolderMonitors() {
-        for folder in allWatchFolders {
-            if folder.isEnabled && folderMonitorService.folderExists(at: folder.folderPath) {
-                if !folderMonitorService.isMonitoring(id: folder.id) {
-                    folderMonitorService.startMonitoring(folder)
-                } else {
-                    folderMonitorService.updateLabelIDs(for: folder.id, labelIDs: folder.labelIDs)
-                }
-            } else {
-                folderMonitorService.stopMonitoring(id: folder.id)
-            }
-        }
-
-        let currentIDs = Set(allWatchFolders.map(\.id))
-        for monitoredID in folderMonitorService.monitoredIDs where !currentIDs.contains(monitoredID) {
-            folderMonitorService.stopMonitoring(id: monitoredID)
-        }
-
-        recomputeWatchFolderStatuses()
+        watchFolderController.refresh(with: allWatchFolders)
+        watchFolderStatuses = watchFolderController.statuses
     }
 
     func tearDownWatchFolderMonitoring() {
-        folderMonitorService.stopAll()
+        watchFolderController.tearDown()
+        watchFolderStatuses = [:]
     }
 
     private func importFromWatchFolder(urls: [URL], labelIDs: [UUID]) {
@@ -670,27 +1143,15 @@ final class LibraryCoordinator {
                 urls: urls,
                 into: libraryURL,
                 autoAssignLabels: labelsToAssign,
+                existingContentHashes: self?.existingContentHashes ?? [],
                 using: modelContext
             )
 
             if result.importedCount > 0 {
                 self?.importSummaryMessage = "Watch folder: imported \(result.importedCount) document\(result.importedCount == 1 ? "" : "s")."
             }
+            self?.recomputeFilteredDocuments()
         }
-    }
-
-    private func recomputeWatchFolderStatuses() {
-        var statuses: [UUID: WatchFolderStatus] = [:]
-        for folder in allWatchFolders {
-            if !folderMonitorService.folderExists(at: folder.folderPath) {
-                statuses[folder.id] = .pathInvalid
-            } else if !folder.isEnabled {
-                statuses[folder.id] = .paused
-            } else {
-                statuses[folder.id] = .monitoring
-            }
-        }
-        watchFolderStatuses = statuses
     }
 
     // MARK: - Binding helpers
@@ -725,7 +1186,8 @@ final class LibraryCoordinator {
 
     var droppedLabelAssignmentTitle: String {
         guard let pending = pendingDroppedLabelAssignment,
-              let label = allLabels.first(where: { $0.persistentModelID == pending.labelID }) else {
+              let labelUUID = labelUUIDByPersistentID[pending.labelID],
+              let label = labelsByUUID[labelUUID] else {
             return "Assign Label"
         }
 
@@ -782,8 +1244,78 @@ final class LibraryCoordinator {
         )
         #endif
     }
+
+    private func logDisplayedSelectionCommit() {
+        #if DEBUG
+        let elapsedMs: Double
+        if let startTime = lastSelectionInteractionStart {
+            elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
+        } else {
+            elapsedMs = 0
+        }
+        Self.performanceLogger.log(
+            "[Performance][SelectionDeferred] displayed=\(self.displayedSelectedDocuments.count) shareURLs=\(self.displayedShareURLs.count) duration=\(elapsedMs, format: .fixed(precision: 2))ms"
+        )
+        #endif
+    }
 }
 
 extension LibrarySidebarCounts {
     static let empty = LibrarySidebarCounts(activeDocuments: [], trashedCount: 0, labels: [], recentLimit: 10, labelSourceDocuments: [], activeLabelFilterIDs: [])
+}
+
+@MainActor
+private final class WatchFolderController {
+    private let folderMonitorService = FolderMonitorService()
+
+    var onImportRequested: ((_ urls: [URL], _ labelIDs: [UUID]) -> Void)? {
+        didSet {
+            folderMonitorService.onNewPDFsDetected = onImportRequested
+        }
+    }
+
+    private(set) var statuses: [UUID: WatchFolderStatus] = [:]
+
+    func refresh(with watchFolders: [WatchFolder]) {
+        let currentIDs = Set(watchFolders.map(\.id))
+
+        for folder in watchFolders {
+            if folder.isEnabled && folderMonitorService.folderExists(at: folder.folderPath) {
+                if folderMonitorService.isMonitoring(id: folder.id),
+                   folderMonitorService.monitoredFolderPath(for: folder.id) == folder.folderPath {
+                    folderMonitorService.updateLabelIDs(for: folder.id, labelIDs: folder.labelIDs)
+                } else {
+                    folderMonitorService.stopMonitoring(id: folder.id)
+                    folderMonitorService.startMonitoring(folder)
+                }
+            } else {
+                folderMonitorService.stopMonitoring(id: folder.id)
+            }
+        }
+
+        for monitoredID in folderMonitorService.monitoredIDs where !currentIDs.contains(monitoredID) {
+            folderMonitorService.stopMonitoring(id: monitoredID)
+        }
+
+        recomputeStatuses(for: watchFolders)
+    }
+
+    func tearDown() {
+        folderMonitorService.stopAll()
+        statuses = [:]
+    }
+
+    private func recomputeStatuses(for watchFolders: [WatchFolder]) {
+        var nextStatuses: [UUID: WatchFolderStatus] = [:]
+        for folder in watchFolders {
+            if !folderMonitorService.folderExists(at: folder.folderPath) {
+                nextStatuses[folder.id] = .pathInvalid
+            } else if !folder.isEnabled {
+                nextStatuses[folder.id] = .paused
+            } else {
+                nextStatuses[folder.id] = .monitoring
+            }
+        }
+        statuses = nextStatuses
+    }
 }

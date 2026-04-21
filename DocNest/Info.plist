@@ -32,6 +32,18 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>ZIP Archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.zip-archive</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>Folder</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -80,6 +92,7 @@
 			<key>NSSendFileTypes</key>
 			<array>
 				<string>com.adobe.pdf</string>
+				<string>public.zip-archive</string>
 				<string>public.folder</string>
 			</array>
 		</dict>

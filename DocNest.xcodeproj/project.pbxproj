@@ -38,8 +38,8 @@
 		3FF08EEE2F6D80C400770D38 /* ManageSmartFoldersUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FF08EED2F6D80C400770D38 /* ManageSmartFoldersUseCase.swift */; };
 		3FF08EF02F6D826900770D38 /* SmartFolderEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FF08EEF2F6D826900770D38 /* SmartFolderEditorSheet.swift */; };
 		3FFBC7592F704C4600FA359D /* OCRTextExtractionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFBC7582F704C4600FA359D /* OCRTextExtractionService.swift */; };
-		3FFBC75C2F704C4600FA359E /* DocumentDateExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFBC75D2F704C4600FA359E /* DocumentDateExtractor.swift */; };
 		3FFBC75B2F704EDC00FA359D /* DocNestSchemaVersioning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFBC75A2F704EDC00FA359D /* DocNestSchemaVersioning.swift */; };
+		3FFBC75C2F704C4600FA359E /* DocumentDateExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFBC75D2F704C4600FA359E /* DocumentDateExtractor.swift */; };
 		4C1368A6F47101D34D33808A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBBA8006045ACAA798F6A49 /* RootView.swift */; };
 		6332EE665429D0D47E89D7F4 /* ResizeHandleCursorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA07191F675258A004D68388 /* ResizeHandleCursorState.swift */; };
 		6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */; };
@@ -113,8 +113,8 @@
 		3FF08EED2F6D80C400770D38 /* ManageSmartFoldersUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageSmartFoldersUseCase.swift; sourceTree = "<group>"; };
 		3FF08EEF2F6D826900770D38 /* SmartFolderEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartFolderEditorSheet.swift; sourceTree = "<group>"; };
 		3FFBC7582F704C4600FA359D /* OCRTextExtractionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRTextExtractionService.swift; sourceTree = "<group>"; };
-		3FFBC75D2F704C4600FA359E /* DocumentDateExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentDateExtractor.swift; sourceTree = "<group>"; };
 		3FFBC75A2F704EDC00FA359D /* DocNestSchemaVersioning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestSchemaVersioning.swift; sourceTree = "<group>"; };
+		3FFBC75D2F704C4600FA359E /* DocumentDateExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentDateExtractor.swift; sourceTree = "<group>"; };
 		45B34DF5ACFF5069169049C6 /* DocNestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestApp.swift; sourceTree = "<group>"; };
 		4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentInspectorView.swift; sourceTree = "<group>"; };
 		54801B6E1BCE4A70FCDB2E29 /* PDFViewRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewRepresentable.swift; sourceTree = "<group>"; };
@@ -553,6 +553,7 @@
 		019A9E9561EE31E9D73D84B1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ARCHS = arm64;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -585,8 +586,9 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
-				COPY_PHASE_STRIP = NO;
+				COPY_PHASE_STRIP = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -601,12 +603,14 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				LLVM_LTO = YES;
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				STRIP_INSTALLED_PRODUCT = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.10;
@@ -617,6 +621,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ARCHS = arm64;
 				COMBINE_HIDPI_IMAGES = YES;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = "";
 				INFOPLIST_FILE = DocNest/Info.plist;
@@ -629,6 +634,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 2026.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest;
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "";
 				SDKROOT = macosx;
@@ -659,6 +665,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ARCHS = arm64;
 				COMBINE_HIDPI_IMAGES = YES;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = "";
 				INFOPLIST_FILE = DocNest/Info.plist;
@@ -671,6 +678,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 2026.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest;
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "";
 				SDKROOT = macosx;
@@ -700,6 +708,7 @@
 		857E800B2D254D7DCB21166A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ARCHS = arm64;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;

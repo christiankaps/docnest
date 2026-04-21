@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 import SwiftData
 import PDFKit
@@ -21,6 +22,43 @@ private enum TestSampleDataSeeder {
         }
 
         try context.save()
+    }
+}
+
+private enum TestImportFixtures {
+    static func createPDF(at url: URL, text: String = "Test PDF") throws {
+        let document = PDFDocument()
+        let image = NSImage(size: NSSize(width: 200, height: 200))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 200, height: 200)).fill()
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 18),
+            .foregroundColor: NSColor.black
+        ]
+        NSString(string: text).draw(at: NSPoint(x: 24, y: 96), withAttributes: attributes)
+        image.unlockFocus()
+
+        guard let page = PDFPage(image: image) else {
+            throw NSError(domain: "DocNestTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not create PDF page."])
+        }
+
+        document.insert(page, at: 0)
+        guard let data = document.dataRepresentation() else {
+            throw NSError(domain: "DocNestTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not render PDF data."])
+        }
+
+        try data.write(to: url)
+    }
+
+    @MainActor
+    static func makeInMemoryContainer() throws -> ModelContainer {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        return try ModelContainer(
+            for: DocumentRecord.self,
+            LabelTag.self,
+            configurations: config
+        )
     }
 }
 
@@ -132,7 +170,7 @@ final class DocNestTests: XCTestCase {
         DocumentLibraryService.persistLibraryURL(createdLibraryURL)
 
         XCTAssertEqual(
-            DocumentLibraryService.restorePersistedLibraryURL(),
+            DocumentLibraryService.restorePersistedLibraryAccess()?.url,
             createdLibraryURL.standardizedFileURL
         )
     }
@@ -152,7 +190,7 @@ final class DocNestTests: XCTestCase {
 
         DocumentLibraryService.persistLibraryURL(nil)
 
-        XCTAssertNil(DocumentLibraryService.restorePersistedLibraryURL())
+        XCTAssertNil(DocumentLibraryService.restorePersistedLibraryAccess())
     }
 
     func testSelectedLibraryURLReadsLaunchArgumentOverride() {
@@ -171,6 +209,205 @@ final class DocNestTests: XCTestCase {
                 from: ["DocNest", "-selectedLibraryPath"]
             )
         )
+    }
+
+    func testFolderMonitorDeltaReportsOnlyNewAndChangedPDFs() {
+        let originalDate = Date(timeIntervalSinceReferenceDate: 100)
+        let updatedDate = Date(timeIntervalSinceReferenceDate: 200)
+        let unchangedPath = "/tmp/unchanged.pdf"
+        let changedPath = "/tmp/changed.pdf"
+        let newPath = "/tmp/new.pdf"
+
+        let result = FolderMonitorService.newPDFURLs(
+            from: [
+                .init(path: unchangedPath, modificationDate: originalDate),
+                .init(path: changedPath, modificationDate: updatedDate),
+                .init(path: newPath, modificationDate: updatedDate)
+            ],
+            previousSnapshots: [
+                unchangedPath: originalDate,
+                changedPath: originalDate
+            ]
+        )
+
+        XCTAssertEqual(
+            Set(result.urls.map(\.path)),
+            Set([changedPath, newPath])
+        )
+        XCTAssertEqual(
+            result.updatedSnapshots,
+            [
+                unchangedPath: originalDate,
+                changedPath: updatedDate,
+                newPath: updatedDate
+            ]
+        )
+    }
+
+    func testFolderMonitorDeltaDropsRemovedFilesFromSnapshot() {
+        let originalDate = Date(timeIntervalSinceReferenceDate: 100)
+        let remainingPath = "/tmp/remaining.pdf"
+        let removedPath = "/tmp/removed.pdf"
+
+        let result = FolderMonitorService.newPDFURLs(
+            from: [
+                .init(path: remainingPath, modificationDate: originalDate)
+            ],
+            previousSnapshots: [
+                remainingPath: originalDate,
+                removedPath: originalDate
+            ]
+        )
+
+        XCTAssertTrue(result.urls.isEmpty)
+        XCTAssertEqual(
+            result.updatedSnapshots,
+            [remainingPath: originalDate]
+        )
+    }
+
+    @MainActor
+    func testImportPDFDocumentsUseCaseImportsNestedFolderPDFsAndIgnoresNonPDFs() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let importRoot = tempRoot.appendingPathComponent("ImportRoot", isDirectory: true)
+        let nestedFolder = importRoot.appendingPathComponent("Nested", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: nestedFolder, withIntermediateDirectories: true)
+        try TestImportFixtures.createPDF(at: importRoot.appendingPathComponent("top-level.pdf"), text: "Top Level")
+        try TestImportFixtures.createPDF(at: nestedFolder.appendingPathComponent("nested.pdf"), text: "Nested")
+        try Data("ignore me".utf8).write(to: nestedFolder.appendingPathComponent("notes.txt"))
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("ImportLibrary")
+        )
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+
+        let result = await ImportPDFDocumentsUseCase.execute(
+            urls: [importRoot],
+            into: libraryURL,
+            using: context
+        )
+
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        XCTAssertEqual(result.importedCount, 2)
+        XCTAssertFalse(result.hasNoImportablePDFs)
+        XCTAssertTrue(result.unsupportedFiles.isEmpty)
+        XCTAssertEqual(documents.count, 2)
+        XCTAssertEqual(Set(documents.map(\.originalFileName)), Set(["top-level.pdf", "nested.pdf"]))
+    }
+
+    @MainActor
+    func testImportPDFDocumentsUseCaseReportsNoPDFsForFolderWithoutPDFContent() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let importRoot = tempRoot.appendingPathComponent("NoPDFs", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: importRoot, withIntermediateDirectories: true)
+        try Data("hello".utf8).write(to: importRoot.appendingPathComponent("readme.txt"))
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("EmptyLibrary")
+        )
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+
+        let result = await ImportPDFDocumentsUseCase.execute(
+            urls: [importRoot],
+            into: libraryURL,
+            using: context
+        )
+
+        XCTAssertEqual(result.importedCount, 0)
+        XCTAssertTrue(result.hasNoImportablePDFs)
+        XCTAssertEqual(result.summaryMessage, "No PDF documents found to import.")
+    }
+
+    @MainActor
+    func testImportPDFDocumentsUseCaseRejectsLibrarySubfoldersAsImportSource() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("SelfImportLibrary")
+        )
+        let nestedLibraryFolder = DocumentLibraryService.originalsDirectory(for: libraryURL)
+            .appendingPathComponent("2026", isDirectory: true)
+        try FileManager.default.createDirectory(at: nestedLibraryFolder, withIntermediateDirectories: true)
+        try TestImportFixtures.createPDF(at: nestedLibraryFolder.appendingPathComponent("inside.pdf"), text: "Inside")
+
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let result = await ImportPDFDocumentsUseCase.execute(
+            urls: [nestedLibraryFolder],
+            into: libraryURL,
+            using: context
+        )
+
+        XCTAssertEqual(result.importedCount, 0)
+        XCTAssertEqual(result.failures.count, 1)
+        XCTAssertFalse(result.hasNoImportablePDFs)
+    }
+
+    func testFolderMonitorScanSnapshotsFindsNestedPDFsRecursively() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let watchRoot = tempRoot.appendingPathComponent("WatchRoot", isDirectory: true)
+        let nestedFolder = watchRoot.appendingPathComponent("Deep", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: nestedFolder, withIntermediateDirectories: true)
+        try TestImportFixtures.createPDF(at: nestedFolder.appendingPathComponent("nested-watch.pdf"), text: "Watch")
+        try Data("ignore".utf8).write(to: watchRoot.appendingPathComponent("note.txt"))
+
+        let result = try FolderMonitorService.scanSnapshots(
+            in: watchRoot.path,
+            previousSnapshots: [:]
+        )
+
+        XCTAssertEqual(result.urls.map(\.lastPathComponent), ["nested-watch.pdf"])
+        XCTAssertEqual(result.updatedSnapshots.count, 1)
+    }
+
+    func testFolderMonitorApplyFileEventsTracksNestedPDFChanges() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let watchRoot = tempRoot.appendingPathComponent("WatchRoot", isDirectory: true)
+        let nestedFolder = watchRoot.appendingPathComponent("Deep", isDirectory: true)
+        let nestedPDF = nestedFolder.appendingPathComponent("nested-event.pdf")
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: nestedFolder, withIntermediateDirectories: true)
+        try TestImportFixtures.createPDF(at: nestedPDF, text: "Event")
+
+        let result = try FolderMonitorService.applyFileEvents(
+            [nestedPDF.path: FSEventStreamEventFlags(kFSEventStreamEventFlagItemCreated)],
+            in: watchRoot.path,
+            previousSnapshots: [:]
+        )
+
+        XCTAssertEqual(result.urls.map(\.lastPathComponent), ["nested-event.pdf"])
+        XCTAssertEqual(result.updatedSnapshots.count, 1)
+        XCTAssertNotNil(result.updatedSnapshots[nestedPDF.path])
     }
 
     func testAcquireLockCreatesLockFile() throws {
@@ -537,6 +774,20 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testImportUseCaseImportsTwoHundredDistinctPDFs() async throws {
+        try await assertImportOfDistinctPDFs(count: 200)
+    }
+
+    @MainActor
+    func testImportUseCaseImportsTenThousandDistinctPDFsStress() async throws {
+        guard ProcessInfo.processInfo.environment["DOCNEST_RUN_STRESS_TESTS"] == "1" else {
+            throw XCTSkip("Stress test disabled by default. Set DOCNEST_RUN_STRESS_TESTS=1 to run the 10,000-document import.")
+        }
+
+        try await assertImportOfDistinctPDFs(count: 10_000)
+    }
+
+    @MainActor
     func testImportUseCaseContinuesAfterPerFileFailure() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -650,6 +901,72 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(importResult.unsupportedFiles.first?.fileName, "notes.txt")
         XCTAssertTrue(importResult.summaryMessage.contains("unsupported"))
         XCTAssertEqual(documents.count, 1)
+    }
+
+    private static func writeUniqueTestPDF(at url: URL, identifier: Int) throws {
+        let pdfDocument = PDFDocument()
+        pdfDocument.insert(PDFPage(), at: 0)
+        pdfDocument.documentAttributes = [
+            PDFDocumentAttribute.titleAttribute: "Fixture \(identifier)",
+            PDFDocumentAttribute.subjectAttribute: "Large Import Test \(identifier)",
+            PDFDocumentAttribute.authorAttribute: "DocNestTests"
+        ]
+
+        guard pdfDocument.write(to: url) else {
+            throw NSError(
+                domain: "DocNestTests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to write PDF fixture \(identifier)."]
+            )
+        }
+    }
+
+    @MainActor
+    private func assertImportOfDistinctPDFs(count documentCount: Int) async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sourceDirectory = tempRoot.appendingPathComponent("Source PDFs", isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Large Import Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
+
+        var pdfURLs: [URL] = []
+        pdfURLs.reserveCapacity(documentCount)
+
+        for index in 0..<documentCount {
+            let pdfURL = sourceDirectory.appendingPathComponent(
+                String(format: "document-%05d.pdf", index)
+            )
+            try Self.writeUniqueTestPDF(at: pdfURL, identifier: index)
+            pdfURLs.append(pdfURL)
+        }
+
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let context = container.mainContext
+
+        let importResult = await ImportPDFDocumentsUseCase.execute(
+            urls: pdfURLs,
+            into: libraryURL,
+            using: context
+        )
+
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+
+        XCTAssertEqual(importResult.importedCount, documentCount)
+        XCTAssertTrue(importResult.duplicates.isEmpty)
+        XCTAssertTrue(importResult.unsupportedFiles.isEmpty)
+        XCTAssertTrue(importResult.failures.isEmpty)
+        XCTAssertEqual(documents.count, documentCount)
+        XCTAssertEqual(Set(documents.map(\.contentHash)).count, documentCount)
+        XCTAssertTrue(documents.allSatisfy { $0.pageCount == 1 })
+        XCTAssertTrue(documents.allSatisfy { ($0.storedFilePath ?? "").hasPrefix("Originals/") })
     }
 
     @MainActor
@@ -1363,5 +1680,458 @@ final class DocNestTests: XCTestCase {
         try DeleteDocumentsUseCase.restoreFromBin([document], using: context)
 
         XCTAssertNil(document.trashedAt)
+    }
+
+    func testReleaseVersionParsesMajorAndMinorOnly() {
+        let version = AppReleaseVersion(string: "2025.4")
+
+        XCTAssertEqual(version?.year, 2025)
+        XCTAssertEqual(version?.major, 4)
+        XCTAssertEqual(version?.minor, 0)
+        XCTAssertEqual(version?.description, "2025.4")
+    }
+
+    func testReleaseVersionParsesPatchVariant() {
+        let version = AppReleaseVersion(string: "2025.4.1")
+
+        XCTAssertEqual(version?.year, 2025)
+        XCTAssertEqual(version?.major, 4)
+        XCTAssertEqual(version?.minor, 1)
+        XCTAssertEqual(version?.description, "2025.4.1")
+    }
+
+    func testReleaseVersionIgnoresLeadingVPrefix() {
+        XCTAssertEqual(
+            AppReleaseVersion(string: "v2025.4.1"),
+            AppReleaseVersion(string: "2025.4.1")
+        )
+    }
+
+    func testReleaseVersionComparisonTreatsPatchAsNewerThanBaseRelease() {
+        let base = AppReleaseVersion(string: "2025.4")
+        let patch = AppReleaseVersion(string: "2025.4.1")
+        let nextMajor = AppReleaseVersion(string: "2025.5")
+
+        XCTAssertNotNil(base)
+        XCTAssertNotNil(patch)
+        XCTAssertNotNil(nextMajor)
+        XCTAssertLessThan(base!, patch!)
+        XCTAssertLessThan(patch!, nextMajor!)
+    }
+
+    @MainActor
+    func testAppUpdateMountedVolumeURLParsesHdiutilPlist() throws {
+        let propertyList: [String: Any] = [
+            "system-entities": [
+                ["dev-entry": "/dev/disk4"],
+                ["mount-point": "/Volumes/DocNest", "volume-kind": "hfs"]
+            ]
+        ]
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: propertyList,
+            format: .xml,
+            options: 0
+        )
+
+        let mountedURL = try AppUpdateService.mountedVolumeURL(fromAttachOutput: data)
+
+        XCTAssertEqual(mountedURL.path, "/Volumes/DocNest")
+    }
+
+    @MainActor
+    func testAppUpdateProgressFormatsDownloadFraction() {
+        let progress = AppUpdateService.UpdateProgress(
+            version: AppReleaseVersion(string: "2025.4.1")!,
+            phase: .downloading(bytesReceived: 1_024, totalBytes: 2_048)
+        )
+
+        XCTAssertEqual(progress.title, "Downloading Version 2025.4.1")
+        XCTAssertEqual(progress.statusSummary, "50%")
+        XCTAssertEqual(progress.fractionCompleted ?? -1, 0.5, accuracy: 0.0001)
+    }
+
+    @MainActor
+    func testAppUpdateProgressFormatsVerificationStep() {
+        let progress = AppUpdateService.UpdateProgress(
+            version: AppReleaseVersion(string: "2025.4.1")!,
+            phase: .verifyingInstaller
+        )
+
+        XCTAssertEqual(progress.title, "Verifying Update")
+        XCTAssertEqual(progress.statusSummary, "4/5")
+        XCTAssertNil(progress.fractionCompleted)
+        XCTAssertTrue(progress.detail.contains("Step 4 of 5"))
+    }
+
+    @MainActor
+    func testAppUpdateProgressRejectsDownloadAfterLaterStage() {
+        XCTAssertFalse(
+            AppUpdateService.UpdateProgress.shouldAccept(
+                .downloading(bytesReceived: 2_048, totalBytes: 4_096),
+                over: .mountingInstaller
+            )
+        )
+    }
+
+    @MainActor
+    func testAppUpdateProgressRejectsStartingDownloadAfterByteProgress() {
+        XCTAssertFalse(
+            AppUpdateService.UpdateProgress.shouldAccept(
+                .startingDownload,
+                over: .downloading(bytesReceived: 2_048, totalBytes: 4_096)
+            )
+        )
+    }
+
+    @MainActor
+    func testAppUpdateProgressSessionIgnoresUpdatesAfterClear() {
+        let service = AppUpdateService()
+        let version = AppReleaseVersion(string: "2025.4.1")!
+        let sessionID = service.beginUpdateProgressSession(for: version)
+
+        service.clearUpdateProgressSession()
+        service.applyUpdateProgress(.downloading(bytesReceived: 1_024, totalBytes: 2_048), version: version, sessionID: sessionID)
+
+        XCTAssertNil(service.updateProgress)
+    }
+
+    @MainActor
+    func testAppUpdateProgressSessionIgnoresRegressiveDownloadUpdate() {
+        let service = AppUpdateService()
+        let version = AppReleaseVersion(string: "2025.4.1")!
+        let sessionID = service.beginUpdateProgressSession(for: version)
+
+        service.applyUpdateProgress(.mountingInstaller, version: version, sessionID: sessionID)
+        service.applyUpdateProgress(.downloading(bytesReceived: 2_048, totalBytes: 4_096), version: version, sessionID: sessionID)
+
+        XCTAssertEqual(service.updateProgress?.phase, .mountingInstaller)
+        service.clearUpdateProgressSession()
+    }
+
+    @MainActor
+    func testAppUpdateProgressSessionIgnoresUpdatesFromOlderSession() {
+        let service = AppUpdateService()
+        let oldVersion = AppReleaseVersion(string: "2025.4.1")!
+        let newVersion = AppReleaseVersion(string: "2025.5")!
+        let oldSessionID = service.beginUpdateProgressSession(for: oldVersion)
+        _ = service.beginUpdateProgressSession(for: newVersion)
+
+        service.applyUpdateProgress(.downloading(bytesReceived: 1_024, totalBytes: 2_048), version: oldVersion, sessionID: oldSessionID)
+
+        XCTAssertEqual(service.updateProgress?.version, newVersion)
+        XCTAssertEqual(service.updateProgress?.phase, .startingDownload)
+        service.clearUpdateProgressSession()
+    }
+
+    @MainActor
+    func testAppUpdateBeginInstallProgressSessionMarksServiceBusyBeforePublishingProgress() {
+        let service = AppUpdateService()
+        let version = AppReleaseVersion(string: "2025.5")!
+
+        let sessionID = service.beginInstallProgressSession(for: version)
+
+        XCTAssertEqual(service.status, .downloading(version))
+        XCTAssertTrue(service.isBusy)
+        XCTAssertEqual(service.updateProgress?.version, version)
+        XCTAssertEqual(service.updateProgress?.phase, .startingDownload)
+
+        service.clearUpdateProgressSession()
+        service.applyUpdateProgress(.mountingInstaller, version: version, sessionID: sessionID)
+        XCTAssertNil(service.updateProgress)
+    }
+
+    @MainActor
+    func testAppUpdateMountDiskImageReportsAttachFailure() {
+        XCTAssertThrowsError(
+            try AppUpdateService.mountDiskImage(
+                at: URL(fileURLWithPath: "/tmp/DocNest.dmg"),
+                processRunner: { _, _ in
+                    throw NSError(
+                        domain: "DocNestTests",
+                        code: 5,
+                        userInfo: [NSLocalizedDescriptionKey: "hdiutil: attach failed"]
+                    )
+                }
+            )
+        ) { error in
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertEqual(
+                message,
+                "The downloaded installer could not be mounted. hdiutil: attach failed"
+            )
+        }
+    }
+
+    @MainActor
+    func testAppUpdateDetachDiskImageRetriesWithForceWhenVolumeIsBusy() throws {
+        var recordedArguments: [[String]] = []
+
+        try AppUpdateService.detachDiskImage(
+            at: URL(fileURLWithPath: "/Volumes/DocNest", isDirectory: true),
+            processRunner: { executablePath, arguments in
+                XCTAssertEqual(executablePath, "/usr/bin/hdiutil")
+                recordedArguments.append(arguments)
+
+                if recordedArguments.count == 1 {
+                    throw NSError(
+                        domain: "DocNestTests",
+                        code: 16,
+                        userInfo: [NSLocalizedDescriptionKey: "hdiutil: couldn't unmount disk23"]
+                    )
+                }
+
+                return Data()
+            },
+            sleep: { _ in }
+        )
+
+        XCTAssertEqual(
+            recordedArguments,
+            [
+                ["detach", "/Volumes/DocNest"],
+                ["detach", "-force", "/Volumes/DocNest"]
+            ]
+        )
+    }
+
+    @MainActor
+    func testAppUpdateDetachDiskImageReportsDetachFailureAfterForcedRetry() {
+        XCTAssertThrowsError(
+            try AppUpdateService.detachDiskImage(
+                at: URL(fileURLWithPath: "/Volumes/DocNest", isDirectory: true),
+                processRunner: { _, arguments in
+                    if arguments.contains("-force") {
+                        throw NSError(
+                            domain: "DocNestTests",
+                            code: 5,
+                            userInfo: [NSLocalizedDescriptionKey: "hdiutil: couldn't unmount disk23"]
+                        )
+                    }
+
+                    throw NSError(
+                        domain: "DocNestTests",
+                        code: 16,
+                        userInfo: [NSLocalizedDescriptionKey: "hdiutil: resource busy"]
+                    )
+                },
+                sleep: { _ in }
+            )
+        ) { error in
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertEqual(
+                message,
+                "The downloaded installer could not be unmounted. hdiutil: couldn't unmount disk23"
+            )
+        }
+    }
+
+    @MainActor
+    func testAppUpdateDetachDiskImageDoesNotForceForNonBusyFailures() {
+        var recordedArguments: [[String]] = []
+
+        XCTAssertThrowsError(
+            try AppUpdateService.detachDiskImage(
+                at: URL(fileURLWithPath: "/Volumes/DocNest", isDirectory: true),
+                processRunner: { _, arguments in
+                    recordedArguments.append(arguments)
+                    throw NSError(
+                        domain: "DocNestTests",
+                        code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "hdiutil: no such image"]
+                    )
+                },
+                sleep: { _ in }
+            )
+        ) { error in
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertEqual(
+                message,
+                "The downloaded installer could not be unmounted. hdiutil: no such image"
+            )
+        }
+
+        XCTAssertEqual(recordedArguments, [["detach", "/Volumes/DocNest"]])
+    }
+
+    @MainActor
+    func testAppUpdateVerifyCodeSignatureReportsVerificationFailure() {
+        XCTAssertThrowsError(
+            try AppUpdateService.verifyCodeSignature(
+                of: URL(fileURLWithPath: "/tmp/DocNest.app", isDirectory: true),
+                expectedBundleIdentifier: "com.kaps.docnest",
+                expectedTeamIdentifier: nil,
+                processRunner: { _, _ in
+                    throw NSError(
+                        domain: "DocNestTests",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "code object is not signed at all"]
+                    )
+                },
+                metadataProvider: { _ in
+                    XCTFail("Metadata should not be requested when signature verification fails.")
+                    return (identifier: nil, teamIdentifier: nil)
+                }
+            )
+        ) { error in
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            XCTAssertEqual(
+                message,
+                "The downloaded update could not be verified. code object is not signed at all"
+            )
+        }
+    }
+
+    @MainActor
+    func testAppUpdateInstallerScriptContainsReplaceAndRelaunchSteps() {
+        let script = AppUpdateService.installerScript(
+            currentPID: 1234,
+            stagedAppURL: URL(fileURLWithPath: "/tmp/DocNestUpdate/DocNest.app"),
+            destinationAppURL: URL(fileURLWithPath: "/Applications/DocNest.app"),
+            temporaryRootURL: URL(fileURLWithPath: "/tmp/DocNestUpdate")
+        )
+
+        XCTAssertTrue(script.contains("CURRENT_PID=1234"))
+        XCTAssertTrue(script.contains("/usr/bin/ditto"))
+        XCTAssertTrue(script.contains("/usr/bin/osascript"))
+        XCTAssertTrue(script.contains("/usr/bin/open \"$DESTINATION_APP\""))
+        XCTAssertTrue(script.contains("/bin/rm -rf \"$TEMP_ROOT\""))
+    }
+
+    @MainActor
+    func testAppUpdateInstallerScriptRestoresPreviousAppOnReplaceFailure() {
+        let script = AppUpdateService.installerScript(
+            currentPID: 1234,
+            stagedAppURL: URL(fileURLWithPath: "/tmp/DocNestUpdate/DocNest.app"),
+            destinationAppURL: URL(fileURLWithPath: "/Applications/DocNest.app"),
+            temporaryRootURL: URL(fileURLWithPath: "/tmp/DocNestUpdate")
+        )
+
+        XCTAssertTrue(script.contains("if /bin/mv \"$DESTINATION_APP.new\" \"$DESTINATION_APP\"; then"))
+        XCTAssertTrue(script.contains("if [ -e \"$DESTINATION_APP.previous\" ]; then"))
+        XCTAssertTrue(script.contains("/bin/mv \"$DESTINATION_APP.previous\" \"$DESTINATION_APP\""))
+        XCTAssertTrue(script.contains("return 1"))
+    }
+
+    @MainActor
+    func testArrowNavigationStepUsesVisibleGroupedOrderAndOrderedSelectionFallback() {
+        let jan2025 = DocumentRecord(
+            originalFileName: "jan-2025.pdf",
+            title: "Jan 2025",
+            documentDate: Calendar.current.date(from: DateComponents(year: 2025, month: 1, day: 15)),
+            importedAt: .now,
+            pageCount: 1
+        )
+        let feb2026 = DocumentRecord(
+            originalFileName: "feb-2026.pdf",
+            title: "Feb 2026",
+            documentDate: Calendar.current.date(from: DateComponents(year: 2026, month: 2, day: 15)),
+            importedAt: .now,
+            pageCount: 1
+        )
+        let jan2026 = DocumentRecord(
+            originalFileName: "jan-2026.pdf",
+            title: "Jan 2026",
+            documentDate: Calendar.current.date(from: DateComponents(year: 2026, month: 1, day: 15)),
+            importedAt: .now,
+            pageCount: 1
+        )
+
+        let flatSortedDocuments = [jan2025, feb2026, jan2026]
+        let visibleDocuments = DocumentGroupMode.yearMonth.group(flatSortedDocuments).flatMap(\.documents)
+
+        let groupedDownStep = DocumentListView.arrowNavigationStep(
+            key: .downArrow,
+            anchor: feb2026.persistentModelID,
+            selectedDocumentIDs: [feb2026.persistentModelID],
+            orderedSelectedDocumentIDs: [feb2026.persistentModelID],
+            visibleDocuments: visibleDocuments,
+            extendSelection: false
+        )
+        XCTAssertEqual(groupedDownStep?.nextID, jan2026.persistentModelID)
+        XCTAssertEqual(groupedDownStep?.selectedIDs, [jan2026.persistentModelID])
+
+        let missingAnchorStep = DocumentListView.arrowNavigationStep(
+            key: .downArrow,
+            anchor: nil,
+            selectedDocumentIDs: [jan2025.persistentModelID, feb2026.persistentModelID],
+            orderedSelectedDocumentIDs: [feb2026.persistentModelID, jan2025.persistentModelID],
+            visibleDocuments: visibleDocuments,
+            extendSelection: false
+        )
+        XCTAssertEqual(missingAnchorStep?.nextID, jan2026.persistentModelID)
+        XCTAssertEqual(missingAnchorStep?.selectedIDs, [jan2026.persistentModelID])
+    }
+
+    @MainActor
+    func testDisplayedSelectionUpdatesImmediatelyForDirectSelectionInteraction() async {
+        let coordinator = LibraryCoordinator()
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", importedAt: .now, pageCount: 1)
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", importedAt: .now, pageCount: 1)
+
+        coordinator.ingest(allDocuments: [first, second], allLabels: [], allSmartFolders: [], allLabelGroups: [], allWatchFolders: [])
+
+        for _ in 0..<20 {
+            if coordinator.filteredDocuments.count == 2 {
+                break
+            }
+            await Task.yield()
+        }
+
+        coordinator.selectedDocumentIDs = [first.persistentModelID]
+        coordinator.recomputeSelectedDocuments()
+        coordinator.syncDisplayedSelectionImmediately()
+        XCTAssertEqual(coordinator.displayedSelectedDocuments.map(\.persistentModelID), [first.persistentModelID])
+
+        coordinator.beginSelectionInteraction()
+        coordinator.selectedDocumentIDs = [second.persistentModelID]
+        coordinator.recomputeSelectedDocuments()
+        coordinator.scheduleDisplayedSelectionUpdate()
+
+        XCTAssertEqual(coordinator.displayedSelectedDocuments.map(\.persistentModelID), [second.persistentModelID])
+    }
+
+    @MainActor
+    func testRecomputeSelectedDocumentsPreservesKnownSelectionDuringStaleFilteredLookup() async {
+        let coordinator = LibraryCoordinator()
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", importedAt: .now, pageCount: 1)
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", importedAt: .now, pageCount: 1)
+
+        coordinator.ingest(allDocuments: [first], allLabels: [], allSmartFolders: [], allLabelGroups: [], allWatchFolders: [])
+        for _ in 0..<20 {
+            if coordinator.filteredDocuments.count == 1 {
+                break
+            }
+            await Task.yield()
+        }
+        coordinator.syncDocuments([first, second], recompute: false)
+
+        coordinator.selectedDocumentIDs = [second.persistentModelID]
+        coordinator.recomputeSelectedDocuments()
+
+        XCTAssertEqual(coordinator.selectedDocumentIDs, [second.persistentModelID])
+        XCTAssertEqual(coordinator.selectedDocuments.map(\.persistentModelID), [second.persistentModelID])
+    }
+
+    @MainActor
+    func testRecomputeSelectedDocumentsFallsBackWhenSelectionNoLongerExists() async {
+        let coordinator = LibraryCoordinator()
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", importedAt: .now, pageCount: 1)
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", importedAt: .now, pageCount: 1)
+
+        coordinator.ingest(allDocuments: [first, second], allLabels: [], allSmartFolders: [], allLabelGroups: [], allWatchFolders: [])
+        for _ in 0..<20 {
+            if coordinator.filteredDocuments.count == 2 {
+                break
+            }
+            await Task.yield()
+        }
+        coordinator.selectedDocumentIDs = [second.persistentModelID]
+        coordinator.recomputeSelectedDocuments()
+
+        coordinator.syncDocuments([first], recompute: false)
+        coordinator.recomputeSelectedDocuments()
+
+        XCTAssertEqual(coordinator.selectedDocumentIDs, [first.persistentModelID])
+        XCTAssertEqual(coordinator.selectedDocuments.map(\.persistentModelID), [first.persistentModelID])
     }
 }
