@@ -1476,6 +1476,7 @@ enum DocumentGroupMode: String, CaseIterable {
     }
 }
 
+#if DEBUG
 @MainActor
 private enum PreviewData {
     static let documentListContainer: ModelContainer = {
@@ -1496,3 +1497,4 @@ private enum PreviewData {
         }
     }()
 }
+#endif
