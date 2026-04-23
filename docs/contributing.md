@@ -8,12 +8,34 @@ Contributions should preserve three things at the same time:
 - predictable local-data handling
 - understandable code and documentation
 
+## AI Agent Workflow
+
+Repository-wide agent instructions live in [AGENTS.md](/Users/kaps/Projects/docnest/AGENTS.md).
+
+For code changes, the required workflow is:
+
+- implement the change
+- add tests for new features and bug fixes
+- update requirements documentation when features or app behavior change
+- run an independent AI review with a different model, starting with a fast reviewer
+- if the fast reviewer is clean, run a second review with a stronger slower model
+- run the full test suite only after all review passes are clean
+- create a commit only after reviews and the full test run pass
+
 ## Code Organization Expectations
 
 - keep business behavior in `Domain/UseCases` or narrowly scoped services
 - keep filesystem and persistence details in `Infrastructure/`
 - keep user-facing workflows in `Features/` and `App/`
 - avoid turning `Shared/` into a dumping ground for domain logic
+
+## Swift Style Expectations
+
+- keep Swift code clear and easy to follow
+- prefer existing project patterns and Apple frameworks over unnecessary abstractions
+- keep dependencies minimal and avoid adding new libraries unless clearly justified
+- document important types, methods, properties, invariants, and non-obvious behavior
+- use `///` documentation comments for important APIs and use inline comments only where they add real value
 
 ## Documentation Expectations
 

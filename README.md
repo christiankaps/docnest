@@ -85,5 +85,6 @@ Start here:
 - [docs/testing.md](docs/testing.md) for test commands and scope
 - [docs/release-process.md](docs/release-process.md) for versioning and GitHub releases
 - [docs/contributing.md](docs/contributing.md) for code, test, and documentation expectations
+- [AGENTS.md](AGENTS.md) for the required AI agent workflow for code changes
 
 Detailed product behavior remains in [docs/requirements.md](docs/requirements.md), and codebase layout is summarized in [docs/project-structure.md](docs/project-structure.md).
