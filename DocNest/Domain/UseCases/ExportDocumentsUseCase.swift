@@ -41,6 +41,10 @@ struct ExportDocumentsResult {
 }
 
 enum ExportDocumentsUseCase {
+    struct DragExportItem {
+        let sourceURL: URL
+        let suggestedFileName: String
+    }
 
     private static let logger = Logger(subsystem: "com.kaps.docnest", category: "export")
 
@@ -83,12 +87,10 @@ enum ExportDocumentsUseCase {
         _ document: DocumentRecord,
         libraryURL: URL
     ) -> ExportDocumentsResult? {
-        guard let storedFilePath = document.storedFilePath,
-              DocumentStorageService.fileExists(at: storedFilePath, libraryURL: libraryURL) else {
+        guard sourceURL(for: document, libraryURL: libraryURL) != nil else {
             return nil
         }
 
-        let sourceURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
         let suggestedName = suggestedFileName(for: document)
         let nameWithoutExtension = (suggestedName as NSString).deletingPathExtension
 
@@ -102,7 +104,7 @@ enum ExportDocumentsUseCase {
         }
 
         do {
-            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            try copyDocument(document, libraryURL: libraryURL, to: destinationURL)
             return ExportDocumentsResult(exportedCount: 1, skippedCount: 0, failures: [])
         } catch {
             logger.error("Failed to export '\(document.title)': \(error.localizedDescription)")
@@ -141,19 +143,17 @@ enum ExportDocumentsUseCase {
         var usedFileNames: [String: Int] = [:]
 
         for document in documents {
-            guard let storedFilePath = document.storedFilePath,
-                  DocumentStorageService.fileExists(at: storedFilePath, libraryURL: libraryURL) else {
+            guard sourceURL(for: document, libraryURL: libraryURL) != nil else {
                 skippedCount += 1
                 continue
             }
 
-            let sourceURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
             let baseName = suggestedFileName(for: document)
             let uniqueName = resolveCollision(baseName: baseName, in: folderURL, usedNames: &usedFileNames)
             let destinationURL = folderURL.appendingPathComponent(uniqueName)
 
             do {
-                try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+                try copyDocument(document, libraryURL: libraryURL, to: destinationURL)
                 exportedCount += 1
             } catch {
                 logger.error("Failed to export '\(document.title)': \(error.localizedDescription)")
@@ -168,9 +168,125 @@ enum ExportDocumentsUseCase {
         )
     }
 
+    static func temporaryExportURL(
+        for document: DocumentRecord,
+        libraryURL: URL
+    ) throws -> URL? {
+        guard let item = dragExportItem(for: document, libraryURL: libraryURL) else {
+            return nil
+        }
+
+        return try temporaryExportURLs(for: [item]).first
+    }
+
+    static func dragExportItem(
+        for document: DocumentRecord,
+        libraryURL: URL
+    ) -> DragExportItem? {
+        guard let sourceURL = sourceURL(for: document, libraryURL: libraryURL) else {
+            return nil
+        }
+
+        return DragExportItem(
+            sourceURL: sourceURL,
+            suggestedFileName: suggestedFileName(for: document)
+        )
+    }
+
+    static func temporaryExportURLs(
+        for items: [DragExportItem]
+    ) throws -> [URL] {
+        guard !items.isEmpty else { return [] }
+
+        let exportDirectory = try createTemporaryExportDirectory()
+        var usedFileNames: [String: Int] = [:]
+        var exportedURLs: [URL] = []
+        exportedURLs.reserveCapacity(items.count)
+        do {
+            for item in items {
+                let uniqueName = resolveCollision(
+                    baseName: item.suggestedFileName,
+                    in: exportDirectory,
+                    usedNames: &usedFileNames
+                )
+                let destinationURL = exportDirectory.appendingPathComponent(uniqueName)
+                try FileManager.default.copyItem(at: item.sourceURL, to: destinationURL)
+                exportedURLs.append(destinationURL)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: exportDirectory)
+            throw error
+        }
+
+        scheduleTemporaryExportCleanup(for: exportDirectory)
+        return exportedURLs
+    }
+
     private static func labelSuffix(for document: DocumentRecord) -> String {
         let sortedLabels = document.labels.sorted { $0.sortOrder < $1.sortOrder }
         return sortedLabels.map(\.name).joined(separator: ", ")
+    }
+
+    private static func sourceURL(for document: DocumentRecord, libraryURL: URL) -> URL? {
+        guard let storedFilePath = document.storedFilePath,
+              DocumentStorageService.fileExists(at: storedFilePath, libraryURL: libraryURL) else {
+            return nil
+        }
+
+        return DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
+    }
+
+    private static func createTemporaryExportDirectory() throws -> URL {
+        cleanupStaleTemporaryExports()
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("docnest-drag-export", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private static func scheduleTemporaryExportCleanup(for directory: URL) {
+        Task.detached(priority: .background) {
+            try? await Task.sleep(nanoseconds: 10 * 60 * 1_000_000_000)
+            try? FileManager.default.removeItem(at: directory)
+        }
+    }
+
+    private static func cleanupStaleTemporaryExports() {
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("docnest-drag-export", isDirectory: true)
+        guard let directoryEnumerator = FileManager.default.enumerator(
+            at: rootDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey, .creationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+
+        let cutoffDate = Date().addingTimeInterval(-(24 * 60 * 60))
+        for case let url as URL in directoryEnumerator {
+            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .creationDateKey]),
+                  values.isDirectory == true,
+                  let creationDate = values.creationDate,
+                  creationDate < cutoffDate else {
+                continue
+            }
+            try? FileManager.default.removeItem(at: url)
+            directoryEnumerator.skipDescendants()
+        }
+    }
+
+    private static func copyDocument(
+        _ document: DocumentRecord,
+        libraryURL: URL,
+        to destinationURL: URL
+    ) throws {
+        guard let sourceURL = sourceURL(for: document, libraryURL: libraryURL) else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
     }
 
     private static func sanitizeForFilesystem(_ input: String) -> String {

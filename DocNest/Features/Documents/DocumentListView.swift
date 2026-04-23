@@ -37,6 +37,11 @@ enum DocumentDragHelper {
 
         return DocumentFileDragPayload.payload(for: documentIDsToDrag)
     }
+
+    struct DragSession {
+        let payload: String
+        let exportItems: [ExportDocumentsUseCase.DragExportItem]
+    }
 }
 
 enum DocumentFileDragPayload {
@@ -454,7 +459,7 @@ struct DocumentListView: View {
     private func documentListRow(document: DocumentRecord, index: Int, allDocs: [DocumentRecord]) -> some View {
         let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
 
-        documentRow(for: document, dragPayload: dragPayload(for: document))
+        documentRow(for: document, dragSession: dragSession(for: document))
             .padding(.horizontal, 12)
             .background(rowBackground(index: index, isSelected: isSelected))
             .contentShape(Rectangle())
@@ -546,7 +551,7 @@ struct DocumentListView: View {
                             onCommitRename: { commitRename(for: document) },
                             onCancelRename: { cancelRename() },
                             onBeginRename: { beginRename(for: document) },
-                            dragPayload: dragPayload(for: document)
+                            dragSession: dragSession(for: document)
                         )
                         .id(document.persistentModelID)
                         .highPriorityGesture(TapGesture().onEnded {
@@ -563,7 +568,7 @@ struct DocumentListView: View {
     }
 
     @ViewBuilder
-    private func documentRow(for document: DocumentRecord, dragPayload: String) -> some View {
+    private func documentRow(for document: DocumentRecord, dragSession: DocumentDragHelper.DragSession?) -> some View {
         HStack(alignment: .center, spacing: 10) {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 8)
@@ -638,20 +643,15 @@ struct DocumentListView: View {
                 .frame(width: labelsColumnWidth, alignment: .leading)
             }
 
-            dragHandle(payload: dragPayload)
+            dragHandle(session: dragSession)
 
         }
         .padding(.vertical, 6)
     }
 
-    private func dragHandle(payload: String) -> some View {
-        Image(systemName: "line.3.horizontal")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.tertiary)
+    private func dragHandle(session: DocumentDragHelper.DragSession?) -> some View {
+        DocumentDragHandleView(session: session)
             .frame(width: 16, height: 20)
-            .contentShape(Rectangle())
-            .help("Drag document")
-            .draggable(payload)
     }
 
     private func isSelectedDocument(_ document: DocumentRecord) -> Bool {
@@ -760,12 +760,25 @@ struct DocumentListView: View {
         actionTargetDocuments(for: document)
     }
 
-    private func dragPayload(for document: DocumentRecord) -> String {
-        DocumentDragHelper.internalPayload(
+    private func dragSession(for document: DocumentRecord) -> DocumentDragHelper.DragSession? {
+        let draggedDocuments = actionTargetDocuments(for: document)
+        let payload = DocumentDragHelper.internalPayload(
             for: document,
             selectedIDs: coordinator.selectedDocumentIDs,
             selectedDocumentIDsToDrag: coordinator.selectedDocumentIDsToDrag
         )
+        guard let libraryURL = coordinator.libraryURL else { return nil }
+        let exportItems = draggedDocuments.compactMap { dragExportItem(for: $0, libraryURL: libraryURL) }
+        guard !exportItems.isEmpty else { return nil }
+
+        return DocumentDragHelper.DragSession(payload: payload, exportItems: exportItems)
+    }
+
+    private func dragExportItem(
+        for document: DocumentRecord,
+        libraryURL: URL
+    ) -> ExportDocumentsUseCase.DragExportItem? {
+        ExportDocumentsUseCase.dragExportItem(for: document, libraryURL: libraryURL)
     }
 
     private func handleArrowKey(_ keyPress: KeyPress, in sortedDocs: [DocumentRecord]) -> KeyPress.Result {
@@ -1173,7 +1186,7 @@ private struct DocumentThumbnailCell: View {
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
     var onBeginRename: () -> Void
-    let dragPayload: String
+    let dragSession: DocumentDragHelper.DragSession?
 
     @Environment(ThumbnailCache.self) private var thumbnailCache
     @FocusState private var isRenameFieldFocused: Bool
@@ -1193,7 +1206,7 @@ private struct DocumentThumbnailCell: View {
         onCommitRename: @escaping () -> Void,
         onCancelRename: @escaping () -> Void,
         onBeginRename: @escaping () -> Void,
-        dragPayload: String
+        dragSession: DocumentDragHelper.DragSession?
     ) {
         self.document = document
         self.libraryURL = libraryURL
@@ -1204,7 +1217,7 @@ private struct DocumentThumbnailCell: View {
         self.onCommitRename = onCommitRename
         self.onCancelRename = onCancelRename
         self.onBeginRename = onBeginRename
-        self.dragPayload = dragPayload
+        self.dragSession = dragSession
 
         let sortedLabels = document.labels.sorted {
             if $0.sortOrder == $1.sortOrder {
@@ -1269,13 +1282,8 @@ private struct DocumentThumbnailCell: View {
                     .clipped()
             }
 
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.tertiary)
+            DocumentDragHandleView(session: dragSession)
                 .frame(width: 22, height: 18)
-                .contentShape(Rectangle())
-                .help("Drag document")
-                .draggable(dragPayload)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 8)
@@ -1346,6 +1354,100 @@ private struct DocumentThumbnailCell: View {
                         .font(.system(size: size * 0.25))
                         .foregroundStyle(.secondary)
                 }
+        }
+    }
+}
+
+private struct DocumentDragHandleView: NSViewRepresentable {
+    let session: DocumentDragHelper.DragSession?
+
+    func makeNSView(context: Context) -> DragHandleNSView {
+        let view = DragHandleNSView()
+        view.toolTip = "Drag document"
+        return view
+    }
+
+    func updateNSView(_ nsView: DragHandleNSView, context: Context) {
+        nsView.session = session
+    }
+
+    final class DragHandleNSView: NSView, NSDraggingSource {
+        var session: DocumentDragHelper.DragSession?
+        private var dragHasStarted = false
+
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            nil
+        }
+
+        override func draw(_ dirtyRect: NSRect) {
+            super.draw(dirtyRect)
+
+            let image = NSImage(systemSymbolName: "line.3.horizontal", accessibilityDescription: nil)
+            image?.isTemplate = true
+            NSColor.tertiaryLabelColor.set()
+            image?.draw(
+                in: bounds.insetBy(dx: 2, dy: 4),
+                from: .zero,
+                operation: .sourceOver,
+                fraction: 1
+            )
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            dragHasStarted = false
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard !dragHasStarted, let session else { return }
+            dragHasStarted = true
+
+            let draggingItems = makeDraggingItems(for: session)
+            guard !draggingItems.isEmpty else { return }
+
+            let draggingSession = beginDraggingSession(with: draggingItems, event: event, source: self)
+            draggingSession.animatesToStartingPositionsOnCancelOrFail = true
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            dragHasStarted = false
+        }
+
+        func draggingSession(
+            _ session: NSDraggingSession,
+            sourceOperationMaskFor context: NSDraggingContext
+        ) -> NSDragOperation {
+            .copy
+        }
+
+        func ignoreModifierKeys(for session: NSDraggingSession) -> Bool {
+            true
+        }
+
+        private func makeDraggingItems(for session: DocumentDragHelper.DragSession) -> [NSDraggingItem] {
+            let previewImage = NSImage(systemSymbolName: "doc.richtext", accessibilityDescription: nil)
+            let draggingFrame = bounds
+            guard let exportedURLs = try? ExportDocumentsUseCase.temporaryExportURLs(for: session.exportItems),
+                  !exportedURLs.isEmpty else {
+                return []
+            }
+
+            return exportedURLs.enumerated().map { index, fileURL in
+                let pasteboardItem = NSPasteboardItem()
+                pasteboardItem.setString(fileURL.absoluteString, forType: .fileURL)
+                if index == 0 {
+                    pasteboardItem.setString(session.payload, forType: .string)
+                }
+
+                let draggingItem = NSDraggingItem(pasteboardWriter: pasteboardItem)
+                let offsetFrame = draggingFrame.offsetBy(dx: CGFloat(index * 4), dy: CGFloat(-index * 2))
+                draggingItem.setDraggingFrame(offsetFrame, contents: previewImage)
+                return draggingItem
+            }
         }
     }
 }

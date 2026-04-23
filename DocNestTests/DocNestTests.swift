@@ -1505,6 +1505,158 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(destinationURL.lastPathComponent, "March Invoice.pdf")
     }
 
+    @MainActor
+    func testTemporaryExportURLUsesSuggestedFileName() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Drag Export Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let storedFilePath = "Originals/2026/03/invoice.pdf"
+        let storedFileURL = libraryURL.appendingPathComponent(storedFilePath)
+        try FileManager.default.createDirectory(
+            at: storedFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let pdfDocument = PDFDocument()
+        pdfDocument.insert(PDFPage(), at: 0)
+        XCTAssertTrue(pdfDocument.write(to: storedFileURL))
+
+        let document = DocumentRecord(
+            originalFileName: "invoice.pdf",
+            title: "March Invoice",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: storedFilePath
+        )
+
+        let temporaryURL = try XCTUnwrap(
+            ExportDocumentsUseCase.temporaryExportURL(for: document, libraryURL: libraryURL)
+        )
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: temporaryURL.path))
+        XCTAssertEqual(temporaryURL.lastPathComponent, "March Invoice.pdf")
+    }
+
+    @MainActor
+    func testTemporaryExportURLsExportMultipleDocuments() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Drag Export Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let firstStoredPath = "Originals/2026/03/invoice-a.pdf"
+        let secondStoredPath = "Originals/2026/03/invoice-b.pdf"
+        for storedPath in [firstStoredPath, secondStoredPath] {
+            let storedFileURL = libraryURL.appendingPathComponent(storedPath)
+            try FileManager.default.createDirectory(
+                at: storedFileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let pdfDocument = PDFDocument()
+            pdfDocument.insert(PDFPage(), at: 0)
+            XCTAssertTrue(pdfDocument.write(to: storedFileURL))
+        }
+
+        let documents = [
+            DocumentRecord(
+                originalFileName: "invoice-a.pdf",
+                title: "March Invoice A",
+                importedAt: .now,
+                pageCount: 1,
+                storedFilePath: firstStoredPath
+            ),
+            DocumentRecord(
+                originalFileName: "invoice-b.pdf",
+                title: "March Invoice B",
+                importedAt: .now,
+                pageCount: 1,
+                storedFilePath: secondStoredPath
+            )
+        ]
+
+        let exportItems = documents.compactMap {
+            ExportDocumentsUseCase.dragExportItem(for: $0, libraryURL: libraryURL)
+        }
+        let exportedURLs = try ExportDocumentsUseCase.temporaryExportURLs(for: exportItems)
+
+        XCTAssertEqual(Set(exportedURLs.map(\.lastPathComponent)), Set(["March Invoice A.pdf", "March Invoice B.pdf"]))
+        XCTAssertTrue(exportedURLs.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    @MainActor
+    func testTemporaryExportURLReturnsNilWhenStoredFileMissing() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Missing File Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let document = DocumentRecord(
+            originalFileName: "missing.pdf",
+            title: "Missing",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: "Originals/2026/03/missing.pdf"
+        )
+
+        let temporaryURL = try ExportDocumentsUseCase.temporaryExportURL(for: document, libraryURL: libraryURL)
+        XCTAssertNil(temporaryURL)
+    }
+
+    @MainActor
+    func testTemporaryExportURLsRemoveDirectoryWhenCopyFails() throws {
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("docnest-drag-export", isDirectory: true)
+        let existingDirectoriesBefore = Set((try? FileManager.default.contentsOfDirectory(
+            at: rootDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? [])
+
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+
+        let sourceURL = tempRoot.appendingPathComponent("source.pdf")
+        let pdfDocument = PDFDocument()
+        pdfDocument.insert(PDFPage(), at: 0)
+        XCTAssertTrue(pdfDocument.write(to: sourceURL))
+
+        let validItem = ExportDocumentsUseCase.DragExportItem(
+            sourceURL: sourceURL,
+            suggestedFileName: "Source.pdf"
+        )
+        let missingItem = ExportDocumentsUseCase.DragExportItem(
+            sourceURL: tempRoot.appendingPathComponent("missing.pdf"),
+            suggestedFileName: "Missing.pdf"
+        )
+
+        XCTAssertThrowsError(try ExportDocumentsUseCase.temporaryExportURLs(for: [validItem, missingItem]))
+
+        let existingDirectoriesAfter = Set((try? FileManager.default.contentsOfDirectory(
+            at: rootDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? [])
+        XCTAssertTrue(existingDirectoriesAfter.subtracting(existingDirectoriesBefore).isEmpty)
+    }
+
     // MARK: - ManageLabelsUseCase Additional Tests
 
     @MainActor
