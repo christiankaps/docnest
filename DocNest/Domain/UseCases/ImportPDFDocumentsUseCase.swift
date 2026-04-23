@@ -491,7 +491,7 @@ enum ImportPDFDocumentsUseCase {
         // Use OCR-aware extraction (fast path for embedded text, Vision fallback for scanned pages)
         let fullText: String?
         if let pdfDocument {
-            fullText = await OCRTextExtractionService.extractText(from: pdfDocument)
+            fullText = await OCRTextExtractionService.extractText(from: pdfDocument, sourceURL: fileURL)
         } else {
             fullText = nil
         }

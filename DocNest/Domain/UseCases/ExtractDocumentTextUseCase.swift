@@ -30,7 +30,7 @@ enum ExtractDocumentTextUseCase {
                     logger.error("Could not open PDF for '\(title)'")
                     return nil as String?
                 }
-                return await OCRTextExtractionService.extractText(from: pdfDocument)
+                return await OCRTextExtractionService.extractText(from: pdfDocument, sourceURL: fileURL)
             }.value
 
             if Task.isCancelled { break }

@@ -72,6 +72,7 @@ final class HelpWindowController: NSWindowController {
 }
 
 enum AppSettingsPane: String, CaseIterable, Identifiable {
+    case ocr
     case labels
     case watchFolders
 
@@ -79,6 +80,7 @@ enum AppSettingsPane: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .ocr: "OCR"
         case .labels: "Labels"
         case .watchFolders: "Watch Folders"
         }
@@ -86,6 +88,7 @@ enum AppSettingsPane: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
+        case .ocr: "doc.text.viewfinder"
         case .labels: "tag"
         case .watchFolders: "folder.badge.gearshape"
         }
@@ -93,6 +96,7 @@ enum AppSettingsPane: String, CaseIterable, Identifiable {
 
     var shortDescription: String {
         switch self {
+        case .ocr: "Text extraction backend"
         case .labels: "Tags, colors, and groups"
         case .watchFolders: "Automatic import locations"
         }
@@ -100,6 +104,8 @@ enum AppSettingsPane: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
+        case .ocr:
+            "Choose which OCR engine DocNest uses when extracting searchable text from PDFs."
         case .labels:
             "Organize label names, colors, icons, and groups for the current library."
         case .watchFolders:
@@ -1370,57 +1376,71 @@ private struct AppSettingsRootView: View {
             Color(nsColor: .windowBackgroundColor)
                 .ignoresSafeArea()
 
-            if let coordinator = settings.libraryCoordinator,
-               let modelContainer = settings.modelContainer {
-                HStack(spacing: 0) {
-                    settingsSidebar
-                        .frame(width: 210)
+            HStack(spacing: 0) {
+                settingsSidebar
+                    .frame(width: 210)
 
-                    Divider()
+                Divider()
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(settings.selectedPane.title)
-                                .font(AppTypography.settingsTitle)
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(settings.selectedPane.title)
+                            .font(AppTypography.settingsTitle)
 
-                            Text(settings.selectedPane.subtitle)
-                                .font(AppTypography.settingsSubtitle)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 22)
-                        .padding(.bottom, 12)
+                        Text(settings.selectedPane.subtitle)
+                            .font(AppTypography.settingsSubtitle)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 22)
+                    .padding(.bottom, 12)
 
-                        Group {
-                            switch settings.selectedPane {
-                            case .labels:
-                                LabelManagerSheet(showsDoneButton: false)
-                                    .environment(coordinator)
-                                    .modelContainer(modelContainer)
-                            case .watchFolders:
-                                WatchFolderSettingsView(showsDoneButton: false)
-                                    .environment(coordinator)
-                                    .modelContainer(modelContainer)
-                            }
-                        }
+                    settingsDetailContent
                         .padding(.horizontal, 18)
                         .padding(.bottom, 18)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                    .background(Color(nsColor: .windowBackgroundColor))
                 }
-            } else {
-                ContentUnavailableView(
-                    "No Library Open",
-                    systemImage: "books.vertical",
-                    description: Text("Open a DocNest library to manage labels and watch folders in Settings.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(32)
+                .background(Color(nsColor: .windowBackgroundColor))
             }
         }
         .frame(minWidth: 760, minHeight: 560)
+    }
+
+    @ViewBuilder
+    private var settingsDetailContent: some View {
+        switch settings.selectedPane {
+        case .ocr:
+            OCRSettingsView()
+        case .labels:
+            if let coordinator = settings.libraryCoordinator,
+               let modelContainer = settings.modelContainer {
+                LabelManagerSheet(showsDoneButton: false)
+                    .environment(coordinator)
+                    .modelContainer(modelContainer)
+            } else {
+                unavailableLibrarySettingsView
+            }
+        case .watchFolders:
+            if let coordinator = settings.libraryCoordinator,
+               let modelContainer = settings.modelContainer {
+                WatchFolderSettingsView(showsDoneButton: false)
+                    .environment(coordinator)
+                    .modelContainer(modelContainer)
+            } else {
+                unavailableLibrarySettingsView
+            }
+        }
+    }
+
+    private var unavailableLibrarySettingsView: some View {
+        ContentUnavailableView(
+            "No Library Open",
+            systemImage: "books.vertical",
+            description: Text("Open a DocNest library to manage labels and watch folders in Settings.")
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
     }
 
     private var settingsSidebar: some View {
@@ -1474,6 +1494,70 @@ private struct AppSettingsRootView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+}
+
+private struct OCRSettingsView: View {
+    @AppStorage(OCRBackend.defaultsKey) private var selectedBackend = OCRBackend.automatic.rawValue
+
+    private var backendBinding: Binding<OCRBackend> {
+        Binding(
+            get: { OCRBackend(rawValue: selectedBackend) ?? .automatic },
+            set: { selectedBackend = $0.rawValue }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Choose how DocNest extracts searchable text from imported and backfilled PDFs.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+
+            Picker("OCR Engine", selection: backendBinding) {
+                ForEach(OCRBackend.allCases) { backend in
+                    Text(backend.title).tag(backend)
+                }
+            }
+            .pickerStyle(.radioGroup)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(OCRBackend.allCases) { backend in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Text(backend.title)
+                                .font(.headline)
+
+                            if backend == backendBinding.wrappedValue {
+                                Text("Selected")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                            }
+                        }
+
+                        Text(backend.summary)
+                            .font(.subheadline)
+
+                        Text(backend.availabilityDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor))
+                    )
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 6)
+        .padding(.top, 6)
     }
 }
 
