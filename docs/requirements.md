@@ -388,6 +388,20 @@ The Document Date represents the semantic content date of a document (e.g. the i
 - Network access is optional and only used for explicit update-check functionality against the project's GitHub releases.
 - User must be able to understand where files are stored and what happens during import.
 
+### 7.7 Engineering Workflow and Code Quality
+- Every code change must be reviewed by an AI reviewer using a different model than the implementing agent.
+- The first review pass should use a fast model.
+- If the fast reviewer reports no findings, a second review pass must be run with a stronger but slower model.
+- Existing review agents should be reused when practical instead of spawning fresh reviewers for every pass.
+- If any review finds issues, those issues must be fixed and the review sequence repeated until all review passes report no further issues.
+- New features and bug fixes must include tests unless there is no practical way to cover the behavior.
+- After all review passes are clean, the full test suite must pass before the change is considered complete.
+- A commit may be created only after the required reviews are clean and the full test run passes.
+- If a new feature is implemented or app behavior changes, the requirements documentation must be updated in the same change.
+- Swift code should remain clear, easy to follow, and aligned with existing project structure and patterns.
+- Important types, methods, properties, invariants, concurrency assumptions, filesystem assumptions, and non-obvious workflows must be documented in code.
+- Dependencies must be kept minimal. New libraries should be added only when clearly justified and when the standard library, Apple frameworks, or existing project code are not sufficient.
+
 ## 8. Library Structure
 
 For the first version, a filesystem-friendly structure is preferred that is technically robust and readable for users in emergency situations.
