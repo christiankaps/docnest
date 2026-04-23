@@ -3,7 +3,13 @@ import Foundation
 import OSLog
 import UniformTypeIdentifiers
 
+/// Describes the user-visible outcome of one export operation.
+///
+/// Single-document exports either succeed once or fail once. Bulk exports may
+/// mix successful copies, skipped documents whose source file no longer exists,
+/// and copy failures that should be surfaced to the user.
 struct ExportDocumentsResult {
+    /// A document that could not be exported even though the workflow attempted it.
     struct Failure {
         let title: String
         let message: String
@@ -40,7 +46,17 @@ struct ExportDocumentsResult {
     }
 }
 
+/// Handles export workflows for Finder-facing files as well as explicit user exports.
+///
+/// The use case owns filename generation, collision handling, missing-file
+/// skipping, and temporary drag-export staging under the user's temporary
+/// directory.
 enum ExportDocumentsUseCase {
+    /// Immutable export metadata captured on the main actor before a drag begins.
+    ///
+    /// This avoids touching live SwiftData models from later AppKit drag
+    /// callbacks while still preserving the source URL and the Finder-facing
+    /// filename that should be materialized.
     struct DragExportItem {
         let sourceURL: URL
         let suggestedFileName: String
@@ -50,6 +66,11 @@ enum ExportDocumentsUseCase {
 
     // MARK: - Filename generation
 
+    /// Builds the Finder-facing filename for a document export.
+    ///
+    /// The title is sanitized for filesystem safety. When labels are present,
+    /// their names are appended in persisted sort order to keep exported files
+    /// descriptive outside the app.
     static func suggestedFileName(for document: DocumentRecord) -> String {
         let sanitizedTitle = sanitizeForFilesystem(document.title)
         let labelSuffix = labelSuffix(for: document)
@@ -168,6 +189,11 @@ enum ExportDocumentsUseCase {
         )
     }
 
+    /// Materializes one temporary export file for drag-out workflows.
+    ///
+    /// Returns `nil` when the document no longer has an accessible stored file.
+    /// Successful results are staged under a temporary export directory that is
+    /// cleaned up later.
     static func temporaryExportURL(
         for document: DocumentRecord,
         libraryURL: URL
@@ -179,6 +205,10 @@ enum ExportDocumentsUseCase {
         return try temporaryExportURLs(for: [item]).first
     }
 
+    /// Captures the plain export metadata needed by drag-out workflows.
+    ///
+    /// Returns `nil` when the document's stored file path is missing or the file
+    /// no longer exists inside the library.
     static func dragExportItem(
         for document: DocumentRecord,
         libraryURL: URL
@@ -193,6 +223,12 @@ enum ExportDocumentsUseCase {
         )
     }
 
+    /// Copies drag-export source files into one temporary staging directory.
+    ///
+    /// Filenames are collision-resolved within that directory so Finder receives
+    /// distinct files for multi-selection drags. If any copy fails, the staging
+    /// directory is removed immediately and the error is rethrown. Successful
+    /// directories are scheduled for delayed cleanup.
     static func temporaryExportURLs(
         for items: [DragExportItem]
     ) throws -> [URL] {
@@ -236,6 +272,10 @@ enum ExportDocumentsUseCase {
         return DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
     }
 
+    /// Creates a fresh temporary directory for one drag-out export session.
+    ///
+    /// The root directory is also opportunistically pruned so abandoned staging
+    /// trees from older sessions do not accumulate indefinitely.
     private static func createTemporaryExportDirectory() throws -> URL {
         cleanupStaleTemporaryExports()
 
@@ -246,6 +286,7 @@ enum ExportDocumentsUseCase {
         return directory
     }
 
+    /// Schedules best-effort cleanup for one successful drag-export directory.
     private static func scheduleTemporaryExportCleanup(for directory: URL) {
         Task.detached(priority: .background) {
             try? await Task.sleep(nanoseconds: 10 * 60 * 1_000_000_000)
@@ -253,6 +294,7 @@ enum ExportDocumentsUseCase {
         }
     }
 
+    /// Removes stale drag-export directories that are older than one day.
     private static func cleanupStaleTemporaryExports() {
         let rootDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("docnest-drag-export", isDirectory: true)

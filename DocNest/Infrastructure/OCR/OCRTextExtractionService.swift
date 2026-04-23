@@ -10,6 +10,8 @@ enum OCRBackend: String, CaseIterable, Identifiable {
     case ocrmypdf
 
     static let defaultsKey = "ocrBackend"
+    private static let overrideEnvironmentKey = "DOCNEST_OCR_BACKEND"
+    private static let testConfigurationEnvironmentKey = "XCTestConfigurationFilePath"
 
     var id: String { rawValue }
 
@@ -48,11 +50,37 @@ enum OCRBackend: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Resolves the active OCR backend from the current process state.
+    ///
+    /// XCTest runs default to Vision so the test suite does not depend on
+    /// machine-local OCRmyPDF and Tesseract installations. Tests that need a
+    /// different backend can still opt in through `DOCNEST_OCR_BACKEND`.
     static var current: OCRBackend {
-        guard let rawValue = UserDefaults.standard.string(forKey: defaultsKey),
-              let backend = OCRBackend(rawValue: rawValue) else {
+        resolved(
+            storedRawValue: UserDefaults.standard.string(forKey: defaultsKey),
+            environment: ProcessInfo.processInfo.environment
+        )
+    }
+
+    /// Resolves an OCR backend from persisted settings and process environment.
+    ///
+    /// Environment overrides take precedence over user defaults so tests and
+    /// diagnostics can force a deterministic backend without mutating persisted
+    /// app settings.
+    static func resolved(storedRawValue: String?, environment: [String: String]) -> OCRBackend {
+        if let override = environment[overrideEnvironmentKey],
+           let backend = OCRBackend(rawValue: override) {
+            return backend
+        }
+
+        if environment[testConfigurationEnvironmentKey] != nil {
+            return .vision
+        }
+
+        guard let storedRawValue, let backend = OCRBackend(rawValue: storedRawValue) else {
             return .automatic
         }
+
         return backend
     }
 }

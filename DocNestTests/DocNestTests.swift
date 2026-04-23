@@ -211,6 +211,36 @@ final class DocNestTests: XCTestCase {
         )
     }
 
+    func testOCRBackendDefaultsToVisionDuringTests() {
+        let backend = OCRBackend.resolved(
+            storedRawValue: nil,
+            environment: ["XCTestConfigurationFilePath": "/tmp/xctest-config"]
+        )
+
+        XCTAssertEqual(backend, .vision)
+    }
+
+    func testOCRBackendOverrideWinsDuringTests() {
+        let backend = OCRBackend.resolved(
+            storedRawValue: OCRBackend.automatic.rawValue,
+            environment: [
+                "XCTestConfigurationFilePath": "/tmp/xctest-config",
+                "DOCNEST_OCR_BACKEND": OCRBackend.ocrmypdf.rawValue
+            ]
+        )
+
+        XCTAssertEqual(backend, .ocrmypdf)
+    }
+
+    func testOCRBackendUsesStoredPreferenceOutsideTests() {
+        let backend = OCRBackend.resolved(
+            storedRawValue: OCRBackend.ocrmypdf.rawValue,
+            environment: [:]
+        )
+
+        XCTAssertEqual(backend, .ocrmypdf)
+    }
+
     func testFolderMonitorDeltaReportsOnlyNewAndChangedPDFs() {
         let originalDate = Date(timeIntervalSinceReferenceDate: 100)
         let updatedDate = Date(timeIntervalSinceReferenceDate: 200)
