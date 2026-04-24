@@ -1687,6 +1687,100 @@ final class DocNestTests: XCTestCase {
         XCTAssertTrue(existingDirectoriesAfter.subtracting(existingDirectoriesBefore).isEmpty)
     }
 
+    func testThumbnailCacheBestAvailableKeyPrefersClosestMatchingPreviewSize() {
+        let storedPath = "Originals/report.pdf"
+        let libraryURL = URL(fileURLWithPath: "/tmp/LibraryA.docnestlibrary")
+        let bestKeys = ThumbnailCache.bestAvailableKeys(
+            for: storedPath,
+            libraryURL: libraryURL,
+            availableKeys: [
+                Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf".utf8).base64EncodedString() + "_240x312",
+                Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf".utf8).base64EncodedString() + "_680x880",
+                Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf".utf8).base64EncodedString() + "_1024x1328",
+                Data("/tmp/LibraryA.docnestlibrary\nOriginals/other.pdf".utf8).base64EncodedString() + "_700x900"
+            ],
+            preferredSize: CGSize(width: 720, height: 900)
+        )
+
+        XCTAssertEqual(
+            bestKeys.first,
+            Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf".utf8).base64EncodedString() + "_680x880"
+        )
+    }
+
+    func testThumbnailCacheBestAvailableKeyIgnoresOtherDocumentPaths() {
+        let libraryURL = URL(fileURLWithPath: "/tmp/LibraryA.docnestlibrary")
+        let bestKeys = ThumbnailCache.bestAvailableKeys(
+            for: "Originals/current.pdf",
+            libraryURL: libraryURL,
+            availableKeys: [
+                Data("/tmp/LibraryA.docnestlibrary\nOriginals/other.pdf".utf8).base64EncodedString() + "_700x900",
+                Data("/tmp/LibraryA.docnestlibrary\nOriginals/other.pdf".utf8).base64EncodedString() + "_500x700"
+            ],
+            preferredSize: CGSize(width: 720, height: 900)
+        )
+
+        XCTAssertTrue(bestKeys.isEmpty)
+    }
+
+    func testThumbnailCacheBestAvailableKeyIgnoresOverlappingPathPrefixes() {
+        let storedPath = "Originals/report.pdf"
+        let libraryURL = URL(fileURLWithPath: "/tmp/LibraryA.docnestlibrary")
+        let bestKeys = ThumbnailCache.bestAvailableKeys(
+            for: storedPath,
+            libraryURL: libraryURL,
+            availableKeys: [
+                Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf_copy".utf8).base64EncodedString() + "_720x900",
+                Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf".utf8).base64EncodedString() + "_680x880"
+            ],
+            preferredSize: CGSize(width: 720, height: 900)
+        )
+
+        XCTAssertEqual(
+            bestKeys.first,
+            Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf".utf8).base64EncodedString() + "_680x880"
+        )
+    }
+
+    func testThumbnailCacheBestAvailableKeyIgnoresOtherLibrariesWithSameStoredPath() {
+        let storedPath = "Originals/report.pdf"
+        let libraryA = URL(fileURLWithPath: "/tmp/LibraryA.docnestlibrary")
+        let libraryB = URL(fileURLWithPath: "/tmp/LibraryB.docnestlibrary")
+        let bestKeys = ThumbnailCache.bestAvailableKeys(
+            for: storedPath,
+            libraryURL: libraryA,
+            availableKeys: [
+                Data("\(libraryB.standardizedFileURL.path)\n\(storedPath)".utf8).base64EncodedString() + "_720x900",
+                Data("\(libraryA.standardizedFileURL.path)\n\(storedPath)".utf8).base64EncodedString() + "_680x880"
+            ],
+            preferredSize: CGSize(width: 720, height: 900)
+        )
+
+        XCTAssertEqual(
+            bestKeys.first,
+            Data("\(libraryA.standardizedFileURL.path)\n\(storedPath)".utf8).base64EncodedString() + "_680x880"
+        )
+    }
+
+    func testThumbnailCacheBestAvailableKeyBreaksEqualDistanceTiesTowardSharperImage() {
+        let storedPath = "Originals/report.pdf"
+        let libraryURL = URL(fileURLWithPath: "/tmp/LibraryA.docnestlibrary")
+        let bestKeys = ThumbnailCache.bestAvailableKeys(
+            for: storedPath,
+            libraryURL: libraryURL,
+            availableKeys: [
+                Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf".utf8).base64EncodedString() + "_600x900",
+                Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf".utf8).base64EncodedString() + "_840x900"
+            ],
+            preferredSize: CGSize(width: 720, height: 900)
+        )
+
+        XCTAssertEqual(
+            bestKeys.first,
+            Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf".utf8).base64EncodedString() + "_840x900"
+        )
+    }
+
     // MARK: - ManageLabelsUseCase Additional Tests
 
     @MainActor

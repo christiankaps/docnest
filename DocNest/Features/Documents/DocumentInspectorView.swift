@@ -150,7 +150,10 @@ struct DocumentInspectorView: View {
     private func pdfPreviewSection(for document: DocumentRecord) -> some View {
         if let path = document.storedFilePath, let libraryURL {
             if selectedFileAvailable ?? true {
-                PDFViewRepresentable(url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL))
+                PDFViewRepresentable(
+                    url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL),
+                    isReady: .constant(true)
+                )
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
                 RoundedRectangle(cornerRadius: 16)
@@ -846,18 +849,39 @@ private struct DocumentPreviewPane: View {
     let document: DocumentRecord
     let libraryURL: URL?
     let selectedFileAvailable: Bool?
+    @Environment(ThumbnailCache.self) private var thumbnailCache
+    @State private var isPDFReady = false
+    @State private var previewRetryTrigger = 0
+    @State private var previewRetryAttempts = 0
+    private let maxAutomaticPreviewRetries = 3
 
     var body: some View {
         Group {
             if let path = document.storedFilePath, let libraryURL {
                 if selectedFileAvailable ?? true {
-                    PDFViewRepresentable(url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL))
+                    GeometryReader { geometry in
+                        ZStack {
+                            PDFViewRepresentable(
+                                url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL),
+                                isReady: $isPDFReady
+                            )
+                            .opacity(isPDFReady ? 1 : 0.01)
+
+                            if !isPDFReady {
+                                previewPlaceholder(
+                                    storedFilePath: path,
+                                    libraryURL: libraryURL,
+                                    size: geometry.size
+                                )
+                            }
+                        }
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
                         }
-                        .id(document.persistentModelID)
+                    }
+                    .id(document.persistentModelID)
                 } else {
                     missingFileContent
                 }
@@ -871,6 +895,16 @@ private struct DocumentPreviewPane: View {
                     message: "Import a PDF to see its preview."
                 )
             }
+        }
+        .onAppear {
+            isPDFReady = false
+            previewRetryTrigger = 0
+            previewRetryAttempts = 0
+        }
+        .onChange(of: document.persistentModelID) {
+            isPDFReady = false
+            previewRetryTrigger = 0
+            previewRetryAttempts = 0
         }
     }
 
@@ -904,6 +938,87 @@ private struct DocumentPreviewPane: View {
                         .frame(maxWidth: 360)
                 }
                 .padding(28)
+            }
+    }
+
+    @ViewBuilder
+    private func previewPlaceholder(storedFilePath: String, libraryURL: URL, size: CGSize) -> some View {
+        let _ = previewRetryTrigger
+        let preferredSize = CGSize(
+            width: max(size.width * 1.6, 320),
+            height: max(size.height * 1.6, 420)
+        )
+
+        switch thumbnailCache.previewThumbnailResult(
+            for: storedFilePath,
+            libraryURL: libraryURL,
+            preferredSize: preferredSize
+        ) {
+        case .exact(let image):
+            ZStack {
+                Rectangle()
+                    .fill(Color(nsColor: .windowBackgroundColor))
+
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .padding(18)
+                    .shadow(color: .black.opacity(0.08), radius: 14, y: 4)
+            }
+        case .fallback(let image):
+            retryingPreviewFallback(for: storedFilePath, preferredSize: preferredSize) {
+                ZStack {
+                    Rectangle()
+                        .fill(Color(nsColor: .windowBackgroundColor))
+
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .padding(18)
+                        .shadow(color: .black.opacity(0.08), radius: 14, y: 4)
+                }
+            }
+        case .unavailable where thumbnailCache.isPreviewThumbnailLoading(
+            for: storedFilePath,
+            libraryURL: libraryURL,
+            preferredSize: preferredSize
+        ):
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay {
+                    ProgressView()
+                }
+        case .unavailable:
+            retryingPreviewFallback(for: storedFilePath, preferredSize: preferredSize) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(nsColor: .windowBackgroundColor))
+                    .overlay {
+                        VStack(spacing: 10) {
+                            Image(systemName: "doc.richtext")
+                                .font(.system(size: 34))
+                                .foregroundStyle(.secondary)
+                            Text("Preview unavailable")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(20)
+                    }
+            }
+        }
+    }
+
+    private func retryingPreviewFallback<Content: View>(
+        for storedFilePath: String,
+        preferredSize: CGSize,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .task(id: "\(storedFilePath)-\(Int(preferredSize.width))x\(Int(preferredSize.height))-\(previewRetryTrigger)") {
+                guard previewRetryAttempts < maxAutomaticPreviewRetries else { return }
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                previewRetryAttempts += 1
+                previewRetryTrigger += 1
             }
     }
 }

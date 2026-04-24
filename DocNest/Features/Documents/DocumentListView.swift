@@ -1267,7 +1267,11 @@ private struct DocumentThumbnailCell: View {
         if let path = document.storedFilePath,
            let libraryURL {
             let targetSize = CGSize(width: size * 2, height: size * 2.6)
-            let _ = thumbnailCache.isObserved(storedFilePath: path, size: targetSize)
+            let _ = thumbnailCache.isObserved(
+                storedFilePath: path,
+                libraryURL: libraryURL,
+                size: targetSize
+            )
             if let image = thumbnailCache.thumbnail(for: path, libraryURL: libraryURL, size: targetSize) {
                 Image(nsImage: image)
                     .resizable()

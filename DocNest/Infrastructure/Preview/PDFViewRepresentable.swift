@@ -4,6 +4,7 @@ import OSLog
 
 struct PDFViewRepresentable: NSViewRepresentable {
     let url: URL
+    @Binding var isReady: Bool
     private static let performanceLogger = Logger(subsystem: "com.kaps.docnest", category: "performance")
 
     func makeCoordinator() -> Coordinator {
@@ -19,11 +20,16 @@ struct PDFViewRepresentable: NSViewRepresentable {
 
     func updateNSView(_ pdfView: PDFView, context: Context) {
         let coordinator = context.coordinator
-        guard pdfView.document?.documentURL != url else { return }
+        let readiness = $isReady
+        if pdfView.document?.documentURL == url {
+            setReadiness(true, binding: readiness)
+            return
+        }
         guard !coordinator.isLoading(url) else { return }
 
         let requestID = coordinator.beginLoad(for: url)
         let targetURL = url
+        setReadiness(false, binding: readiness)
         coordinator.installLoadTask(
             Task.detached(priority: .userInitiated) { [weak coordinator, weak pdfView] in
                 #if DEBUG
@@ -37,9 +43,14 @@ struct PDFViewRepresentable: NSViewRepresentable {
                     guard let coordinator else { return }
                     defer { coordinator.finishLoad(requestID) }
                     guard coordinator.canApplyLoad(requestID, for: targetURL) else { return }
-                    guard let pdfView, pdfView.window != nil else { return }
+                    guard let pdfView else { return }
                     pdfView.document = document
-                    pdfView.goToFirstPage(nil)
+                    if document != nil {
+                        pdfView.goToFirstPage(nil)
+                        readiness.wrappedValue = true
+                    } else {
+                        readiness.wrappedValue = false
+                    }
                     #if DEBUG
                     let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
                     Self.performanceLogger.log(
@@ -98,6 +109,13 @@ struct PDFViewRepresentable: NSViewRepresentable {
                 activeURL = nil
                 activeRequestID = UUID()
             }
+        }
+    }
+
+    private func setReadiness(_ value: Bool, binding: Binding<Bool>) {
+        Task { @MainActor in
+            guard binding.wrappedValue != value else { return }
+            binding.wrappedValue = value
         }
     }
 }
