@@ -48,8 +48,8 @@ Documentation-only edits may use a lighter workflow, but code changes must follo
 - Only create a new `MAJOR` component when the release plan explicitly requires it.
 - When the release year changes, start a new release line for that calendar year and reset the version to `YYYY.1.0` unless an explicit release plan says otherwise.
 - Do not maintain older major lines or older year lines separately. Releases always continue from the latest published version.
-- There is only one release branch: `master`.
-- When preparing a release, use `master` as the source branch unless an explicit repository instruction overrides it.
+- The release branch is `master` or `main`, whichever is the repository's default branch.
+- When preparing a release, use the repository's default branch as the source branch unless an explicit repository instruction overrides it.
 
 ## Swift Code Style
 
