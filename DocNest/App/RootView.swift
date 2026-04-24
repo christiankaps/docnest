@@ -59,7 +59,7 @@ struct RootView: View {
             .compositingGroup()
         }
         .animation(.easeInOut(duration: 0.16), value: inspectorVisibilityProgress)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppTheme.windowBackground)
         .environment(coordinator)
         .environment(thumbnailCache)
         .environment(quickLook)
@@ -147,7 +147,7 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.15), value: coordinator.isQuickLabelPickerPresented)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppTheme.windowBackground)
         .background { QuickLookPanelResponder(coordinator: quickLook) }
         .onDrop(of: [.fileURL], delegate: FileImportDropDelegate(coordinator: coordinator))
         .onChange(of: coordinator.displayedShareURLs) {
@@ -159,12 +159,12 @@ struct RootView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .principal) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 SearchToolbarField(
                     text: Bindable(coordinator).searchText,
                     focusRequestToken: coordinator.searchFocusRequestToken
                 )
-                .frame(width: 300)
+                .frame(minWidth: 260, idealWidth: 340, maxWidth: 420)
 
                 if let progress = coordinator.importProgress {
                     ImportProgressIndicator(progress: progress) {
@@ -188,6 +188,7 @@ struct RootView: View {
             } label: {
                 Label("Import PDFs", systemImage: "plus")
             }
+            .help("Import PDFs or folders")
         }
 
         ToolbarItem(placement: .secondaryAction) {
@@ -200,7 +201,7 @@ struct RootView: View {
                     .tag(DocumentListViewMode.thumbnails)
             }
             .pickerStyle(.segmented)
-            .frame(width: 60)
+            .frame(width: 72)
             .help("Switch between list and thumbnail view")
         }
 

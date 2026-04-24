@@ -547,23 +547,30 @@ private struct AppRootView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     closedSidebarSection("Library") {
-                        Text("No library open")
-                            .font(.system(size: 13, weight: .regular))
+                        Label("No library open", systemImage: "books.vertical")
+                            .font(AppTypography.body)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
+                            .padding(.vertical, 7)
                     }
                     closedSidebarSection("Labels") {
-                        Text("No labels")
-                            .font(.system(size: 13, weight: .regular))
+                        Label("No labels", systemImage: "tag")
+                            .font(AppTypography.body)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
+                            .padding(.vertical, 7)
                     }
                 }
             }
             .frame(width: AppSplitViewLayout.sidebarWidth)
             .fixedSize(horizontal: true, vertical: false)
+            .background {
+                ZStack {
+                    Rectangle()
+                        .fill(.bar)
+                    AppTheme.windowBackground.opacity(0.12)
+                }
+            }
 
             Divider()
 
@@ -574,8 +581,14 @@ private struct AppRootView: View {
                     Text("Create a DocNest library or open an existing one before importing documents.")
                 } actions: {
                     HStack(spacing: 12) {
-                        Button("Create Library", action: librarySession.createLibrary)
-                        Button("Open Library", action: librarySession.openLibrary)
+                        Button(action: librarySession.createLibrary) {
+                            Label("Create Library", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button(action: librarySession.openLibrary) {
+                            Label("Open Library", systemImage: "folder")
+                        }
                     }
                 }
 
@@ -602,14 +615,16 @@ private struct AppRootView: View {
                 description: Text("Open a library and select a document to see its details.")
             )
             .frame(width: AppSplitViewLayout.inspectorWidth)
+            .background(AppTheme.panelBackground)
         }
+        .background(AppTheme.windowBackground)
         .padding([.top, .bottom, .trailing], AppSplitViewLayout.windowContentInset)
     }
 
     private func closedSidebarSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .font(AppTypography.sidebarSection)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
                 .padding(.horizontal, 16)

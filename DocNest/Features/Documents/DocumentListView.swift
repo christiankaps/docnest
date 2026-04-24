@@ -36,8 +36,8 @@ struct DocumentListView: View {
 
     private let documentColumnMinWidth = 260.0
     private let listColumnSpacing = 10.0
-    private let listHorizontalPadding = 24.0
-    private let listPanelBackground = Color(nsColor: .windowBackgroundColor)
+    private let listHorizontalPadding = 28.0
+    private let listPanelBackground = AppTheme.windowBackground
 
     @Environment(LibraryCoordinator.self) private var coordinator
     @Environment(QuickLookCoordinator.self) private var quickLook
@@ -199,7 +199,8 @@ struct DocumentListView: View {
                 filteredCount: documents.count,
                 totalCount: coordinator.isBinSelected
                     ? coordinator.trashedDocuments.count
-                    : coordinator.activeDocuments.count
+                    : coordinator.activeDocuments.count,
+                selectedCount: coordinator.selectedDocumentIDs.count
             )
         }
         .focusable()
@@ -250,13 +251,20 @@ struct DocumentListView: View {
     }
 
     private var emptyContent: some View {
-        ContentUnavailableView(
-            "No Documents",
-            systemImage: "doc.text",
-            description: Text("Import PDFs to populate the library and review them here.")
-        )
+        ContentUnavailableView {
+            Label("No Documents", systemImage: "doc.text")
+        } description: {
+            Text("Import PDFs to populate the library and review them here.")
+        } actions: {
+            Button {
+                coordinator.isImporting = true
+            } label: {
+                Label("Import PDFs", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.background)
+        .background(AppTheme.windowBackground)
         .contextMenu {
             listColumnContextMenuItems
         }
@@ -319,14 +327,14 @@ struct DocumentListView: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background {
             Rectangle()
-                .fill(Color(nsColor: .windowBackgroundColor))
+                .fill(AppTheme.headerBackground)
                 .overlay(alignment: .bottom) {
                     Rectangle()
-                        .fill(Color.primary.opacity(0.06))
+                        .fill(AppTheme.separator)
                         .frame(height: 0.5)
                 }
         }
@@ -366,15 +374,15 @@ struct DocumentListView: View {
                                         .font(AppTypography.caption)
                                         .foregroundStyle(.tertiary)
                                 }
-                                .padding(.horizontal, 16)
+                                .padding(.horizontal, 14)
                                 .padding(.vertical, 6)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background {
                                     Rectangle()
-                                        .fill(Color(nsColor: .windowBackgroundColor))
+                                        .fill(AppTheme.headerBackground)
                                         .overlay(alignment: .bottom) {
                                             Rectangle()
-                                                .fill(Color.primary.opacity(0.04))
+                                                .fill(AppTheme.subtleSeparator)
                                                 .frame(height: 0.5)
                                         }
                                 }
@@ -397,6 +405,12 @@ struct DocumentListView: View {
         documentRow(for: document, dragSession: dragSession(for: document))
             .padding(.horizontal, 12)
             .background(rowBackground(index: index, isSelected: isSelected))
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(AppTheme.subtleSeparator)
+                    .frame(height: 0.5)
+                    .padding(.leading, 52)
+            }
             .contentShape(Rectangle())
             .id(document.persistentModelID)
             .highPriorityGesture(TapGesture().onEnded {
@@ -464,9 +478,9 @@ struct DocumentListView: View {
 
     private func rowBackground(index: Int, isSelected: Bool) -> Color {
         if isSelected {
-            return Color.accentColor.opacity(0.11)
+            return AppTheme.selectedFill
         }
-        return index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.012)
+        return index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.015)
     }
 
     private func thumbnailContent(_ sortedDocs: [DocumentRecord]) -> some View {
@@ -507,12 +521,12 @@ struct DocumentListView: View {
         HStack(alignment: .center, spacing: 10) {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelectedDocument(document) ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.035))
-                    .frame(width: 30, height: 30)
+                    .fill(isSelectedDocument(document) ? Color.accentColor.opacity(0.13) : AppTheme.quietFill)
+                    .frame(width: 28, height: 28)
                     .overlay {
                         Image(systemName: "doc.richtext")
                             .foregroundStyle(isSelectedDocument(document) ? Color.accentColor : Color.secondary)
-                            .font(AppTypography.listTitle)
+                            .font(.system(size: 14, weight: .medium))
                     }
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -581,7 +595,7 @@ struct DocumentListView: View {
             dragHandle(session: dragSession)
 
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 7)
     }
 
     private func dragHandle(session: DocumentDragHelper.DragSession?) -> some View {
@@ -833,6 +847,7 @@ struct DocumentListView: View {
                 }
             }
             .foregroundStyle(sortColumn == column ? Color.primary : Color.secondary)
+            .padding(.vertical, 2)
         }
         .buttonStyle(.plain)
     }
@@ -1170,7 +1185,7 @@ private struct DocumentThumbnailCell: View {
         VStack(spacing: 8) {
             thumbnailImage
                 .frame(width: size, height: size * 1.3)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(alignment: .bottomTrailing) {
                     if !document.labels.isEmpty {
                         labelBadges
@@ -1178,9 +1193,9 @@ private struct DocumentThumbnailCell: View {
                     }
                 }
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(
-                            isSelected ? Color.accentColor.opacity(0.72) : Color.primary.opacity(0.08),
+                            isSelected ? AppTheme.selectedStroke : AppTheme.separator,
                             lineWidth: isSelected ? 1.5 : 0.8
                         )
                 )
@@ -1223,7 +1238,7 @@ private struct DocumentThumbnailCell: View {
         .padding(.horizontal, 6)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isSelected ? Color.accentColor.opacity(0.05) : Color.clear)
         )
     }
@@ -1279,14 +1294,14 @@ private struct DocumentThumbnailCell: View {
                     .padding(8)
                     .background(Color(nsColor: .textBackgroundColor))
             } else {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(.thinMaterial)
                     .overlay {
                         ProgressView()
                     }
             }
         } else {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(.thinMaterial)
                 .overlay {
                     Image(systemName: "doc.richtext")
@@ -1300,6 +1315,7 @@ private struct DocumentThumbnailCell: View {
 private struct DocumentListStatusBar: View {
     let filteredCount: Int
     let totalCount: Int
+    let selectedCount: Int
 
     private var ratio: Double {
         guard totalCount > 0 else { return 0 }
@@ -1321,11 +1337,17 @@ private struct DocumentListStatusBar: View {
                     .progressViewStyle(.linear)
                     .frame(width: 80)
             }
+
+            if selectedCount > 0 {
+                Text(selectionText)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .padding(.horizontal, 12)
-        .frame(height: 22)
+        .frame(height: 24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(AppTheme.headerBackground)
     }
 
     private var summaryText: String {
@@ -1336,6 +1358,10 @@ private struct DocumentListStatusBar: View {
         } else {
             return "\(totalCount) documents"
         }
+    }
+
+    private var selectionText: String {
+        selectedCount == 1 ? "1 selected" : "\(selectedCount) selected"
     }
 }
 

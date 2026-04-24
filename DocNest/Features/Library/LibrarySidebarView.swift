@@ -71,7 +71,7 @@ struct LibrarySidebarView: View {
             }
             .overlay(alignment: .trailing) {
                 Rectangle()
-                    .fill(Color.primary.opacity(0.08))
+                    .fill(AppTheme.separator)
                     .frame(width: 0.5)
             }
         }
@@ -878,11 +878,11 @@ private struct LibrarySectionRowView: View {
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(
                     isSelected
-                    ? Color.accentColor.opacity(0.14)
-                    : (isHovered ? Color.primary.opacity(0.04) : Color.clear)
+                    ? AppTheme.selectedFill
+                    : (isHovered ? AppTheme.quietHoverFill : Color.clear)
                 )
         )
         .contentShape(Rectangle())
@@ -927,11 +927,11 @@ private struct LibraryLabelRowView: View {
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(
                     isSelected
                     ? color.opacity(0.15)
-                    : (isHovered ? Color.primary.opacity(0.04) : Color.clear)
+                    : (isHovered ? AppTheme.quietHoverFill : Color.clear)
                 )
         )
         .contentShape(Rectangle())
@@ -1211,11 +1211,11 @@ private struct SmartFolderRowView: View {
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(
                     isSelected
-                    ? Color.accentColor.opacity(0.14)
-                    : (isHovered ? Color.primary.opacity(0.04) : Color.clear)
+                    ? AppTheme.selectedFill
+                    : (isHovered ? AppTheme.quietHoverFill : Color.clear)
                 )
         )
         .contentShape(Rectangle())

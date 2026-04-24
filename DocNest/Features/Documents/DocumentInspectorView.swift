@@ -143,7 +143,7 @@ struct DocumentInspectorView: View {
             .frame(minHeight: 240, idealHeight: 320)
         }
         .navigationTitle("Preview")
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(AppTheme.panelBackground)
     }
 
     @ViewBuilder
@@ -154,7 +154,11 @@ struct DocumentInspectorView: View {
                     url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL),
                     isReady: .constant(true)
                 )
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(AppTheme.separator, lineWidth: 0.8)
+                    }
             } else {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color.red.opacity(0.08))
@@ -237,7 +241,7 @@ struct DocumentInspectorView: View {
 
                 Text(document.originalFileName)
                     .font(AppTypography.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.secondaryText)
 
                 Text("Imported \(document.importedAt.formatted(date: .abbreviated, time: .omitted))")
                     .font(AppTypography.caption)
@@ -293,13 +297,10 @@ struct DocumentInspectorView: View {
                     }
                 }
 
-                Text("\(document.pageCount) pages")
-                    .font(AppTypography.body)
-                    .foregroundStyle(.secondary)
-
-                Text(document.formattedFileSize)
-                    .font(AppTypography.body)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    MetadataPill(systemImage: "doc.plaintext", text: "\(document.pageCount) pages")
+                    MetadataPill(systemImage: "externaldrive", text: document.formattedFileSize)
+                }
             }
 
             Divider()
@@ -323,23 +324,29 @@ struct DocumentInspectorView: View {
             let resolvedFileURL = originalFileURL(for: document)
             Divider()
             HStack(spacing: 12) {
-                Button("Open Original") {
+                Button {
                     if let fileURL = resolvedFileURL {
                         NSWorkspace.shared.open(fileURL)
                     }
+                } label: {
+                    Label("Open Original", systemImage: "doc")
                 }
                 .disabled(resolvedFileURL == nil)
 
-                Button("Show in Finder") {
+                Button {
                     if let fileURL = resolvedFileURL {
                         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                     }
+                } label: {
+                    Label("Show in Finder", systemImage: "folder")
                 }
                 .disabled(resolvedFileURL == nil)
 
                 if let libraryURL {
-                    Button("Show Library") {
+                    Button {
                         NSWorkspace.shared.activateFileViewerSelecting([libraryURL])
+                    } label: {
+                        Label("Show Library", systemImage: "books.vertical")
                     }
                 }
             }
@@ -1020,6 +1027,23 @@ private struct DocumentPreviewPane: View {
                 previewRetryAttempts += 1
                 previewRetryTrigger += 1
             }
+    }
+}
+
+private struct MetadataPill: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: systemImage)
+            .font(AppTypography.captionStrong)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(AppTheme.quietFill)
+            )
     }
 }
 

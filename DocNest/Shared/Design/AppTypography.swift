@@ -17,3 +17,17 @@ enum AppTypography {
     static let settingsTitle = Font.title3.weight(.semibold)
     static let settingsSubtitle = Font.callout
 }
+
+enum AppTheme {
+    static let windowBackground = Color(nsColor: .windowBackgroundColor)
+    static let panelBackground = Color(nsColor: .controlBackgroundColor)
+    static let contentBackground = Color(nsColor: .textBackgroundColor)
+    static let headerBackground = Color(nsColor: .windowBackgroundColor).opacity(0.96)
+    static let separator = Color.primary.opacity(0.07)
+    static let subtleSeparator = Color.primary.opacity(0.045)
+    static let quietFill = Color.primary.opacity(0.035)
+    static let quietHoverFill = Color.primary.opacity(0.055)
+    static let selectedFill = Color.accentColor.opacity(0.13)
+    static let selectedStroke = Color.accentColor.opacity(0.62)
+    static let secondaryText = Color.secondary.opacity(0.82)
+}
