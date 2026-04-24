@@ -40,6 +40,17 @@ Documentation-only edits may use a lighter workflow, but code changes must follo
 - If app behavior changes, update the requirements documentation in the same change.
 - Keep high-level documentation aligned with shipped behavior before considering the change complete.
 
+## Release Instructions
+
+- Before creating a release, check GitHub for the latest published release and derive the next version from that release rather than from local assumptions.
+- Use the release version schema `YYYY.MAJOR.MINOR`.
+- By default, create a new minor release by incrementing the `MINOR` component of the latest published release.
+- Only create a new `MAJOR` component when the release plan explicitly requires it.
+- When the release year changes, start a new release line for that calendar year and reset the version to `YYYY.1.0` unless an explicit release plan says otherwise.
+- Do not maintain older major lines or older year lines separately. Releases always continue from the latest published version.
+- There is only one release branch: `master`.
+- When preparing a release, use `master` as the source branch unless an explicit repository instruction overrides it.
+
 ## Swift Code Style
 
 - Keep Swift code clear, small, and easy to follow.
