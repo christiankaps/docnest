@@ -386,6 +386,7 @@ The Document Date represents the semantic content date of a document (e.g. the i
 ### 7.6 Privacy
 - All data is processed locally.
 - Network access is optional and only used for explicit update-check functionality against the project's GitHub releases.
+- Update checks must request fresh GitHub release metadata and tolerate a short delay between a release becoming latest and its DMG installer asset being attached.
 - User must be able to understand where files are stored and what happens during import.
 
 ### 7.7 Engineering Workflow and Code Quality

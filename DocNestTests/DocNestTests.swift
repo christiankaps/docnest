@@ -2021,6 +2021,90 @@ final class DocNestTests: XCTestCase {
         XCTAssertLessThan(patch!, nextMajor!)
     }
 
+    func testAppUpdateLatestReleaseRequestBypassesCachedReleasePayloads() throws {
+        let url = try XCTUnwrap(URL(string: "https://api.github.com/repos/christiankaps/docnest/releases/latest"))
+
+        let request = AppUpdateService.makeLatestReleaseRequest(url: url)
+
+        XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalAndRemoteCacheData)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Cache-Control"), "no-cache")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Pragma"), "no-cache")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "DocNest")
+    }
+
+    @MainActor
+    func testAppUpdateRetriesWhenNewerReleaseInitiallyMissingInstallerAsset() async throws {
+        let service = AppUpdateService()
+        let currentVersion = try XCTUnwrap(AppReleaseVersion(string: "2026.7.7"))
+        let releaseWithoutDMG = AppUpdateService.GitHubReleaseResponse(
+            tagName: "2026.7.8",
+            htmlURL: "https://github.com/christiankaps/docnest/releases/tag/stale-without-dmg",
+            assets: []
+        )
+        let releaseWithDMG = AppUpdateService.GitHubReleaseResponse(
+            tagName: "2026.7.8",
+            htmlURL: "https://github.com/christiankaps/docnest/releases/tag/fresh-with-dmg",
+            assets: [
+                .init(
+                    name: "DocNest_2026.7.8_43.dmg",
+                    browserDownloadURL: "https://github.com/christiankaps/docnest/releases/download/fresh-with-dmg/DocNest_2026.7.8_43.dmg"
+                )
+            ]
+        )
+        var responses = [releaseWithoutDMG, releaseWithDMG]
+        var fetchCount = 0
+        var sleepCount = 0
+
+        let info = try await service.fetchUpdateInfo(
+            currentVersion: currentVersion,
+            releaseFetcher: {
+                fetchCount += 1
+                return responses.removeFirst()
+            },
+            sleep: { _ in
+                sleepCount += 1
+            }
+        )
+
+        XCTAssertEqual(fetchCount, 2)
+        XCTAssertEqual(sleepCount, 1)
+        XCTAssertEqual(info?.latestVersion, AppReleaseVersion(string: "2026.7.8"))
+        XCTAssertEqual(info?.assetName, "DocNest_2026.7.8_43.dmg")
+        XCTAssertEqual(info?.releasePageURL.absoluteString, "https://github.com/christiankaps/docnest/releases/tag/fresh-with-dmg")
+        XCTAssertEqual(
+            info?.downloadURL.absoluteString,
+            "https://github.com/christiankaps/docnest/releases/download/fresh-with-dmg/DocNest_2026.7.8_43.dmg"
+        )
+    }
+
+    @MainActor
+    func testAppUpdateDoesNotRetryWhenLatestReleaseIsNotNewer() async throws {
+        let service = AppUpdateService()
+        let currentVersion = try XCTUnwrap(AppReleaseVersion(string: "2026.7.8"))
+        var fetchCount = 0
+        var sleepCount = 0
+
+        let info = try await service.fetchUpdateInfo(
+            currentVersion: currentVersion,
+            releaseFetcher: {
+                fetchCount += 1
+                return AppUpdateService.GitHubReleaseResponse(
+                    tagName: "2026.7.8",
+                    htmlURL: "https://github.com/christiankaps/docnest/releases/tag/2026.7.8",
+                    assets: []
+                )
+            },
+            sleep: { _ in
+                sleepCount += 1
+            }
+        )
+
+        XCTAssertNil(info)
+        XCTAssertEqual(fetchCount, 1)
+        XCTAssertEqual(sleepCount, 0)
+    }
+
     @MainActor
     func testAppUpdateMountedVolumeURLParsesHdiutilPlist() throws {
         let propertyList: [String: Any] = [

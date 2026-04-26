@@ -417,6 +417,8 @@ final class AppUpdateService: ObservableObject {
     private let owner: String
     private let repo: String
     private var activeUpdateSessionID: UUID?
+    private static let installerAssetRetryCount = 3
+    private static let installerAssetRetryDelay: Duration = .seconds(2)
 
     init(owner: String = "christiankaps", repo: String = "docnest") {
         self.owner = owner
@@ -535,19 +537,40 @@ final class AppUpdateService: ObservableObject {
             throw UpdateError.invalidInstalledVersion
         }
 
-        let response = try await fetchLatestRelease()
-        guard let latestVersion = AppReleaseVersion(string: response.tagName) else {
-            throw UpdateError.invalidRemoteVersion(response.tagName)
+        return try await fetchUpdateInfo(
+            currentVersion: currentVersion,
+            releaseFetcher: { try await self.fetchLatestRelease() },
+            sleep: { try await Task.sleep(for: $0) }
+        )
+    }
+
+    func fetchUpdateInfo(
+        currentVersion: AppReleaseVersion,
+        releaseFetcher: () async throws -> GitHubReleaseResponse,
+        sleep: (Duration) async throws -> Void
+    ) async throws -> AppUpdateInfo? {
+        var response = try await releaseFetcher()
+        var resolvedRelease = try updateRelease(from: response, currentVersion: currentVersion)
+        if resolvedRelease != nil && resolvedRelease?.dmgAsset == nil {
+            for _ in 0..<Self.installerAssetRetryCount {
+                try await sleep(Self.installerAssetRetryDelay)
+                response = try await releaseFetcher()
+                resolvedRelease = try updateRelease(from: response, currentVersion: currentVersion)
+                if resolvedRelease?.dmgAsset != nil {
+                    break
+                }
+            }
         }
 
-        guard latestVersion > currentVersion else {
+        guard let resolvedRelease else {
             return nil
         }
 
-        let releasePageURL = URL(string: response.htmlURL) ?? releaseWebURL
-        guard let dmgAsset = response.assets.first(where: { $0.name.lowercased().hasSuffix(".dmg") }) else {
+        guard let dmgAsset = resolvedRelease.dmgAsset else {
             throw UpdateError.missingInstallerAsset
         }
+        let latestVersion = resolvedRelease.latestVersion
+        let releasePageURL = resolvedRelease.releasePageURL
         let downloadURL = URL(string: dmgAsset.browserDownloadURL) ?? releasePageURL
 
         return AppUpdateInfo(
@@ -559,10 +582,27 @@ final class AppUpdateService: ObservableObject {
         )
     }
 
+    private func updateRelease(
+        from response: GitHubReleaseResponse,
+        currentVersion: AppReleaseVersion
+    ) throws -> (latestVersion: AppReleaseVersion, releasePageURL: URL, dmgAsset: GitHubReleaseResponse.Asset?)? {
+        guard let latestVersion = AppReleaseVersion(string: response.tagName) else {
+            throw UpdateError.invalidRemoteVersion(response.tagName)
+        }
+
+        guard latestVersion > currentVersion else {
+            return nil
+        }
+
+        return (
+            latestVersion,
+            URL(string: response.htmlURL) ?? releaseWebURL,
+            response.dmgInstallerAsset
+        )
+    }
+
     private func fetchLatestRelease() async throws -> GitHubReleaseResponse {
-        var request = URLRequest(url: apiURL)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("DocNest", forHTTPHeaderField: "User-Agent")
+        let request = Self.makeLatestReleaseRequest(url: apiURL)
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -579,6 +619,15 @@ final class AppUpdateService: ObservableObject {
         } catch {
             throw UpdateError.invalidPayload
         }
+    }
+
+    nonisolated static func makeLatestReleaseRequest(url: URL) -> URLRequest {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("DocNest", forHTTPHeaderField: "User-Agent")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        return request
     }
 
     private func currentInstalledVersion() -> AppReleaseVersion? {
@@ -629,7 +678,7 @@ final class AppUpdateService: ObservableObject {
         URL(string: "https://github.com/\(owner)/\(repo)/releases/latest")!
     }
 
-    private struct GitHubReleaseResponse: Decodable {
+    struct GitHubReleaseResponse: Decodable {
         struct Asset: Decodable {
             let name: String
             let browserDownloadURL: String
@@ -648,6 +697,10 @@ final class AppUpdateService: ObservableObject {
             case tagName = "tag_name"
             case htmlURL = "html_url"
             case assets
+        }
+
+        var dmgInstallerAsset: Asset? {
+            assets.first { $0.name.lowercased().hasSuffix(".dmg") }
         }
     }
 
