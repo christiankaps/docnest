@@ -154,13 +154,12 @@ struct DocumentInspectorView: View {
                     url: DocumentStorageService.fileURL(for: path, libraryURL: libraryURL),
                     isReady: .constant(true)
                 )
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        Rectangle()
                             .stroke(AppTheme.separator, lineWidth: 0.8)
                     }
             } else {
-                RoundedRectangle(cornerRadius: 16)
+                Rectangle()
                     .fill(Color.red.opacity(0.08))
                     .overlay {
                         VStack(spacing: 12) {
@@ -179,7 +178,7 @@ struct DocumentInspectorView: View {
                     }
             }
         } else if document.storedFilePath != nil {
-            RoundedRectangle(cornerRadius: 16)
+            Rectangle()
                 .fill(Color.red.opacity(0.08))
                 .overlay {
                     VStack(spacing: 12) {
@@ -197,7 +196,7 @@ struct DocumentInspectorView: View {
                     .padding()
                 }
         } else {
-            RoundedRectangle(cornerRadius: 16)
+            Rectangle()
                 .fill(Color.secondary.opacity(0.12))
                 .overlay {
                     VStack(spacing: 12) {
@@ -882,9 +881,8 @@ private struct DocumentPreviewPane: View {
                                 )
                             }
                         }
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            Rectangle()
                                 .stroke(Color.primary.opacity(0.06), lineWidth: 1)
                         }
                     }
@@ -925,10 +923,10 @@ private struct DocumentPreviewPane: View {
     }
 
     private func placeholderCard(icon: String, iconColor: Color, title: String, message: String) -> some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        Rectangle()
             .fill(Color(nsColor: .windowBackgroundColor))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                Rectangle()
                     .stroke(Color.primary.opacity(0.06), lineWidth: 1)
             }
             .overlay {
@@ -990,14 +988,14 @@ private struct DocumentPreviewPane: View {
             libraryURL: libraryURL,
             preferredSize: preferredSize
         ):
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            Rectangle()
                 .fill(.thinMaterial)
                 .overlay {
                     ProgressView()
                 }
         case .unavailable:
             retryingPreviewFallback(for: storedFilePath, preferredSize: preferredSize) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                Rectangle()
                     .fill(Color(nsColor: .windowBackgroundColor))
                     .overlay {
                         VStack(spacing: 10) {
