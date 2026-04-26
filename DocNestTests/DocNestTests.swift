@@ -1781,6 +1781,32 @@ final class DocNestTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testPDFPreviewAlignmentMovesViewToFirstPageTop() throws {
+        let image = NSImage(size: NSSize(width: 200, height: 300))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 200, height: 300)).fill()
+        image.unlockFocus()
+
+        let page = try XCTUnwrap(PDFPage(image: image))
+        let document = PDFDocument()
+        document.insert(page, at: 0)
+
+        let pdfView = PDFView(frame: NSRect(x: 0, y: 0, width: 180, height: 220))
+        pdfView.displayMode = .singlePageContinuous
+        pdfView.autoScales = true
+        pdfView.document = document
+
+        PDFViewRepresentable.alignFirstPageTop(in: pdfView)
+
+        let bounds = page.bounds(for: .cropBox)
+        let destination = try XCTUnwrap(pdfView.currentDestination)
+
+        XCTAssertIdentical(destination.page, page)
+        XCTAssertEqual(destination.point.y, bounds.maxY, accuracy: 1.0)
+    }
+
     // MARK: - ManageLabelsUseCase Additional Tests
 
     @MainActor

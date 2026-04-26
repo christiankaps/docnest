@@ -46,7 +46,7 @@ struct PDFViewRepresentable: NSViewRepresentable {
                     guard let pdfView else { return }
                     pdfView.document = document
                     if document != nil {
-                        pdfView.goToFirstPage(nil)
+                        Self.alignFirstPageTop(in: pdfView)
                         readiness.wrappedValue = true
                     } else {
                         readiness.wrappedValue = false
@@ -65,6 +65,22 @@ struct PDFViewRepresentable: NSViewRepresentable {
     static func dismantleNSView(_ nsView: PDFView, coordinator: Coordinator) {
         coordinator.cancelLoad(resetRequest: true)
         nsView.document = nil
+    }
+
+    static func firstPageTopDestinationPoint(for page: PDFPage, displayBox: PDFDisplayBox) -> NSPoint {
+        let bounds = page.bounds(for: displayBox)
+        return NSPoint(x: bounds.minX, y: bounds.maxY)
+    }
+
+    @MainActor
+    static func alignFirstPageTop(in pdfView: PDFView) {
+        guard let firstPage = pdfView.document?.page(at: 0) else { return }
+        pdfView.autoScales = true
+        pdfView.layoutDocumentView()
+        pdfView.go(to: PDFDestination(
+            page: firstPage,
+            at: firstPageTopDestinationPoint(for: firstPage, displayBox: pdfView.displayBox)
+        ))
     }
 
     @MainActor
