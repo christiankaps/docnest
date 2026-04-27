@@ -13,15 +13,17 @@ For investigation, review, planning, or suggestions without code edits, do not r
 ## Required Change Workflow
 
 1. Understand the affected code before editing.
-2. Implement the change.
-3. Add or update tests for every new feature or bug fix as part of the same change.
-4. Run an AI review using a different model than the implementing agent.
-5. Start the first review pass with a fast model.
-6. Reuse existing review agents when practical instead of spawning new ones for every pass.
-7. If the fast review finds issues, fix them and rerun review until that review agent reports no further findings.
-8. If the fast review reports no findings, run a second review with a stronger but slower model.
-9. Only after all review agents report no further issues, run the full test suite.
-10. Create a commit only after the reviews are clean and the full test run passes.
+2. Before implementing a new feature or fixing a bug, plan the change thoroughly.
+3. In the plan, identify likely corner cases, regression risks, affected workflows, data-loss risks, concurrency risks, and test coverage needed before editing.
+4. Implement the change.
+5. Add or update tests for every new feature or bug fix as part of the same change.
+6. Run an AI review using a different model than the implementing agent.
+7. Start the first review pass with a fast model.
+8. Reuse existing review agents when practical instead of spawning new ones for every pass.
+9. If the fast review finds issues, fix them and rerun review until that review agent reports no further findings.
+10. If the fast review reports no findings, run a second review with a stronger but slower model.
+11. Only after all review agents report no further issues, run the full test suite.
+12. Create a commit only after the reviews are clean and the full test run passes.
 
 Before editing, check the worktree. Do not revert or overwrite unrelated user changes. If unrelated changes exist, leave them alone. If they affect the task, work with them or ask before proceeding.
 
