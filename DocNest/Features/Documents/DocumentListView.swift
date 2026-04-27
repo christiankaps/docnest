@@ -682,12 +682,16 @@ struct DocumentListView: View {
                 guard let libraryURL = coordinator.libraryURL, let modelContext = coordinator.modelContext else { return }
                 coordinator.reExtractText(for: targets, libraryURL: libraryURL, modelContext: modelContext)
             }
+            .disabled(coordinator.libraryURL.map { LibraryCoordinator.documentsEligibleForTextExtraction(from: targets, libraryURL: $0).isEmpty } ?? true)
 
             Button("Re-extract Date") {
                 guard let modelContext = coordinator.modelContext else { return }
-                coordinator.reExtractDocumentDate(for: targets, modelContext: modelContext)
+                coordinator.reExtractDocumentDate(
+                    for: DocumentBulkActionSummary.documentsEligibleForDateExtraction(from: targets),
+                    modelContext: modelContext
+                )
             }
-            .disabled(targets.allSatisfy { $0.fullText == nil || $0.fullText?.isEmpty == true })
+            .disabled(!DocumentBulkActionSummary(documents: targets).canReExtractDates)
 
             Divider()
 

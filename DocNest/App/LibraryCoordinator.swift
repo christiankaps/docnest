@@ -115,6 +115,8 @@ final class LibraryCoordinator {
     private var pendingSearchRecomputeTask: Task<Void, Never>?
     private var pendingDerivedStateTask: Task<Void, Never>?
     private var pendingDisplayedShareURLsTask: Task<Void, Never>?
+    private var ocrBackfillGeneration = 0
+    private var queuedOCRBackfillDocuments: [DocumentRecord] = []
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
     private let displayedSelectionDelay: Duration = .milliseconds(65)
     private let searchRecomputeDelay: Duration = .milliseconds(85)
@@ -751,9 +753,13 @@ final class LibraryCoordinator {
     // MARK: - Actions
 
     func restoreDocumentFromBin(_ document: DocumentRecord) {
+        restoreDocumentsFromBin([document])
+    }
+
+    func restoreDocumentsFromBin(_ documents: [DocumentRecord]) {
         guard let modelContext else { return }
         do {
-            try DeleteDocumentsUseCase.restoreFromBin([document], using: modelContext)
+            try DeleteDocumentsUseCase.restoreFromBin(documents, using: modelContext)
             recomputeFilteredDocuments()
         } catch {
             importSummaryMessage = error.localizedDescription
@@ -1016,8 +1022,20 @@ final class LibraryCoordinator {
 
     // MARK: - OCR actions
 
-    func runOCRBackfill(documents: [DocumentRecord], libraryURL: URL, modelContext: ModelContext) {
-        guard activeOCRTask == nil else { return }
+    func runOCRBackfill(
+        documents: [DocumentRecord],
+        libraryURL: URL,
+        modelContext: ModelContext,
+        restartExisting: Bool = false
+    ) {
+        if activeOCRTask != nil {
+            guard restartExisting else { return }
+            activeOCRTask?.cancel()
+            activeOCRTask = nil
+        }
+
+        ocrBackfillGeneration += 1
+        let generation = ocrBackfillGeneration
 
         activeOCRTask = Task { @MainActor [weak self] in
             await ExtractDocumentTextUseCase.backfillAll(
@@ -1029,30 +1047,43 @@ final class LibraryCoordinator {
             }
 
             guard !Task.isCancelled else {
-                self?.activeOCRTask = nil
+                if self?.ocrBackfillGeneration == generation {
+                    self?.activeOCRTask = nil
+                }
                 return
             }
 
+            guard self?.ocrBackfillGeneration == generation else { return }
             self?.ocrProgress = nil
             self?.activeOCRTask = nil
             self?.recomputeFilteredDocuments()
+
+            self?.runQueuedOCRBackfillIfNeeded(libraryURL: libraryURL, modelContext: modelContext)
         }
     }
 
     func reExtractText(for documents: [DocumentRecord], libraryURL: URL, modelContext: ModelContext) {
-        guard !documents.isEmpty else { return }
+        let extractableDocuments = Self.documentsEligibleForTextExtraction(from: documents, libraryURL: libraryURL)
+        guard !extractableDocuments.isEmpty else { return }
 
         // Mark documents for re-extraction by clearing their text and ocrCompleted flag
-        for document in documents {
+        for document in extractableDocuments {
             document.fullText = nil
             document.ocrCompleted = false
         }
         try? modelContext.save()
 
-        // If an OCR task is already running, the backfill will pick these up.
-        // Otherwise, start a new backfill.
         if activeOCRTask == nil {
-            runOCRBackfill(documents: documents, libraryURL: libraryURL, modelContext: modelContext)
+            runOCRBackfill(documents: extractableDocuments, libraryURL: libraryURL, modelContext: modelContext)
+        } else {
+            queuedOCRBackfillDocuments.append(contentsOf: extractableDocuments)
+        }
+    }
+
+    static func documentsEligibleForTextExtraction(from documents: [DocumentRecord], libraryURL: URL) -> [DocumentRecord] {
+        documents.filter { document in
+            guard let storedFilePath = document.storedFilePath else { return false }
+            return DocumentStorageService.fileExists(at: storedFilePath, libraryURL: libraryURL)
         }
     }
 
@@ -1070,11 +1101,66 @@ final class LibraryCoordinator {
         recomputeFilteredDocuments()
     }
 
+    func setDocumentDate(_ date: Date?, for documents: [DocumentRecord], modelContext: ModelContext) {
+        setDocumentDate(date, for: documents) {
+            try modelContext.save()
+        }
+    }
+
+    func setDocumentDate(_ date: Date?, for documents: [DocumentRecord], save: () throws -> Void) {
+        guard !documents.isEmpty else { return }
+        let previousDates = documents.map(\.documentDate)
+        for document in documents {
+            document.documentDate = date
+        }
+        do {
+            try save()
+            recomputeFilteredDocuments()
+        } catch {
+            Self.restoreDocumentDates(zip(documents, previousDates).map { (document: $0.0, date: $0.1) })
+            importSummaryMessage = error.localizedDescription
+        }
+    }
+
+    static func restoreDocumentDates(_ previousDates: [(document: DocumentRecord, date: Date?)]) {
+        for previousDate in previousDates {
+            previousDate.document.documentDate = previousDate.date
+        }
+    }
+
     func cancelOCR() {
         activeOCRTask?.cancel()
         activeOCRTask = nil
         ocrProgress = nil
+        queuedOCRBackfillDocuments = []
     }
+
+    private func runQueuedOCRBackfillIfNeeded(libraryURL: URL, modelContext: ModelContext) {
+        guard !queuedOCRBackfillDocuments.isEmpty else { return }
+        let queuedDocuments = queuedOCRBackfillDocuments
+        queuedOCRBackfillDocuments = []
+        runOCRBackfill(documents: queuedDocuments, libraryURL: libraryURL, modelContext: modelContext)
+    }
+
+    #if DEBUG
+    var queuedOCRBackfillDocumentCountForTesting: Int {
+        queuedOCRBackfillDocuments.count
+    }
+
+    func queueOCRBackfillDocumentsForTesting(_ documents: [DocumentRecord]) {
+        queuedOCRBackfillDocuments.append(contentsOf: documents)
+    }
+
+    func startIdleOCRTaskForTesting() {
+        activeOCRTask = Task {
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+        }
+    }
+
+    func drainQueuedOCRBackfillDocumentsForTesting(libraryURL: URL, modelContext: ModelContext) {
+        runQueuedOCRBackfillIfNeeded(libraryURL: libraryURL, modelContext: modelContext)
+    }
+    #endif
 
     // MARK: - Smart folder helpers
 

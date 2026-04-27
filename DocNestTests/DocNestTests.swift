@@ -1938,6 +1938,339 @@ final class DocNestTests: XCTestCase {
         XCTAssertFalse(SearchDocumentsUseCase.filter([document], query: "INVOICE", selectedLabelIDs: noLabels).isEmpty)
     }
 
+    func testDocumentBulkActionSummaryCountsActionableDocuments() {
+        let dated = Date(timeIntervalSince1970: 1_800)
+        let first = DocumentRecord(
+            originalFileName: "first.pdf",
+            title: "First",
+            documentDate: dated,
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: "Originals/2026/first.pdf"
+        )
+        first.fullText = "Invoice 123"
+
+        let second = DocumentRecord(
+            originalFileName: "second.pdf",
+            title: "Second",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: "Originals/2026/second.pdf"
+        )
+        second.fullText = "   "
+
+        let third = DocumentRecord(
+            originalFileName: "third.pdf",
+            title: "Third",
+            importedAt: .now,
+            pageCount: 1
+        )
+
+        let summary = DocumentBulkActionSummary(documents: [first, second, third])
+
+        XCTAssertEqual(summary.selectedCount, 3)
+        XCTAssertEqual(summary.exportableCount, 2)
+        XCTAssertEqual(summary.documentsWithStoredFilesCount, 2)
+        XCTAssertEqual(summary.documentsWithDateCount, 1)
+        XCTAssertEqual(summary.documentsWithExtractedTextCount, 1)
+        XCTAssertTrue(summary.canReExtractDates)
+        XCTAssertEqual(
+            DocumentBulkActionSummary.documentsEligibleForDateExtraction(from: [first, second, third]).map(\.persistentModelID),
+            [first.persistentModelID]
+        )
+    }
+
+    func testDocumentBulkActionSummaryDisablesDateExtractionWithoutText() {
+        let first = DocumentRecord(
+            originalFileName: "first.pdf",
+            title: "First",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: "Originals/2026/first.pdf"
+        )
+        let second = DocumentRecord(
+            originalFileName: "second.pdf",
+            title: "Second",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: "Originals/2026/second.pdf"
+        )
+        second.fullText = "   "
+
+        let summary = DocumentBulkActionSummary(documents: [first, second])
+
+        XCTAssertEqual(summary.documentsWithExtractedTextCount, 0)
+        XCTAssertFalse(summary.canReExtractDates)
+    }
+
+    @MainActor
+    func testTextExtractionEligibilityRequiresExistingStoredFiles() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let storedFilePath = "Originals/2026/first.pdf"
+        let storedFileURL = tempRoot.appendingPathComponent(storedFilePath)
+        try FileManager.default.createDirectory(
+            at: storedFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("pdf".utf8).write(to: storedFileURL)
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let first = DocumentRecord(
+            originalFileName: "first.pdf",
+            title: "First",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: storedFilePath
+        )
+        let second = DocumentRecord(
+            originalFileName: "second.pdf",
+            title: "Second",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: "Originals/2026/missing.pdf"
+        )
+        let third = DocumentRecord(
+            originalFileName: "third.pdf",
+            title: "Third",
+            importedAt: .now,
+            pageCount: 1
+        )
+
+        XCTAssertEqual(
+            LibraryCoordinator.documentsEligibleForTextExtraction(from: [first, second, third], libraryURL: tempRoot).map(\.persistentModelID),
+            [first.persistentModelID]
+        )
+    }
+
+    @MainActor
+    func testCoordinatorReExtractTextIgnoresDocumentsWithoutExistingStoredFiles() throws {
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let document = DocumentRecord(
+            originalFileName: "missing.pdf",
+            title: "Missing",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: "Originals/2026/missing.pdf"
+        )
+        document.fullText = "Existing searchable text"
+        document.ocrCompleted = true
+        context.insert(document)
+        try context.save()
+
+        let coordinator = LibraryCoordinator()
+        coordinator.reExtractText(
+            for: [document],
+            libraryURL: FileManager.default.temporaryDirectory,
+            modelContext: context
+        )
+
+        XCTAssertEqual(document.fullText, "Existing searchable text")
+        XCTAssertTrue(document.ocrCompleted)
+    }
+
+    @MainActor
+    func testCoordinatorReExtractTextQueuesEligibleDocumentsWhenOCRIsActive() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let storedFilePath = "Originals/2026/first.pdf"
+        let storedFileURL = tempRoot.appendingPathComponent(storedFilePath)
+        try FileManager.default.createDirectory(
+            at: storedFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("pdf".utf8).write(to: storedFileURL)
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let eligible = DocumentRecord(
+            originalFileName: "first.pdf",
+            title: "First",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: storedFilePath
+        )
+        eligible.fullText = "Old searchable text"
+        eligible.ocrCompleted = true
+        let missing = DocumentRecord(
+            originalFileName: "missing.pdf",
+            title: "Missing",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: "Originals/2026/missing.pdf"
+        )
+        missing.fullText = "Keep me"
+        missing.ocrCompleted = true
+        context.insert(eligible)
+        context.insert(missing)
+        try context.save()
+
+        let coordinator = LibraryCoordinator()
+        coordinator.startIdleOCRTaskForTesting()
+
+        coordinator.reExtractText(for: [eligible, missing], libraryURL: tempRoot, modelContext: context)
+
+        XCTAssertNil(eligible.fullText)
+        XCTAssertFalse(eligible.ocrCompleted)
+        XCTAssertEqual(missing.fullText, "Keep me")
+        XCTAssertTrue(missing.ocrCompleted)
+        XCTAssertEqual(coordinator.queuedOCRBackfillDocumentCountForTesting, 1)
+
+        coordinator.cancelOCR()
+        try await Task.sleep(nanoseconds: 50_000_000)
+    }
+
+    @MainActor
+    func testCoordinatorDrainsQueuedOCRBackfillDocuments() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let storedFilePath = "Originals/2026/first.pdf"
+        let storedFileURL = tempRoot.appendingPathComponent(storedFilePath)
+        try FileManager.default.createDirectory(
+            at: storedFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("pdf".utf8).write(to: storedFileURL)
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let document = DocumentRecord(
+            originalFileName: "first.pdf",
+            title: "First",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: storedFilePath
+        )
+        context.insert(document)
+        try context.save()
+
+        let coordinator = LibraryCoordinator()
+        coordinator.queueOCRBackfillDocumentsForTesting([document])
+        XCTAssertEqual(coordinator.queuedOCRBackfillDocumentCountForTesting, 1)
+
+        coordinator.drainQueuedOCRBackfillDocumentsForTesting(libraryURL: tempRoot, modelContext: context)
+
+        XCTAssertEqual(coordinator.queuedOCRBackfillDocumentCountForTesting, 0)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        coordinator.cancelOCR()
+        try await Task.sleep(nanoseconds: 50_000_000)
+    }
+
+    @MainActor
+    func testCoordinatorRestoresPreviousDatesAfterFailedBulkDateSave() {
+        enum SaveError: LocalizedError {
+            case failed
+
+            var errorDescription: String? {
+                "Save failed"
+            }
+        }
+
+        let firstDate = Date(timeIntervalSince1970: 100)
+        let secondDate = Date(timeIntervalSince1970: 200)
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", documentDate: nil, importedAt: .now, pageCount: 1)
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", documentDate: firstDate, importedAt: .now, pageCount: 1)
+        let coordinator = LibraryCoordinator()
+
+        coordinator.setDocumentDate(secondDate, for: [first, second]) {
+            throw SaveError.failed
+        }
+
+        XCTAssertNil(first.documentDate)
+        XCTAssertEqual(second.documentDate, firstDate)
+        XCTAssertEqual(coordinator.importSummaryMessage, "Save failed")
+    }
+
+    @MainActor
+    func testCoordinatorCancelOCRClearsQueuedBackfillDocuments() {
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", importedAt: .now, pageCount: 1)
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", importedAt: .now, pageCount: 1)
+        let coordinator = LibraryCoordinator()
+
+        coordinator.queueOCRBackfillDocumentsForTesting([first, second])
+        XCTAssertEqual(coordinator.queuedOCRBackfillDocumentCountForTesting, 2)
+
+        coordinator.cancelOCR()
+
+        XCTAssertEqual(coordinator.queuedOCRBackfillDocumentCountForTesting, 0)
+    }
+
+    @MainActor
+    func testCoordinatorSetsDocumentDateForSelection() throws {
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", importedAt: .now, pageCount: 1)
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", importedAt: .now, pageCount: 1)
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+
+        let coordinator = LibraryCoordinator()
+        coordinator.modelContext = context
+        let expectedDate = Date(timeIntervalSince1970: 123_456)
+
+        coordinator.setDocumentDate(expectedDate, for: [first, second], modelContext: context)
+
+        XCTAssertEqual(first.documentDate, expectedDate)
+        XCTAssertEqual(second.documentDate, expectedDate)
+
+        coordinator.setDocumentDate(nil, for: [first, second], modelContext: context)
+
+        XCTAssertNil(first.documentDate)
+        XCTAssertNil(second.documentDate)
+    }
+
+    @MainActor
+    func testCoordinatorReExtractsDocumentDateForSelectionWithFallback() throws {
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let importedAt = Date(timeIntervalSince1970: 400_000)
+        let extractedDate = DocumentDateExtractor.extractDate(from: "Invoice Date: 2026-03-15")
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", importedAt: importedAt, pageCount: 1)
+        first.fullText = "Invoice Date: 2026-03-15"
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", importedAt: importedAt, pageCount: 1)
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+
+        let coordinator = LibraryCoordinator()
+        coordinator.modelContext = context
+
+        coordinator.reExtractDocumentDate(for: [first, second], modelContext: context)
+
+        XCTAssertEqual(first.documentDate, extractedDate)
+        XCTAssertEqual(second.documentDate, importedAt)
+    }
+
+    @MainActor
+    func testCoordinatorRestoresDocumentSelectionFromBin() throws {
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let first = DocumentRecord(originalFileName: "first.pdf", title: "First", importedAt: .now, pageCount: 1, trashedAt: .now)
+        let second = DocumentRecord(originalFileName: "second.pdf", title: "Second", importedAt: .now, pageCount: 1, trashedAt: .now)
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+
+        let coordinator = LibraryCoordinator()
+        coordinator.modelContext = context
+        coordinator.ingest(allDocuments: [first, second], allLabels: [], allSmartFolders: [], allLabelGroups: [], allWatchFolders: [])
+
+        coordinator.restoreDocumentsFromBin([first, second])
+
+        XCTAssertNil(first.trashedAt)
+        XCTAssertNil(second.trashedAt)
+    }
+
     // MARK: - DeleteDocumentsUseCase Additional Tests
 
     @MainActor

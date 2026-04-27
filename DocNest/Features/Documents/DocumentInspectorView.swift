@@ -21,6 +21,7 @@ struct DocumentInspectorView: View {
     @State private var selectedFileAvailabilityTask: Task<Void, Never>?
     @State private var cachedSelectionSummary = BatchLabelSelectionSummary.empty
     @State private var cachedSelectionSummarySignature = 0
+    @State private var bulkDateFieldText = ""
 
     private var singleSelectedDocument: DocumentRecord? {
         documents.count == 1 ? documents.first : nil
@@ -28,6 +29,14 @@ struct DocumentInspectorView: View {
 
     private var selectionIsInBin: Bool {
         !documents.isEmpty && documents.allSatisfy { $0.trashedAt != nil }
+    }
+
+    private var documentSelectionSignature: Int {
+        var hasher = Hasher()
+        for document in documents {
+            hasher.combine(document.persistentModelID)
+        }
+        return hasher.finalize()
     }
 
     private var multiSelectionSummarySignature: Int {
@@ -92,9 +101,10 @@ struct DocumentInspectorView: View {
         } message: {
             Text(pendingDeletionMessage)
         }
-        .onChange(of: documents.first?.persistentModelID) {
+        .onChange(of: documentSelectionSignature) {
             isEditingTitle = false
             dateFieldText = formattedDateString(from: singleSelectedDocument?.documentDate)
+            bulkDateFieldText = ""
             refreshSelectedFileAvailability()
         }
         .onAppear {
@@ -254,7 +264,8 @@ struct DocumentInspectorView: View {
                         Spacer()
 
                         Button {
-                            coordinator.reExtractDocumentDate(for: [document], modelContext: modelContext)
+                            let eligibleDocuments = DocumentBulkActionSummary.documentsEligibleForDateExtraction(from: [document])
+                            coordinator.reExtractDocumentDate(for: eligibleDocuments, modelContext: modelContext)
                             dateFieldText = formattedDateString(from: document.documentDate)
                         } label: {
                             Image(systemName: "arrow.clockwise")
@@ -262,7 +273,7 @@ struct DocumentInspectorView: View {
                         }
                         .buttonStyle(.borderless)
                         .help("Re-extract date from document text")
-                        .disabled(document.fullText == nil || document.fullText?.isEmpty == true)
+                        .disabled(DocumentBulkActionSummary.documentsEligibleForDateExtraction(from: [document]).isEmpty)
 
                         if document.documentDate != nil || !dateFieldText.isEmpty {
                             Button {
@@ -474,13 +485,14 @@ struct DocumentInspectorView: View {
                 guard let libraryURL = coordinator.libraryURL, let modelContext = coordinator.modelContext else { return }
                 coordinator.reExtractText(for: [document], libraryURL: libraryURL, modelContext: modelContext)
             }
-            .disabled(document.storedFilePath == nil)
+            .disabled(libraryURL.map { LibraryCoordinator.documentsEligibleForTextExtraction(from: [document], libraryURL: $0).isEmpty } ?? true)
         }
     }
 
     private var multiSelectionInspector: some View {
         let availableLabels = coordinator.allLabels
         let selectionSummary = cachedSelectionSummary
+        let actionSummary = DocumentBulkActionSummary(documents: documents)
 
         return VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
@@ -491,6 +503,8 @@ struct DocumentInspectorView: View {
                     .font(AppTypography.body)
                     .foregroundStyle(.secondary)
             }
+
+            bulkActionSection(summary: actionSummary)
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -565,6 +579,100 @@ struct DocumentInspectorView: View {
 
             Spacer()
         }
+    }
+
+    @ViewBuilder
+    private func bulkActionSection(summary: DocumentBulkActionSummary) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Actions")
+                .font(AppTypography.sectionLabel)
+
+            HStack(spacing: 8) {
+                MetadataPill(systemImage: "doc", text: "\(summary.exportableCount) exportable")
+                MetadataPill(systemImage: "calendar", text: "\(summary.documentsWithDateCount) dated")
+                MetadataPill(systemImage: "doc.text.viewfinder", text: "\(summary.documentsWithExtractedTextCount) searchable")
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
+                Button {
+                    coordinator.exportDocuments(documents)
+                } label: {
+                    Label("Export Selection", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .disabled(libraryURL == nil || summary.exportableCount == 0)
+
+                Button {
+                    guard let libraryURL = coordinator.libraryURL, let modelContext = coordinator.modelContext else { return }
+                    coordinator.reExtractText(
+                        for: documentsWithStoredFiles,
+                        libraryURL: libraryURL,
+                        modelContext: modelContext
+                    )
+                } label: {
+                    Label("Re-extract Text", systemImage: "doc.text.viewfinder")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .disabled(documentsWithStoredFiles.isEmpty)
+
+                Button {
+                    coordinator.reExtractDocumentDate(for: documentsWithExtractedText, modelContext: modelContext)
+                } label: {
+                    Label("Re-extract Dates", systemImage: "calendar.badge.clock")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .disabled(!summary.canReExtractDates)
+
+                if selectionIsInBin {
+                    Button {
+                        coordinator.restoreDocumentsFromBin(documents)
+                    } label: {
+                        Label("Restore Selection", systemImage: "arrow.uturn.backward")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .buttonStyle(.bordered)
+
+            HStack(spacing: 8) {
+                TextField("DD.MM.YYYY", text: $bulkDateFieldText)
+                    .font(.body.monospaced())
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 120)
+                    .onChange(of: bulkDateFieldText) {
+                        applyBulkDateMask()
+                    }
+                    .onSubmit {
+                        applyBulkDocumentDate()
+                    }
+
+                Button {
+                    applyBulkDocumentDate()
+                } label: {
+                    Label("Set Date", systemImage: "calendar.badge.checkmark")
+                }
+                .disabled(parsedBulkDate == nil)
+
+                Button {
+                    bulkDateFieldText = ""
+                    coordinator.setDocumentDate(nil, for: documents, modelContext: modelContext)
+                } label: {
+                    Label("Clear Dates", systemImage: "xmark.circle")
+                }
+                .disabled(summary.documentsWithDateCount == 0)
+            }
+        }
+
+        Divider()
+    }
+
+    private var documentsWithStoredFiles: [DocumentRecord] {
+        guard let libraryURL else { return [] }
+        return LibraryCoordinator.documentsEligibleForTextExtraction(from: documents, libraryURL: libraryURL)
+    }
+
+    private var documentsWithExtractedText: [DocumentRecord] {
+        DocumentBulkActionSummary.documentsEligibleForDateExtraction(from: documents)
     }
 
     @ViewBuilder
@@ -717,6 +825,32 @@ struct DocumentInspectorView: View {
                 coordinator.recomputeFilteredDocuments()
             }
         }
+    }
+
+    private var parsedBulkDate: Date? {
+        guard bulkDateFieldText.count == 10 else { return nil }
+        return Self.germanDateFormatter.date(from: bulkDateFieldText)
+    }
+
+    private func applyBulkDateMask() {
+        bulkDateFieldText = maskedDateString(from: bulkDateFieldText)
+    }
+
+    private func applyBulkDocumentDate() {
+        guard let parsedBulkDate else { return }
+        coordinator.setDocumentDate(parsedBulkDate, for: documents, modelContext: modelContext)
+    }
+
+    private func maskedDateString(from rawValue: String) -> String {
+        let digits = rawValue.filter(\.isWholeNumber)
+        let clamped = String(digits.prefix(8))
+
+        var masked = ""
+        for (index, character) in clamped.enumerated() {
+            if index == 2 || index == 4 { masked.append(".") }
+            masked.append(character)
+        }
+        return masked
     }
 
     private func refreshSelectedFileAvailability() {
@@ -1042,6 +1176,31 @@ private struct MetadataPill: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(AppTheme.quietFill)
             )
+    }
+}
+
+struct DocumentBulkActionSummary {
+    let selectedCount: Int
+    let exportableCount: Int
+    let documentsWithStoredFilesCount: Int
+    let documentsWithDateCount: Int
+    let documentsWithExtractedTextCount: Int
+    let canReExtractDates: Bool
+
+    init(documents: [DocumentRecord]) {
+        selectedCount = documents.count
+        exportableCount = documents.filter { $0.storedFilePath != nil }.count
+        documentsWithStoredFilesCount = exportableCount
+        documentsWithDateCount = documents.filter { $0.documentDate != nil }.count
+        documentsWithExtractedTextCount = Self.documentsEligibleForDateExtraction(from: documents).count
+        canReExtractDates = documentsWithExtractedTextCount > 0
+    }
+
+    static func documentsEligibleForDateExtraction(from documents: [DocumentRecord]) -> [DocumentRecord] {
+        documents.filter { document in
+            guard let text = document.fullText else { return false }
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 }
 

@@ -656,6 +656,7 @@ Current state:
 - Deleting a label removes only associations. Documents and original files remain unchanged.
 - Document list supports multi-selection. Inspector can add/remove labels for entire selection.
 - For mixed label states, inspector separates shared labels from partially assigned labels and offers actions such as add to remaining documents.
+- Multi-selection inspector shows bulk action summaries and supports exporting the selection, re-extracting text, re-extracting dates, setting one document date across the selection, clearing document dates, restoring binned selections, and deleting or permanently deleting the selection as appropriate.
 - Sidebar offers lightweight label actions for filtering, creation, drag-and-drop organization, and contextual editing, while full management lives in Settings.
 - Labels are reorderable in sidebar, persisted via sortOrder field.
 - Label groups allow organizing labels into collapsible categories in the sidebar (e.g. "Finance" containing "Invoices", "Tax", "Receipts").
