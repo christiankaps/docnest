@@ -117,6 +117,7 @@ final class LibraryCoordinator {
     private var pendingDisplayedShareURLsTask: Task<Void, Never>?
     private var ocrBackfillGeneration = 0
     private var queuedOCRBackfillDocuments: [DocumentRecord] = []
+    private var queuedOCRDateFallbacks: [PersistentIdentifier: Date?] = [:]
     private let labelFilterApplyDelay: Duration = .milliseconds(75)
     private let displayedSelectionDelay: Duration = .milliseconds(65)
     private let searchRecomputeDelay: Duration = .milliseconds(85)
@@ -1011,6 +1012,12 @@ final class LibraryCoordinator {
                 self?.importSummaryMessage = importResult.summaryMessage
             }
             self?.recomputeFilteredDocuments()
+            self?.startOrQueueOCRBackfill(
+                for: importResult.importedDocuments,
+                libraryURL: libraryURL,
+                modelContext: modelContext,
+                dateFallbacksByDocumentID: Self.dateFallbacksByDocumentID(for: importResult.importedDocuments)
+            )
         }
     }
 
@@ -1026,6 +1033,7 @@ final class LibraryCoordinator {
         documents: [DocumentRecord],
         libraryURL: URL,
         modelContext: ModelContext,
+        dateUpdatePolicy: OCRDateUpdatePolicy = .preserveExistingDates,
         restartExisting: Bool = false
     ) {
         if activeOCRTask != nil {
@@ -1041,7 +1049,8 @@ final class LibraryCoordinator {
             await ExtractDocumentTextUseCase.backfillAll(
                 documents: documents,
                 libraryURL: libraryURL,
-                modelContext: modelContext
+                modelContext: modelContext,
+                dateUpdatePolicy: dateUpdatePolicy
             ) { [weak self] completed, total, title in
                 self?.ocrProgress = OCRProgress(total: total, completed: completed, currentTitle: title)
             }
@@ -1059,6 +1068,33 @@ final class LibraryCoordinator {
             self?.recomputeFilteredDocuments()
 
             self?.runQueuedOCRBackfillIfNeeded(libraryURL: libraryURL, modelContext: modelContext)
+        }
+    }
+
+    func startOrQueueOCRBackfill(
+        for documents: [DocumentRecord],
+        libraryURL: URL,
+        modelContext: ModelContext,
+        dateFallbacksByDocumentID: [PersistentIdentifier: Date?] = [:]
+    ) {
+        let extractableDocuments = Self.documentsEligibleForTextExtraction(from: documents, libraryURL: libraryURL)
+        guard !extractableDocuments.isEmpty else { return }
+
+        let policy = OCRDateUpdatePolicy(fallbackDatesByDocumentID: dateFallbacksByDocumentID)
+        if activeOCRTask == nil {
+            runOCRBackfill(
+                documents: extractableDocuments,
+                libraryURL: libraryURL,
+                modelContext: modelContext,
+                dateUpdatePolicy: policy
+            )
+        } else {
+            queuedOCRBackfillDocuments.append(contentsOf: extractableDocuments)
+            for document in extractableDocuments {
+                if let fallback = dateFallbacksByDocumentID[document.persistentModelID] {
+                    queuedOCRDateFallbacks.updateValue(fallback, forKey: document.persistentModelID)
+                }
+            }
         }
     }
 
@@ -1133,13 +1169,21 @@ final class LibraryCoordinator {
         activeOCRTask = nil
         ocrProgress = nil
         queuedOCRBackfillDocuments = []
+        queuedOCRDateFallbacks = [:]
     }
 
     private func runQueuedOCRBackfillIfNeeded(libraryURL: URL, modelContext: ModelContext) {
         guard !queuedOCRBackfillDocuments.isEmpty else { return }
         let queuedDocuments = queuedOCRBackfillDocuments
+        let dateFallbacks = queuedOCRDateFallbacks
         queuedOCRBackfillDocuments = []
-        runOCRBackfill(documents: queuedDocuments, libraryURL: libraryURL, modelContext: modelContext)
+        queuedOCRDateFallbacks = [:]
+        runOCRBackfill(
+            documents: queuedDocuments,
+            libraryURL: libraryURL,
+            modelContext: modelContext,
+            dateUpdatePolicy: OCRDateUpdatePolicy(fallbackDatesByDocumentID: dateFallbacks)
+        )
     }
 
     #if DEBUG
@@ -1237,7 +1281,17 @@ final class LibraryCoordinator {
                 self?.importSummaryMessage = "Watch folder: imported \(result.importedCount) document\(result.importedCount == 1 ? "" : "s")."
             }
             self?.recomputeFilteredDocuments()
+            self?.startOrQueueOCRBackfill(
+                for: result.importedDocuments,
+                libraryURL: libraryURL,
+                modelContext: modelContext,
+                dateFallbacksByDocumentID: Self.dateFallbacksByDocumentID(for: result.importedDocuments)
+            )
         }
+    }
+
+    private static func dateFallbacksByDocumentID(for documents: [DocumentRecord]) -> [PersistentIdentifier: Date?] {
+        Dictionary(uniqueKeysWithValues: documents.map { ($0.persistentModelID, $0.documentDate) })
     }
 
     // MARK: - Binding helpers

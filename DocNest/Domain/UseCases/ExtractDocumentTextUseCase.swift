@@ -3,6 +3,23 @@ import OSLog
 import PDFKit
 import SwiftData
 
+struct OCRDateUpdatePolicy {
+    let fallbackDatesByDocumentID: [PersistentIdentifier: Date?]
+
+    static let preserveExistingDates = OCRDateUpdatePolicy(fallbackDatesByDocumentID: [:])
+
+    init(fallbackDatesByDocumentID: [PersistentIdentifier: Date?]) {
+        self.fallbackDatesByDocumentID = fallbackDatesByDocumentID
+    }
+
+    func shouldUpdateDate(for document: DocumentRecord) -> Bool {
+        guard let fallbackDate = fallbackDatesByDocumentID[document.persistentModelID] else {
+            return false
+        }
+        return document.documentDate == fallbackDate
+    }
+}
+
 enum ExtractDocumentTextUseCase {
     private static let logger = Logger(subsystem: "com.kaps.docnest", category: "textExtraction")
 
@@ -11,6 +28,7 @@ enum ExtractDocumentTextUseCase {
         documents: [DocumentRecord],
         libraryURL: URL,
         modelContext: ModelContext,
+        dateUpdatePolicy: OCRDateUpdatePolicy = .preserveExistingDates,
         onProgress: (@MainActor (_ completed: Int, _ total: Int, _ currentTitle: String) -> Void)? = nil
     ) async {
         let pending = documents.filter { $0.fullText == nil && !$0.ocrCompleted && $0.storedFilePath != nil }
@@ -37,6 +55,10 @@ enum ExtractDocumentTextUseCase {
 
             if let text, !text.isEmpty {
                 document.fullText = text
+                if dateUpdatePolicy.shouldUpdateDate(for: document),
+                   let extractedDate = DocumentDateExtractor.extractDate(from: text) {
+                    document.documentDate = extractedDate
+                }
             }
             document.ocrCompleted = true
         }

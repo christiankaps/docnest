@@ -34,6 +34,7 @@ struct ImportPDFDocumentsResult {
     let failures: [Failure]
     let hadNoImportablePDFs: Bool
     let autoAssignedLabels: [String]
+    let importedDocuments: [DocumentRecord]
 
     var hasDuplicates: Bool {
         !duplicates.isEmpty
@@ -109,7 +110,6 @@ enum ImportPDFDocumentsUseCase {
         let fileSize: Int64
         let pageCount: Int
         let documentDate: Date?
-        let fullText: String?
     }
 
     private struct PreparedImport {
@@ -121,7 +121,6 @@ enum ImportPDFDocumentsUseCase {
         let fileSize: Int64
         let contentHash: String
         let storedFilePath: String
-        let fullText: String?
     }
 
     /// Resolves the supplied URLs, imports all supported PDFs into the active
@@ -354,8 +353,7 @@ enum ImportPDFDocumentsUseCase {
             pageCount: metadata.pageCount,
             fileSize: metadata.fileSize,
             contentHash: metadata.contentHash,
-            storedFilePath: "",
-            fullText: metadata.fullText
+            storedFilePath: ""
         )
     }
 
@@ -380,8 +378,7 @@ enum ImportPDFDocumentsUseCase {
             pageCount: preparedImport.pageCount,
             fileSize: preparedImport.fileSize,
             contentHash: preparedImport.contentHash,
-            storedFilePath: storedFilePath,
-            fullText: preparedImport.fullText
+            storedFilePath: storedFilePath
         )
     }
 
@@ -427,8 +424,8 @@ enum ImportPDFDocumentsUseCase {
                 contentHash: preparedImport.contentHash,
                 storedFilePath: preparedImport.storedFilePath
             )
-            record.fullText = preparedImport.fullText
-            record.ocrCompleted = true
+            record.fullText = nil
+            record.ocrCompleted = false
             record.labels = autoAssignLabels
             modelContext.insert(record)
             importedRecords.append(record)
@@ -460,7 +457,8 @@ enum ImportPDFDocumentsUseCase {
                 downloadFailures: downloadFailures,
                 failures: failures,
                 hadNoImportablePDFs: hadNoImportablePDFs,
-                autoAssignedLabels: autoAssignedLabelNames
+                autoAssignedLabels: autoAssignedLabelNames,
+                importedDocuments: []
             )
         }
 
@@ -471,7 +469,8 @@ enum ImportPDFDocumentsUseCase {
             downloadFailures: downloadFailures,
             failures: failures,
             hadNoImportablePDFs: hadNoImportablePDFs,
-            autoAssignedLabels: autoAssignedLabelNames
+            autoAssignedLabels: autoAssignedLabelNames,
+            importedDocuments: importedRecords
         )
     }
 
@@ -488,28 +487,11 @@ enum ImportPDFDocumentsUseCase {
 
         let pageCount = pdfDocument?.pageCount ?? 0
 
-        // Use OCR-aware extraction (fast path for embedded text, Vision fallback for scanned pages)
-        let fullText: String?
-        if let pdfDocument {
-            fullText = await OCRTextExtractionService.extractText(from: pdfDocument, sourceURL: fileURL)
-        } else {
-            fullText = nil
-        }
-
-        // Derive document date: prefer a date found in the document content, fall back to file creation date.
-        let documentDate: Date?
-        if let text = fullText, let extracted = DocumentDateExtractor.extractDate(from: text) {
-            documentDate = extracted
-        } else {
-            documentDate = creationDate
-        }
-
         return ImportMetadata(
             contentHash: contentHash,
             fileSize: fileSize,
             pageCount: pageCount,
-            documentDate: documentDate,
-            fullText: fullText
+            documentDate: creationDate
         )
     }
 

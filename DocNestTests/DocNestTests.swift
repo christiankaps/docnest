@@ -241,6 +241,45 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(backend, .ocrmypdf)
     }
 
+    @MainActor
+    func testOCRDateUpdatePolicyUpdatesOnlyUnchangedFallbackDates() {
+        let fallbackDate = Date(timeIntervalSince1970: 10)
+        let editedDate = Date(timeIntervalSince1970: 20)
+        let unchanged = DocumentRecord(
+            originalFileName: "unchanged.pdf",
+            title: "Unchanged",
+            documentDate: fallbackDate,
+            importedAt: .now,
+            pageCount: 1
+        )
+        let edited = DocumentRecord(
+            originalFileName: "edited.pdf",
+            title: "Edited",
+            documentDate: editedDate,
+            importedAt: .now,
+            pageCount: 1
+        )
+        let unchangedNil = DocumentRecord(
+            originalFileName: "undated.pdf",
+            title: "Undated",
+            documentDate: nil,
+            importedAt: .now,
+            pageCount: 1
+        )
+        let policy = OCRDateUpdatePolicy(
+            fallbackDatesByDocumentID: [
+                unchanged.persistentModelID: fallbackDate,
+                edited.persistentModelID: fallbackDate,
+                unchangedNil.persistentModelID: nil
+            ]
+        )
+
+        XCTAssertTrue(policy.shouldUpdateDate(for: unchanged))
+        XCTAssertFalse(policy.shouldUpdateDate(for: edited))
+        XCTAssertTrue(policy.shouldUpdateDate(for: unchangedNil))
+        XCTAssertFalse(OCRDateUpdatePolicy.preserveExistingDates.shouldUpdateDate(for: unchanged))
+    }
+
     func testFolderMonitorDeltaReportsOnlyNewAndChangedPDFs() {
         let originalDate = Date(timeIntervalSinceReferenceDate: 100)
         let updatedDate = Date(timeIntervalSinceReferenceDate: 200)
@@ -793,6 +832,9 @@ final class DocNestTests: XCTestCase {
         XCTAssertFalse(documents.first?.contentHash.isEmpty ?? true)
         XCTAssertGreaterThan(documents.first?.fileSize ?? 0, 0)
         XCTAssertNotNil(documents.first?.documentDate)
+        XCTAssertNil(documents.first?.fullText)
+        XCTAssertEqual(documents.first?.ocrCompleted, false)
+        XCTAssertEqual(importResult.importedDocuments.map(\.persistentModelID), documents.map(\.persistentModelID))
 
         guard let storedFilePath = documents.first?.storedFilePath else {
             XCTFail("Expected imported document to include a stored file path")

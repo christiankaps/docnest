@@ -249,9 +249,11 @@ A user-configured directory on the local filesystem that the app monitors for ne
 #### v1 Assumption
 - For PDFs with extractable text, embedded text is indexed.
 - For scanned or image-based PDFs, Vision framework OCR extracts text using VNRecognizeTextRequest with accurate recognition level. Pages with embedded text use the fast PDFKit path; pages without embedded text are rendered at 300 DPI and processed through OCR. Pages are processed sequentially to manage memory.
-- OCR runs during import (new documents are fully extracted before the import completes) and as a background backfill on app launch for documents not yet processed.
+- Import stores new documents immediately after copy and cheap metadata extraction. OCR/text extraction is marked pending for new documents and runs in the background after import completes.
+- Background OCR also runs on app launch for documents not yet processed.
 - A toolbar progress indicator shows OCR backfill progress (document count and cancel button) next to the search bar.
 - Each document tracks an `ocrCompleted` flag to prevent infinite retry on genuinely blank documents.
+- Search results update after background OCR completes and extracted text is saved.
 - Users can manually trigger re-extraction via "Re-extract Text" in the document context menu or the inspector's Text Extraction section.
 - The inspector shows per-document OCR status: extracted character count, "No text found", "Legacy extraction (no OCR)", or "Pending extraction".
 
@@ -275,8 +277,10 @@ The Document Date represents the semantic content date of a document (e.g. the i
 - The field is separate from `importedAt` (set at import time, immutable) and from the file system creation date.
 - The data model field is named `documentDate` and was renamed from `sourceCreatedAt` in schema V4; the SwiftData migration is lightweight using `@Attribute(.originalName("sourceCreatedAt"))`.
 
-**Date Extraction on Import**
-- During import, after OCR text extraction completes, the app attempts to extract a document date from the extracted text using `DocumentDateExtractor`.
+**Date Extraction**
+- During import, the file system creation date is captured as the initial fallback `documentDate` when available.
+- After background OCR text extraction completes for newly imported documents, the app attempts to extract a semantic document date from the extracted text using `DocumentDateExtractor`.
+- The OCR-derived date replaces the initial fallback only if the document date still matches the import-time fallback, so a user-edited date is not overwritten by late OCR completion.
 - `DocumentDateExtractor` recognises common English and German date formats:
   - ISO 8601: `2024-03-15`
   - English long form: `March 15, 2024` and `15 March 2024`
@@ -680,7 +684,7 @@ Current state:
 - Search filters live across title, original filename, label names, and extracted PDF full text.
 - Multi-word search is token-based; document remains visible only if all terms are found across searchable metadata and full text.
 - Search text and label filters can be combined and operate on the same document list.
-- PDF text extraction uses a two-tier approach: PDFKit for pages with embedded text (fast path) and Vision framework OCR for scanned/image pages (fallback). Text is extracted during import and stored in the document model. Existing documents without extracted text are backfilled on app launch with a toolbar progress indicator. Users can manually re-extract text via context menu or inspector.
+- PDF text extraction uses a two-tier approach: PDFKit for pages with embedded text (fast path) and Vision framework OCR for scanned/image pages (fallback). New documents are imported first with text extraction pending; OCR runs in the background after import and on app launch for documents without extracted text. Users can manually re-extract text via context menu or inspector.
 - Smart folders are implemented as saved label collections persisted via SwiftData.
 - Smart folders appear in their own sidebar section between Library and Labels, with create (+), edit, delete, and drag-to-reorder.
 - Selecting a smart folder highlights the corresponding labels in the sidebar and shows only documents matching all of the folder's labels.
