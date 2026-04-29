@@ -202,7 +202,7 @@ struct WatchFolderEditorSheet: View {
         let trimmed = newLabelName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            let label = try ManageLabelsUseCase.createLabel(named: trimmed, color: .blue, using: modelContext)
+            let label = try ManageLabelsUseCase.createOrReuseLabelForAssignment(named: trimmed, color: .blue, using: modelContext)
             selectedLabelIDs.insert(label.id)
             newLabelName = ""
         } catch {

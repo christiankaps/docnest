@@ -20,11 +20,14 @@ struct LabelEditorSheet: View {
 
     @State private var name: String = ""
     @State private var icon: String = ""
+    @State private var unit: String = ""
     @State private var selectedColor: LabelColor = .blue
     @State private var selectedGroupID: UUID?
     @State private var isCreatingNewGroup = false
     @State private var newGroupName = ""
     @State private var errorMessage: String?
+    @State private var isConfirmingUnitClear = false
+    @State private var pendingUnitClearAffectedCount = 0
 
     private var isEditing: Bool {
         if case .edit = config.mode { return true }
@@ -56,6 +59,14 @@ struct LabelEditorSheet: View {
 
                     TextField("Label name", text: $name)
                         .textFieldStyle(.roundedBorder)
+                }
+
+                Section("Unit") {
+                    TextField("€ / USD / kg", text: $unit)
+                        .textFieldStyle(.roundedBorder)
+                    Text("Optional value suffix. Leave empty for labels that do not track document values.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 // Color grid
@@ -150,25 +161,51 @@ struct LabelEditorSheet: View {
             if let label = existingLabel {
                 name = label.name
                 icon = label.icon ?? ""
+                unit = label.unitSymbol ?? ""
                 selectedColor = label.labelColor
                 selectedGroupID = label.groupID
             } else if case .create(let groupID) = config.mode {
                 selectedGroupID = groupID
             }
         }
+        .confirmationDialog(
+            "Clear Label Unit?",
+            isPresented: $isConfirmingUnitClear,
+            titleVisibility: .visible
+        ) {
+            Button("Clear Unit and Values", role: .destructive) {
+                save(confirmedUnitClear: true)
+            }
+            Button("Cancel", role: .cancel) {
+                unit = existingLabel?.unitSymbol ?? ""
+                pendingUnitClearAffectedCount = 0
+            }
+        } message: {
+            Text("Clearing this unit will delete values from \(pendingUnitClearAffectedCount) document(s).")
+        }
     }
 
-    private func save() {
+    private func save(confirmedUnitClear: Bool = false) {
         do {
             let trimmedIcon = icon.trimmingCharacters(in: .whitespacesAndNewlines)
             let iconValue = trimmedIcon.isEmpty ? nil : String(trimmedIcon.prefix(1))
 
             if let label = existingLabel {
+                let normalizedUnit = try ManageLabelValuesUseCase.normalizedUnitSymbol(from: unit)
+                if label.unitSymbol != nil, normalizedUnit == nil, !confirmedUnitClear {
+                    let affectedCount = try ManageLabelsUseCase.valuesAffectedByClearingUnit(for: label, using: modelContext)
+                    if affectedCount > 0 {
+                        pendingUnitClearAffectedCount = affectedCount
+                        isConfirmingUnitClear = true
+                        return
+                    }
+                }
                 try ManageLabelsUseCase.update(
                     label,
                     name: name,
                     color: selectedColor,
                     icon: iconValue,
+                    unitSymbol: unit,
                     groupID: selectedGroupID,
                     using: modelContext
                 )
@@ -177,6 +214,7 @@ struct LabelEditorSheet: View {
                     named: name,
                     color: selectedColor,
                     icon: iconValue,
+                    unitSymbol: unit,
                     groupID: selectedGroupID,
                     using: modelContext
                 )

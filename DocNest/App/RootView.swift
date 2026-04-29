@@ -33,6 +33,9 @@ struct RootView: View {
     @Query(sort: \WatchFolder.sortOrder, order: .forward)
     private var allWatchFolders: [WatchFolder]
 
+    @Query(sort: \DocumentLabelValue.updatedAt, order: .reverse)
+    private var allLabelValues: [DocumentLabelValue]
+
     var body: some View {
         HStack(spacing: 0) {
             LibrarySidebarView()
@@ -66,7 +69,7 @@ struct RootView: View {
         .toolbar { toolbarContent }
         .modifier(RootViewImportModifier(coordinator: coordinator))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
-        .modifier(RootViewChangeHandlers(coordinator: coordinator, thumbnailCache: thumbnailCache, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders))
+        .modifier(RootViewChangeHandlers(coordinator: coordinator, thumbnailCache: thumbnailCache, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders, allLabelValues: allLabelValues))
         .focusedSceneValue(\.exportDocumentsAction) {
             coordinator.exportDocuments(coordinator.displayedSelectedDocuments)
         }
@@ -88,7 +91,7 @@ struct RootView: View {
                 coordinator: coordinator,
                 modelContainer: librarySession.modelContainer
             )
-            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders)
+            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders, allLabelValues: allLabelValues)
             coordinator.runOCRBackfill(documents: allDocuments, libraryURL: libraryURL, modelContext: modelContext)
             coordinator.setupWatchFolderMonitoring()
             // Import any URLs that arrived before the library was ready
@@ -389,6 +392,7 @@ private struct RootViewChangeHandlers: ViewModifier {
     let allSmartFolders: [SmartFolder]
     let allLabelGroups: [LabelGroup]
     let allWatchFolders: [WatchFolder]
+    let allLabelValues: [DocumentLabelValue]
 
     private var labelFingerprint: Int {
         var hasher = Hasher()
@@ -396,6 +400,7 @@ private struct RootViewChangeHandlers: ViewModifier {
         for label in allLabels {
             hasher.combine(label.persistentModelID)
             hasher.combine(label.name)
+            hasher.combine(label.unitSymbol)
             hasher.combine(label.sortOrder)
             hasher.combine(label.groupID)
         }
@@ -445,6 +450,14 @@ private struct RootViewChangeHandlers: ViewModifier {
         return hasher.finalize()
     }
 
+    private var labelValueChangeToken: LabelValueChangeToken {
+        LabelValueChangeToken(
+            count: allLabelValues.count,
+            newestUpdatedAt: allLabelValues.first?.updatedAt,
+            newestPersistentIDDescription: allLabelValues.first.map { String(describing: $0.persistentModelID) }
+        )
+    }
+
     func body(content: Content) -> some View {
         content
             .modifier(ChangeHandlersNotifications(coordinator: coordinator, thumbnailCache: thumbnailCache))
@@ -455,12 +468,20 @@ private struct RootViewChangeHandlers: ViewModifier {
                 allSmartFolders: allSmartFolders,
                 allLabelGroups: allLabelGroups,
                 allWatchFolders: allWatchFolders,
+                allLabelValues: allLabelValues,
                 labelFingerprint: labelFingerprint,
                 smartFolderFingerprint: smartFolderFingerprint,
                 labelGroupFingerprint: labelGroupFingerprint,
-                watchFolderFingerprint: watchFolderFingerprint
+                watchFolderFingerprint: watchFolderFingerprint,
+                labelValueChangeToken: labelValueChangeToken
             ))
     }
+}
+
+private struct LabelValueChangeToken: Equatable {
+    let count: Int
+    let newestUpdatedAt: Date?
+    let newestPersistentIDDescription: String?
 }
 
 private struct ChangeHandlersNotifications: ViewModifier {
@@ -519,13 +540,16 @@ private struct ChangeHandlersData: ViewModifier {
     let allSmartFolders: [SmartFolder]
     let allLabelGroups: [LabelGroup]
     let allWatchFolders: [WatchFolder]
+    let allLabelValues: [DocumentLabelValue]
     let labelFingerprint: Int
     let smartFolderFingerprint: Int
     let labelGroupFingerprint: Int
     let watchFolderFingerprint: Int
+    let labelValueChangeToken: LabelValueChangeToken
     @State private var pendingDocumentRefreshTask: Task<Void, Never>?
     @State private var pendingMetadataRefreshTask: Task<Void, Never>?
     @State private var pendingWatchFolderRefreshTask: Task<Void, Never>?
+    @State private var pendingLabelValueRefreshTask: Task<Void, Never>?
 
     private func scheduleDocumentRefresh(allowWhenMetadataRefreshPending: Bool = true) {
         pendingDocumentRefreshTask?.cancel()
@@ -572,6 +596,16 @@ private struct ChangeHandlersData: ViewModifier {
         }
     }
 
+    private func scheduleLabelValueRefresh() {
+        pendingLabelValueRefreshTask?.cancel()
+        pendingLabelValueRefreshTask = Task { @MainActor in
+            defer { pendingLabelValueRefreshTask = nil }
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            coordinator.syncLabelValues(allLabelValues)
+        }
+    }
+
     func body(content: Content) -> some View {
         content
             .onChange(of: allDocuments.count) {
@@ -592,10 +626,14 @@ private struct ChangeHandlersData: ViewModifier {
             .onChange(of: watchFolderFingerprint) {
                 scheduleWatchFolderRefresh()
             }
+            .onChange(of: labelValueChangeToken) {
+                scheduleLabelValueRefresh()
+            }
             .onDisappear {
                 pendingDocumentRefreshTask?.cancel()
                 pendingMetadataRefreshTask?.cancel()
                 pendingWatchFolderRefreshTask?.cancel()
+                pendingLabelValueRefreshTask?.cancel()
             }
     }
 }

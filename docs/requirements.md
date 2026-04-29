@@ -210,6 +210,14 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - Label management (create, rename, delete, color selection) is integrated directly in left sidebar, not in a separate modal dialog.
 - Label order in sidebar is user-reorderable via drag-and-drop and persisted.
 - Full label management is available from `DocNest > Settings… > Labels`. The sidebar remains the quick-access surface for filtering, selection, creation shortcuts, and drag-and-drop organization.
+- Labels may optionally define a short free-form unit, such as `€`, `USD`, `kg`, or `h`.
+- A document assigned to a unit-enabled label may store one optional numeric value for that document-label pair.
+- Values are entered manually from the inspector. Missing values are distinct from zero.
+- Clearing a label unit warns with the affected document count and deletes existing values for that label after confirmation.
+- When the active filter context contains exactly one unit-enabled label, the document list shows contextual read-only values for that label and a sidebar statistics footer.
+- Label value statistics show the count of scoped documents with values and compute sum, average, minimum, maximum, and median over valued documents only. Empty values are not counted as zero or included in averages.
+- Label value statistics identify the active value label, always show the filtered-document scope, and show the selected-visible-document scope only when more than one visible document is selected.
+- Statistics calculation must not block document selection, row highlighting, or inspector updates.
 
 #### Should
 - Colored labels.

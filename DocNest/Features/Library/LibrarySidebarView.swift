@@ -52,16 +52,22 @@ struct LibrarySidebarView: View {
         let renderStartTime = Date().timeIntervalSinceReferenceDate
         #endif
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                librarySectionContent
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    librarySectionContent
 
-                smartFolderSection
+                    smartFolderSection
 
-                labelSectionContent
+                    labelSectionContent
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 12)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 12)
+
+            if let summary = coordinator.activeLabelValueStatisticsSummary {
+                LabelValueStatisticsFooter(summary: summary)
+            }
         }
         .background {
             ZStack {
@@ -1257,6 +1263,90 @@ private struct SmartFolderDragPreview: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct LabelValueStatisticsFooter: View {
+    let summary: LabelValueStatisticsSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Values", systemImage: "number")
+                    .font(AppTypography.sidebarSection)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(summary.filtered.labelName) · \(summary.filtered.unitSymbol)")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            statisticsBlock(title: "Filtered", statistics: summary.filtered)
+
+            if summary.selection.scopeDocumentCount > 1 {
+                Divider()
+
+                statisticsBlock(title: "Selection", statistics: summary.selection)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.headerBackground)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(AppTheme.separator)
+                .frame(height: 0.5)
+        }
+    }
+
+    private func statisticsBlock(title: String, statistics: LabelValueStatistics) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text("\(statistics.valuedDocumentCount) of \(statistics.scopeDocumentCount) valued")
+                    .font(AppTypography.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(minimum: 58), alignment: .leading),
+                    GridItem(.flexible(minimum: 58), alignment: .leading)
+                ],
+                alignment: .leading,
+                spacing: 6
+            ) {
+                statisticMetric("Sum", statistics.sum, statistics)
+                statisticMetric("Avg", statistics.average, statistics)
+                statisticMetric("Min", statistics.minimum, statistics)
+                statisticMetric("Max", statistics.maximum, statistics)
+                statisticMetric("Med", statistics.median, statistics)
+            }
+        }
+    }
+
+    private func statisticMetric(_ label: String, _ value: Decimal?, _ statistics: LabelValueStatistics) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
+            Text(formatted(value, statistics))
+                .font(AppTypography.caption.monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .foregroundStyle(value == nil ? .tertiary : .primary)
+        }
+    }
+
+    private func formatted(_ value: Decimal?, _ statistics: LabelValueStatistics) -> String {
+        guard let value else { return "-" }
+        return ManageLabelValuesUseCase.formattedValue(value, unitSymbol: statistics.unitSymbol)
     }
 }
 

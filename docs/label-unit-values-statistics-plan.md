@@ -13,7 +13,7 @@ Example: if `Invoice` has unit `€`, documents labeled `Invoice` can store invo
 - Label creation, rename, delete, assignment, and removal live in `ManageLabelsUseCase`.
 - `LibraryCoordinator` derives active, trashed, filtered, and selected document sets, and does expensive filter work off the main actor using `SearchDocumentsUseCase.Snapshot`.
 - The document inspector owns single-document label assignment UI and multi-selection label operations.
-- The document list status bar is the natural place to show compact aggregate information for the current filtered set.
+- The bottom of the left sidebar is the preferred place to show aggregate value information because it has enough room to show filtered and selected scopes together.
 - SwiftData schema evolution is managed in `DocNestSchemaVersioning.swift`; the current schema is V4.
 
 ## Product Decisions
@@ -21,10 +21,10 @@ Example: if `Invoice` has unit `€`, documents labeled `Invoice` can store invo
 - A label has zero or one unit. The unit is metadata on `LabelTag`, not on each document.
 - A document-label assignment has zero or one numeric value. This value is metadata for the specific document and label pair.
 - Exactly one value per document-label pair is the lasting constraint for this feature; do not design for multiple values per pair.
-- Statistics only appear when the effective label filter context resolves to exactly one label with a non-empty unit. Additional non-unit labels may still narrow the filtered documents.
-- Statistics operate on an explicit document scope selected in the statistics UI:
-  - `Filtered`, the default, uses the currently filtered document set
-  - `Selection` uses selected documents that are still visible in the current filtered set
+- Statistics only appear when the effective label filter context resolves to exactly one label with a non-empty unit. Additional non-unit labels may still narrow the filtered documents. If a document has several value-enabled labels, the statistics still describe only the single active value label; values from different labels or units are never combined.
+- Statistics show the active value label name and unit, then the relevant document scopes:
+  - `Filtered` uses the currently filtered document set and is always shown
+  - `Selection` uses selected documents that are still visible in the current filtered set and is shown only when more than one visible document is selected
 - Statistics ignore empty/missing values for numeric calculations, including average and median.
 - The statistic surface must show both the number of documents with a value and the total document count in the current scope, so missing values are visible instead of silent.
 - Smart folder selections should show statistics when the effective smart-folder label set contains exactly one value-enabled label. Non-unit labels in the same smart folder, such as `Invoice + 2026`, still scope the visible documents but do not make the statistic ambiguous.
@@ -176,7 +176,7 @@ Do not rely only on `filteredDocuments` changes for invalidation. Statistics als
 - the effective label filter changes
 - a label unit is created, edited, cleared, or merged
 - a value is set, updated, cleared, pruned, deduplicated, or deleted
-- the user changes the statistics scope between `Filtered` and `Selection`
+No user-facing scope toggle is needed; the sidebar footer derives scope visibility from the current filter and selection.
 
 Implementation options:
 
@@ -197,15 +197,14 @@ Statistics appear only when the effective label set resolves to exactly one labe
 
 The coordinator should not include trashed documents unless the current filtered document set is the Bin view. It should simply use `filteredDocuments`, after section filtering and search have already been applied, so the statistic always describes exactly what the user is looking at.
 
-Statistics scope selection:
+Statistics scopes:
 
-- default to `Filtered`, even when the document list has an automatic or explicit single-document selection
-- expose a small scope picker in the statistics strip with `Filtered` and `Selection`
-- enable `Selection` only when one or more selected documents are still present in `filteredDocuments`
-- when `Selection` is active and the visible selection becomes empty, fall back to `Filtered`
-- expose the active scope in `LabelValueStatistics.scope`, for example `.selection` or `.filteredDocuments`, so the UI can label the statistic as `Selection` or `Filtered`
-- if selection changes while `Selection` scope is active, statistics must refresh immediately
-- if selection changes while `Filtered` scope is active, keep the displayed aggregate stable except for enabling or disabling the `Selection` option
+- always compute and show `Filtered`, even when the document list has an automatic or explicit single-document selection
+- compute `Selection` for selected documents still present in `filteredDocuments`, but show it only when more than one visible document is selected
+- hide single-document and empty selection statistics rather than falling back to filtered statistics
+- expose the scope in each `LabelValueStatistics.scope`, for example `.selection` or `.filtered`, so the UI can label each block
+- if selection changes, selection statistics must refresh without blocking row highlighting
+- if selection changes, keep the filtered aggregate stable while showing, updating, or hiding the `Selection` block
 - selection handling must update visible selection state before scheduling statistics recomputation, so rapid arrow-key or mouse selection remains responsive
 
 ## UI Plan
@@ -223,7 +222,7 @@ Add a unit field anywhere labels are created or edited:
 
 For compact create-and-assign flows, do not add a unit field unless there is enough room and the workflow remains clear. It is acceptable for quick-create flows to create labels without units and rely on the full label editor for adding the unit later. The important requirement is that this behavior is intentional and documented in code/UI tests.
 
-Use a compact text field labeled `Unit` with placeholder examples such as `€`, `USD`, `kg`, or `h`. Empty means no value support for that label. Keep units short enough for list rows and the statistics strip:
+Use a compact text field labeled `Unit` with placeholder examples such as `€`, `USD`, `kg`, or `h`. Empty means no value support for that label. Keep units short enough for list rows and the statistics footer:
 
 - normalize collapsed whitespace
 - reject or require shortening units beyond 12 visible characters
@@ -275,7 +274,7 @@ The document list should not permanently inflate every label pill with values. I
 When the current filter context resolves to exactly one value-enabled label, document rows may show that label's value as a contextual read-only value indicator:
 
 - list mode: show a stable optional `Value` column that is available in the column visibility menu, excluded from saved per-label context, and populated only for the active value-enabled label context
-- if the `Value` column is hidden and a value-enabled filter is active, show a small inline affordance in the unified status/stat bar to reveal it
+- if the `Value` column is hidden and a value-enabled filter is active, keep statistics visible in the sidebar footer; the column visibility menu remains the place to reveal the column
 - thumbnail mode: show a small value badge below the title or near the mini label bar, only for the active value-enabled label
 - missing values display as `-` or `No value` in subdued text
 - zero displays as a real formatted value, never as missing
@@ -286,26 +285,26 @@ When the current filter context resolves to exactly one value-enabled label, doc
 
 ### Filter Statistics
 
-Replace the existing document-list status bar with a unified status/stat bar rather than adding a separate panel:
+Show statistics in a footer at the bottom of the left sidebar:
 
 - visible only when `coordinator.activeLabelValueStatistics != nil`
-- left side keeps the existing document count and selected count
-- right side shows the value statistics when the current filter context has exactly one value-enabled label
-- includes a compact `Filtered / Selection` scope picker; `Filtered` is the default
-- shows `Sum`, `Avg`, `Min`, `Max`, and `Median`
-- shows active scope plus `valuedDocumentCount` and missing count in subdued text, for example `Selection: 3 of 5 valued` or `Filtered: 8 of 10 valued`
+- the document-list status bar keeps the existing document count and selected count
+- the sidebar footer shows value statistics when the current filter context has exactly one value-enabled label
+- names the active value label and unit in the footer header
+- shows `Filtered` without a scope picker and adds `Selection` only for multi-selection
+- each scope shows `Sum`, `Avg`, `Min`, `Max`, and `Median`
+- shows `valuedDocumentCount` and missing count in subdued text for each scope, for example `Selection: 3 of 5 valued` and `Filtered: 8 of 10 valued`
 - formats values with the label unit
-- remains visible for a filter context with exactly one value-enabled label even when no documents in scope have values, showing `0 of N valued` and omitting or disabling numeric statistic fields
-- when no documents in scope have values, include a concise action such as `Select a document to add a value` or `Show missing values`, depending on whether any documents are visible
-- handles narrow widths responsively by collapsing lower-priority fields, moving details into a popover, or using another native compact presentation instead of truncating five stats into unreadable text
+- remains visible for a filter context with exactly one value-enabled label even when no documents in either scope have values, showing `0 of N valued` and `-` for unavailable numeric fields
+- handles narrow widths responsively by arranging metrics in a compact grid and scaling long numeric text rather than truncating five stats into unreadable text
 
-Keep the bar dense and native, since this is an operational document list, not a dashboard. It should not consume much vertical space or visually compete with the document list.
+Keep the footer dense and native, since this is an operational document list, not a dashboard. It should not visually compete with the document list.
 
 Bulk and missing-value usability:
 
-- from a multi-selection summary such as `Invoice (€): 6 of 8 valued`, provide a `Show Missing` affordance that filters or steps focus through the selected visible documents missing that value without changing stored metadata
-- in filtered scope, `Show Missing` should temporarily highlight or navigate to visible documents missing the active value rather than creating a new persistent filter
-- avoid a new side panel; use the unified status/stat bar, inspector focus, and existing list affordances
+- from a multi-selection summary such as `Invoice (€): 6 of 8 valued`, a later enhancement may provide a `Show Missing` affordance that filters or steps focus through the selected visible documents missing that value without changing stored metadata
+- in filtered scope, any future `Show Missing` behavior should temporarily highlight or navigate to visible documents missing the active value rather than creating a new persistent filter
+- avoid a separate right-side statistics panel; use the sidebar footer, inspector focus, and existing list affordances
 
 ## Formatting Plan
 
@@ -355,10 +354,10 @@ Add focused tests in `DocNestTests`:
 - statistics with zero valued documents show the empty statistics state rather than disappearing for a value-enabled filter
 - statistics use only currently filtered documents
 - statistics honor current section and search text as well as labels
-- statistics default to filtered scope even when a document is selected
-- users can switch statistics to selection scope when selected visible documents exist
-- selection scope falls back to filtered scope when no selected document is visible
-- selection changes refresh statistics only when selection scope is active, and otherwise only update scope availability
+- statistics show filtered scope even when a document is selected
+- statistics also show selection scope when more than one visible document is selected
+- selection scope is hidden for empty or single-document selections
+- selection changes refresh the sidebar footer without requiring a scope toggle
 - single-label filter produces statistics for a value-enabled label
 - multi-label filter with exactly one value-enabled label produces statistics scoped by all labels
 - multi-label filter with multiple value-enabled labels suppresses statistics
@@ -379,11 +378,11 @@ Add at least one UI or UI-adjacent test in `DocNestUITests` or a focused integra
 - verify the inspector shows label identity and value editing as separate controls, not an editable number embedded inside the label pill
 - verify the contextual list value indicator appears only for the active value-enabled label filter and treats missing values differently from zero
 - verify missing value cells can reveal and focus the inspector value field
-- verify the statistics scope picker defaults to `Filtered`, can switch to `Selection`, and disables or falls back when no visible selection exists
-- verify `0 of N valued` includes an actionable next step
-- verify the statistics strip appears and updates after the edit
+- verify the sidebar statistics footer shows the active value label, always shows filtered statistics, and shows selection statistics only for multi-selection
+- verify `0 of N valued` leaves numeric statistics empty instead of dividing by zero
+- verify the statistics footer appears and updates after the edit
 
-If direct UI automation proves too brittle, add accessibility identifiers to the value field and statistics strip before writing the test.
+If direct UI automation proves too brittle, add accessibility identifiers to the value field and statistics footer before writing the test.
 
 Run focused tests while implementing, then follow the repository gate:
 
@@ -404,7 +403,7 @@ Update requirements documentation when implementing:
 Update organization documentation:
 
 - explain that labels can optionally carry units
-- explain that statistics default to filtered scope and can be switched to selected visible documents
+- explain that statistics describe one active value label at a time, always include filtered documents, and include selected visible documents only for multi-selection
 - clarify that values are metadata on the document-label assignment, not on the document globally
 
 Update library format/schema documentation:
@@ -420,10 +419,34 @@ Update library format/schema documentation:
 4. Add coordinator-derived statistics for the effective single value-enabled label filter.
 5. Add inspector value editing for assigned labels with units using the separate `LabelValueRow` pattern.
 6. Add contextual read-only document-list value indicators and missing-value affordances for the active value-enabled label filter.
-7. Replace the document-list status bar with the unified status/stat bar and explicit statistics scope picker.
+7. Add the sidebar statistics footer that shows filtered statistics and adds selected statistics for multi-selection.
 8. Add tests for domain behavior, statistics, filter scoping, lifecycle cleanup, invalidation, UI wiring, and migration.
 9. Update requirements and supporting docs.
 10. Run the required independent AI reviews and full test suite before committing.
+
+## Implementation Phase Instructions
+
+When implementing this feature, follow `AGENTS.md` as the controlling workflow:
+
+- add or update automated tests with the implementation, including domain, migration, coordinator/statistics, and UI or UI-adjacent coverage described above
+- update `docs/requirements.md` in the same change because this feature changes app behavior
+- update supporting documentation such as `docs/search-and-organization.md` and `docs/library-format.md` where the new label unit/value model affects behavior or schema description
+- run the independent AI review sequence required by `AGENTS.md`: start with the fast reviewer, fix findings, rerun until clean, then run the stronger reviewer and fix any findings
+- run the full test suite only after both review passes are clean
+- commit only after implementation, documentation, reviews, and full tests are complete
+- push the completed commit to the remote branch
+- create a major release after the pushed implementation is verified
+
+For the major release:
+
+- follow the repository release instructions in `AGENTS.md`
+- ensure the working tree is clean before release work
+- determine the repository default branch from git/GitHub metadata
+- check out the default branch and fast-forward it from origin when possible
+- check GitHub for the latest published release before choosing the next version
+- use the `YYYY.MAJOR.MINOR` schema
+- because this feature explicitly requests a major release, increment the `MAJOR` component for the current release year and reset `MINOR` to `0`, unless the latest release year differs from the current calendar year and the repository release rules require starting the new year line at `YYYY.1.0`
+- create the release from the default branch and verify it is marked latest
 
 ## Risks and Mitigations
 
@@ -441,9 +464,9 @@ Update library format/schema documentation:
 - Input abuse risk: reject overlong or non-finite numeric strings before attempting expensive parsing.
 - Pill overload risk: keep label pills as identity chips and use adjacent value controls/indicators for numeric metadata.
 - Discoverability risk: missing-value cells and label rows must provide direct affordances to reveal the inspector, focus the value field, or manage the label unit.
-- UI clutter risk: keep values in the inspector and aggregate statistics in the status area; avoid adding another large dashboard panel.
-- Scope surprise risk: default statistics to filtered scope and require an explicit scope picker for selection statistics.
-- Narrow layout risk: define a collapsed statistics presentation so the unified status/stat bar is not forced to display every statistic at once.
+- UI clutter risk: keep values in the inspector and aggregate statistics in the sidebar footer; avoid adding another large dashboard panel.
+- Scope surprise risk: show filtered and selection statistics side by side instead of requiring users to discover a scope toggle.
+- Narrow layout risk: use a compact sidebar grid so both scopes remain readable.
 - Performance risk: compute statistics from `filteredDocuments` and the value lookup map, not from repeated SwiftData fetches per row.
 - Data-loss risk: clearing a label unit intentionally deletes existing values, so require an explicit warning that includes the affected document count before the deletion happens.
 
@@ -454,7 +477,7 @@ An independent review pass with a different model found four plan gaps, all inco
 - define uniqueness and cleanup rules for `DocumentLabelValue`, including hard document deletion
 - define statistics invalidation on unit/value changes, not just filtered-document changes
 - enumerate quick-create label surfaces and decide duplicate-name unit behavior
-- add UI or UI-adjacent coverage for inspector value editing and the statistics strip
+- add UI or UI-adjacent coverage for inspector value editing and the statistics footer
 
 ## Open Questions for Implementation
 

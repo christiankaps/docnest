@@ -17,9 +17,12 @@ struct LabelManagerSheet: View {
 
     @State private var editorName = ""
     @State private var editorIcon = ""
+    @State private var editorUnit = ""
     @State private var editorColor: LabelColor = .blue
     @State private var editorGroupID: UUID?
     @State private var suppressAutoSave = false
+    @State private var pendingUnitClearLabel: LabelTag?
+    @State private var pendingUnitClearAffectedCount = 0
 
     // MARK: - Group management
 
@@ -124,6 +127,26 @@ struct LabelManagerSheet: View {
             }
         } message: {
             Text(deletionDialogMessage)
+        }
+        .confirmationDialog(
+            "Clear Label Unit?",
+            isPresented: pendingUnitClearBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Clear Unit and Values", role: .destructive) {
+                if let label = pendingUnitClearLabel {
+                    applyChanges(to: label, confirmedUnitClear: true)
+                }
+                pendingUnitClearLabel = nil
+                pendingUnitClearAffectedCount = 0
+            }
+            Button("Cancel", role: .cancel) {
+                loadEditorFromSelection()
+                pendingUnitClearLabel = nil
+                pendingUnitClearAffectedCount = 0
+            }
+        } message: {
+            Text("Clearing this unit will delete values from \(pendingUnitClearAffectedCount) document(s).")
         }
     }
 
@@ -328,6 +351,15 @@ struct LabelManagerSheet: View {
             }
             .onChange(of: editorIcon) { autoSave() }
 
+            Section("Unit") {
+                TextField("€ / USD / kg", text: $editorUnit)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { applyChanges() }
+                Text("Shown next to document values and statistics. Leave empty for a normal label.")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Color") {
                 colorGrid
             }
@@ -358,6 +390,14 @@ struct LabelManagerSheet: View {
 
                 TextField("Label name", text: $editorName)
                     .textFieldStyle(.roundedBorder)
+            }
+
+            Section("Unit") {
+                TextField("€ / USD / kg", text: $editorUnit)
+                    .textFieldStyle(.roundedBorder)
+                Text("Optional. Add a unit to store one value per document for this label.")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Color") {
@@ -585,6 +625,7 @@ struct LabelManagerSheet: View {
             suppressAutoSave = true
             editorName = label.name
             editorIcon = label.icon ?? ""
+            editorUnit = label.unitSymbol ?? ""
             editorColor = label.labelColor
             editorGroupID = label.groupID
             suppressAutoSave = false
@@ -598,6 +639,7 @@ struct LabelManagerSheet: View {
         createInGroupID = groupID
         editorName = ""
         editorIcon = ""
+        editorUnit = ""
         editorColor = .blue
         editorGroupID = groupID
         errorMessage = nil
@@ -613,6 +655,7 @@ struct LabelManagerSheet: View {
                 named: editorName,
                 color: editorColor,
                 icon: iconValue,
+                unitSymbol: editorUnit,
                 groupID: editorGroupID,
                 using: modelContext
             )
@@ -631,8 +674,35 @@ struct LabelManagerSheet: View {
 
     private func applyChanges() {
         guard let label = singleSelectedLabel else { return }
+        applyChanges(to: label, confirmedUnitClear: false)
+    }
+
+    private var pendingUnitClearBinding: Binding<Bool> {
+        Binding(
+            get: { pendingUnitClearLabel != nil },
+            set: { newValue in
+                if !newValue {
+                    pendingUnitClearLabel = nil
+                    pendingUnitClearAffectedCount = 0
+                }
+            }
+        )
+    }
+
+    private func applyChanges(to label: LabelTag, confirmedUnitClear: Bool) {
         guard !editorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         do {
+            if label.unitSymbol != nil,
+               editorUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !confirmedUnitClear {
+                let affectedCount = try ManageLabelsUseCase.valuesAffectedByClearingUnit(for: label, using: modelContext)
+                if affectedCount > 0 {
+                    pendingUnitClearLabel = label
+                    pendingUnitClearAffectedCount = affectedCount
+                    return
+                }
+            }
+
             let trimmedIcon = editorIcon.trimmingCharacters(in: .whitespacesAndNewlines)
             let iconValue = trimmedIcon.isEmpty ? nil : String(trimmedIcon.prefix(1))
 
@@ -641,6 +711,7 @@ struct LabelManagerSheet: View {
                 name: editorName,
                 color: editorColor,
                 icon: iconValue,
+                unitSymbol: editorUnit,
                 groupID: editorGroupID,
                 using: modelContext
             )

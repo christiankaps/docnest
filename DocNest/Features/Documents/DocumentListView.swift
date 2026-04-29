@@ -28,9 +28,10 @@ struct DocumentListView: View {
         var pages: Bool
         var size: Bool
         var labels: Bool
+        var value: Bool
 
         var visibleCount: Int {
-            [imported, created, pages, size, labels].filter { $0 }.count
+            [imported, created, pages, size, labels, value].filter { $0 }.count
         }
     }
 
@@ -62,11 +63,13 @@ struct DocumentListView: View {
     @AppStorage("docListColumnWidthPages") private var pagesColumnWidth = 72.0
     @AppStorage("docListColumnWidthSize") private var sizeColumnWidth = 96.0
     @AppStorage("docListColumnWidthLabels") private var labelsColumnWidth = 240.0
+    @AppStorage("docListColumnWidthValue") private var valueColumnWidth = 120.0
     @AppStorage("docListShowImported") private var showsImportedColumn = true
     @AppStorage("docListShowCreated") private var showsCreatedColumn = true
     @AppStorage("docListShowPages") private var showsPagesColumn = true
     @AppStorage("docListShowSize") private var showsSizeColumn = true
     @AppStorage("docListShowLabels") private var showsLabelsColumn = true
+    @AppStorage("docListShowValue") private var showsValueColumn = true
 
     private func recomputeSortedDocuments() {
         let column = sortColumn
@@ -129,7 +132,8 @@ struct DocumentListView: View {
             created: showsCreatedColumn,
             pages: showsPagesColumn,
             size: showsSizeColumn,
-            labels: showsLabelsColumn
+            labels: showsLabelsColumn,
+            value: showsValueColumn && coordinator.activeLabelValueStatistics != nil
         )
 
         let optionalColumnsAvailableWidth = max(
@@ -145,6 +149,7 @@ struct DocumentListView: View {
             if visibility.pages { width += pagesColumnWidth }
             if visibility.size { width += sizeColumnWidth }
             if visibility.labels { width += labelsColumnWidth }
+            if visibility.value { width += valueColumnWidth }
 
             width += Double(visibility.visibleCount) * listColumnSpacing
             return width
@@ -152,6 +157,7 @@ struct DocumentListView: View {
 
         let hideOrder: [WritableKeyPath<OptionalColumnVisibility, Bool>] = [
             \.labels,
+            \.value,
             \.size,
             \.pages,
             \.created,
@@ -311,6 +317,15 @@ struct DocumentListView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    if effectiveOptionalColumns.value {
+                        ResizableColumnHeader(width: $valueColumnWidth, minWidth: 90) {
+                            Text("Value")
+                                .font(AppTypography.columnHeader)
+                                .lineLimit(1)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             } else {
                 HStack(spacing: 10) {
@@ -434,6 +449,7 @@ struct DocumentListView: View {
         Toggle("Pages", isOn: $showsPagesColumn)
         Toggle("Size", isOn: $showsSizeColumn)
         Toggle("Labels", isOn: $showsLabelsColumn)
+        Toggle("Value", isOn: $showsValueColumn)
         Divider()
         Text("Group By")
         Picker("Group By", selection: $groupMode) {
@@ -592,6 +608,19 @@ struct DocumentListView: View {
                 .frame(width: labelsColumnWidth, alignment: .leading)
             }
 
+            if effectiveOptionalColumns.value {
+                let documentValueText = valueText(for: document)
+                Text(documentValueText)
+                    .font(AppTypography.listMeta.monospacedDigit())
+                    .foregroundStyle(documentValueText == "-" ? .secondary : .primary)
+                    .frame(width: valueColumnWidth, alignment: .trailing)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) {
+                        coordinator.isInspectorCollapsed = false
+                    }
+                    .help("Open inspector to add or edit value")
+            }
+
             dragHandle(session: dragSession)
 
         }
@@ -609,6 +638,15 @@ struct DocumentListView: View {
 
     private func onRemoveLabelFromDocument(_ label: LabelTag, _ document: DocumentRecord) {
         coordinator.toggleLabel(label, on: [document])
+    }
+
+    private func valueText(for document: DocumentRecord) -> String {
+        guard let statistics = coordinator.activeLabelValueStatistics else { return "-" }
+        guard let valueString = coordinator.activeLabelValueStringsByDocumentID[document.id],
+              let decimal = ManageLabelValuesUseCase.decimal(from: valueString) else {
+            return "-"
+        }
+        return ManageLabelValuesUseCase.formattedValue(decimal, unitSymbol: statistics.unitSymbol)
     }
 
     private func resolvedStoredFileURL(for document: DocumentRecord) -> URL? {
@@ -1352,6 +1390,7 @@ private struct DocumentListStatusBar: View {
         .frame(height: 24)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.headerBackground)
+        .font(AppTypography.caption.monospacedDigit())
     }
 
     private var summaryText: String {
@@ -1459,7 +1498,7 @@ private enum PreviewData {
     static let documentListContainer: ModelContainer = {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         do {
-            let container = try ModelContainer(for: DocumentRecord.self, configurations: configuration)
+            let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: configuration)
             let labels = LabelTag.makeSamples()
             container.mainContext.insert(labels.finance)
             container.mainContext.insert(labels.tax)

@@ -34,6 +34,8 @@ enum DeleteDocumentsUseCase {
             throw DeleteDocumentsError.missingLibraryLocation
         }
 
+        try ManageLabelValuesUseCase.deleteValues(forDocumentIDs: Set(documents.map(\.id)), using: modelContext)
+
         for document in documents {
             modelContext.delete(document)
         }

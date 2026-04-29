@@ -71,7 +71,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testSampleDataCanBeSeeded() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         try TestSampleDataSeeder.seedIfNeeded(using: context)
@@ -86,7 +86,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testSeedingIsIdempotent() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         try TestSampleDataSeeder.seedIfNeeded(using: context)
@@ -99,7 +99,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testDocumentRecordAcceptsStoredFilePath() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let doc = DocumentRecord(
@@ -796,6 +796,105 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testOpeningV4LibraryMigratesLabelsAndSupportsLabelValues() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("V4 Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let configuration = ModelConfiguration(
+            "DocNestLibrary",
+            url: DocumentLibraryService.metadataStoreURL(for: libraryURL),
+            cloudKitDatabase: .none
+        )
+        let v4Schema = Schema(versionedSchema: DocNestSchemaV4.self)
+        do {
+            let v4Container = try ModelContainer(for: v4Schema, configurations: configuration)
+            let context = v4Container.mainContext
+            let label = DocNestSchemaV4.LabelTag(name: "Invoice", colorName: LabelColor.green.rawValue)
+            let document = DocNestSchemaV4.DocumentRecord(
+                originalFileName: "invoice.pdf",
+                title: "Invoice",
+                importedAt: .now,
+                pageCount: 1,
+                labels: [label]
+            )
+            context.insert(label)
+            context.insert(document)
+            try context.save()
+        }
+
+        let migratedContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
+        let context = migratedContainer.mainContext
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        let labels = try context.fetch(FetchDescriptor<LabelTag>())
+
+        XCTAssertEqual(documents.count, 1)
+        XCTAssertEqual(labels.count, 1)
+        XCTAssertEqual(documents.first?.labels.first?.name, "Invoice")
+        XCTAssertNil(labels.first?.unitSymbol)
+
+        guard let document = documents.first, let label = labels.first else {
+            XCTFail("Expected migrated document and label.")
+            return
+        }
+
+        label.unitSymbol = "€"
+        try ManageLabelValuesUseCase.setValue("15.50", for: document, label: label, using: context, locale: Locale(identifier: "en_US_POSIX"))
+
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+        XCTAssertEqual(values.count, 1)
+        XCTAssertEqual(values.first?.decimalString, "15.5")
+    }
+
+    @MainActor
+    func testOpeningReleasedV4LibraryFixtureMigratesLabelsAndSupportsLabelValues() throws {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let fixtureURL = testFileURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/ReleasedV4Library.docnestlibrary", isDirectory: true)
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("ReleasedV4Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: fixtureURL, to: libraryURL)
+
+        let migratedContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
+        let context = migratedContainer.mainContext
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        let labels = try context.fetch(FetchDescriptor<LabelTag>())
+
+        XCTAssertEqual(documents.count, 1)
+        XCTAssertEqual(labels.count, 1)
+        XCTAssertEqual(documents.first?.labels.first?.name, "Invoice")
+        XCTAssertNil(labels.first?.unitSymbol)
+
+        guard let document = documents.first, let label = labels.first else {
+            XCTFail("Expected migrated fixture document and label.")
+            return
+        }
+
+        label.unitSymbol = "€"
+        try ManageLabelValuesUseCase.setValue("15.50", for: document, label: label, using: context, locale: Locale(identifier: "en_US_POSIX"))
+
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+        XCTAssertEqual(values.count, 1)
+        XCTAssertEqual(values.first?.documentID, document.id)
+        XCTAssertEqual(values.first?.labelID, label.id)
+        XCTAssertEqual(values.first?.decimalString, "15.5")
+    }
+
+    @MainActor
     func testImportUseCaseCopiesPdfAndCreatesRecord() async throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -813,7 +912,7 @@ final class DocNestTests: XCTestCase {
         XCTAssertTrue(pdfDocument.write(to: sourcePDFURL))
 
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let importResult = await ImportPDFDocumentsUseCase.execute(
@@ -878,7 +977,7 @@ final class DocNestTests: XCTestCase {
         XCTAssertTrue(pdfDocument.write(to: validPDFURL))
 
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let importResult = await ImportPDFDocumentsUseCase.execute(
@@ -915,7 +1014,7 @@ final class DocNestTests: XCTestCase {
         try FileManager.default.copyItem(at: sourcePDFURL, to: duplicatePDFURL)
 
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let firstImport = await ImportPDFDocumentsUseCase.execute(
@@ -958,7 +1057,7 @@ final class DocNestTests: XCTestCase {
         try "hello".write(to: unsupportedTextURL, atomically: true, encoding: .utf8)
 
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let importResult = await ImportPDFDocumentsUseCase.execute(
@@ -1020,7 +1119,7 @@ final class DocNestTests: XCTestCase {
         }
 
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let importResult = await ImportPDFDocumentsUseCase.execute(
@@ -1044,7 +1143,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testCreateAndAssignLabelCreatesSingleNormalizedLabel() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let document = DocumentRecord(
@@ -1068,7 +1167,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testRenameLabelMergesAssignmentsIntoExistingLabel() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let finance = LabelTag(name: "Finance")
@@ -1092,9 +1191,147 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testRenamingUnitLabelToExistingUnitlessLabelPreservesValuesAndUnit() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let invoice = LabelTag(name: "Invoice", unitSymbol: "€")
+        let finance = LabelTag(name: "Finance")
+        let document = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [invoice])
+        context.insert(invoice)
+        context.insert(finance)
+        context.insert(document)
+        try context.save()
+
+        try ManageLabelValuesUseCase.setValue("25", for: document, label: invoice, using: context, locale: Locale(identifier: "en_US_POSIX"))
+
+        let survivingLabel = try ManageLabelsUseCase.rename(invoice, to: "Finance", using: context)
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+
+        XCTAssertEqual(survivingLabel.name, "Finance")
+        XCTAssertEqual(survivingLabel.unitSymbol, "€")
+        XCTAssertEqual(values.count, 1)
+        XCTAssertEqual(values.first?.labelID, survivingLabel.id)
+        XCTAssertEqual(document.labels.first?.id, survivingLabel.id)
+    }
+
+    @MainActor
+    func testRenamingUnitLabelToExistingDifferentUnitIsRejected() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let invoice = LabelTag(name: "Invoice", unitSymbol: "€")
+        let weight = LabelTag(name: "Weight", unitSymbol: "kg")
+        context.insert(invoice)
+        context.insert(weight)
+        try context.save()
+
+        XCTAssertThrowsError(try ManageLabelsUseCase.rename(invoice, to: "Weight", using: context)) { error in
+            XCTAssertEqual(error as? LabelValidationError, .incompatibleUnitsForMerge)
+        }
+
+        let labels = try context.fetch(FetchDescriptor<LabelTag>())
+        XCTAssertEqual(labels.count, 2)
+    }
+
+    @MainActor
+    func testUpdatingUnitLabelToExistingDifferentUnitKeepsSourceValuesOnError() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let invoice = LabelTag(name: "Invoice", unitSymbol: "€")
+        let weight = LabelTag(name: "Weight", unitSymbol: "kg")
+        let document = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [invoice])
+        context.insert(invoice)
+        context.insert(weight)
+        context.insert(document)
+        try context.save()
+
+        try ManageLabelValuesUseCase.setValue("25", for: document, label: invoice, using: context, locale: Locale(identifier: "en_US_POSIX"))
+
+        XCTAssertThrowsError(
+            try ManageLabelsUseCase.update(invoice, name: "Weight", color: .blue, icon: nil, unitSymbol: "€", groupID: nil, using: context)
+        ) { error in
+            XCTAssertEqual(error as? LabelValidationError, .incompatibleUnitsForMerge)
+        }
+
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+        XCTAssertEqual(values.count, 1)
+        XCTAssertEqual(values.first?.labelID, invoice.id)
+        XCTAssertEqual(document.labels.first?.id, invoice.id)
+    }
+
+    @MainActor
+    func testUpdatingUnitLabelToExistingUnitWithEmptyUnitKeepsDestinationValuesOnError() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let invoice = LabelTag(name: "Invoice", unitSymbol: "€")
+        let weight = LabelTag(name: "Weight", unitSymbol: "kg")
+        let sourceDocument = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [invoice])
+        let destinationDocument = DocumentRecord(originalFileName: "weight.pdf", title: "Weight", importedAt: .now, pageCount: 1, labels: [weight])
+        context.insert(invoice)
+        context.insert(weight)
+        context.insert(sourceDocument)
+        context.insert(destinationDocument)
+        try context.save()
+
+        try ManageLabelValuesUseCase.setValue("25", for: sourceDocument, label: invoice, using: context, locale: Locale(identifier: "en_US_POSIX"))
+        try ManageLabelValuesUseCase.setValue("3", for: destinationDocument, label: weight, using: context, locale: Locale(identifier: "en_US_POSIX"))
+
+        XCTAssertThrowsError(
+            try ManageLabelsUseCase.update(invoice, name: "Weight", color: .blue, icon: nil, unitSymbol: "", groupID: nil, using: context)
+        ) { error in
+            XCTAssertEqual(error as? LabelValidationError, .incompatibleUnitsForMerge)
+        }
+
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+        XCTAssertEqual(values.count, 2)
+        XCTAssertNotNil(values.first { $0.labelID == invoice.id && $0.documentID == sourceDocument.id })
+        XCTAssertNotNil(values.first { $0.labelID == weight.id && $0.documentID == destinationDocument.id })
+        XCTAssertEqual(weight.unitSymbol, "kg")
+    }
+
+    @MainActor
+    func testUpdatingUnitlessLabelToExistingUnitLabelPreservesDestinationValuesAndUnit() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let archive = LabelTag(name: "Archive")
+        let invoice = LabelTag(name: "Invoice", unitSymbol: "€")
+        let archiveDocument = DocumentRecord(originalFileName: "archive.pdf", title: "Archive", importedAt: .now, pageCount: 1, labels: [archive])
+        let invoiceDocument = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [invoice])
+        context.insert(archive)
+        context.insert(invoice)
+        context.insert(archiveDocument)
+        context.insert(invoiceDocument)
+        try context.save()
+
+        try ManageLabelValuesUseCase.setValue("42", for: invoiceDocument, label: invoice, using: context, locale: Locale(identifier: "en_US_POSIX"))
+
+        try ManageLabelsUseCase.update(archive, name: "Invoice", color: .green, icon: nil, unitSymbol: "", groupID: nil, using: context)
+
+        let labels = try context.fetch(FetchDescriptor<LabelTag>())
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+
+        XCTAssertEqual(labels.count, 1)
+        XCTAssertEqual(labels.first?.id, invoice.id)
+        XCTAssertEqual(labels.first?.unitSymbol, "€")
+        XCTAssertEqual(values.count, 1)
+        XCTAssertEqual(values.first?.labelID, invoice.id)
+        XCTAssertEqual(values.first?.documentID, invoiceDocument.id)
+        XCTAssertEqual(archiveDocument.labels.first?.id, invoice.id)
+    }
+
+    @MainActor
     func testDeleteLabelRemovesAssignmentsButKeepsDocuments() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let label = LabelTag(name: "Receipts")
@@ -1114,9 +1351,141 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testLabelValueStatisticsIgnoreMissingValues() throws {
+        let labelID = UUID()
+        let documentIDs = [UUID(), UUID(), UUID()]
+        let values = [
+            LabelValueSnapshot(documentID: documentIDs[0], labelID: labelID, decimalString: "10"),
+            LabelValueSnapshot(documentID: documentIDs[2], labelID: labelID, decimalString: "20")
+        ]
+
+        let statistics = ManageLabelValuesUseCase.statistics(
+            labelID: labelID,
+            labelName: "Invoice",
+            unitSymbol: "€",
+            scope: .filtered,
+            availableScopes: [.filtered],
+            documentIDs: documentIDs,
+            values: values
+        )
+
+        XCTAssertEqual(statistics.scopeDocumentCount, 3)
+        XCTAssertEqual(statistics.valuedDocumentCount, 2)
+        XCTAssertEqual(statistics.missingValueCount, 1)
+        XCTAssertEqual(statistics.sum, Decimal(30))
+        XCTAssertEqual(statistics.average, Decimal(15))
+        XCTAssertEqual(statistics.minimum, Decimal(10))
+        XCTAssertEqual(statistics.maximum, Decimal(20))
+        XCTAssertEqual(statistics.median, Decimal(15))
+    }
+
+    @MainActor
+    func testLabelValueStatisticsHandleNoValuesWithoutDivisionByZero() throws {
+        let statistics = ManageLabelValuesUseCase.statistics(
+            labelID: UUID(),
+            labelName: "Invoice",
+            unitSymbol: "€",
+            scope: .filtered,
+            availableScopes: [.filtered],
+            documentIDs: [UUID(), UUID()],
+            values: []
+        )
+
+        XCTAssertEqual(statistics.scopeDocumentCount, 2)
+        XCTAssertEqual(statistics.valuedDocumentCount, 0)
+        XCTAssertEqual(statistics.missingValueCount, 2)
+        XCTAssertNil(statistics.sum)
+        XCTAssertNil(statistics.average)
+        XCTAssertNil(statistics.minimum)
+        XCTAssertNil(statistics.maximum)
+        XCTAssertNil(statistics.median)
+    }
+
+    @MainActor
+    func testSettingLabelValueDeduplicatesDocumentLabelPair() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Invoice", unitSymbol: "€")
+        let document = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [label])
+        context.insert(label)
+        context.insert(document)
+        context.insert(DocumentLabelValue(documentID: document.id, labelID: label.id, decimalString: "10"))
+        context.insert(DocumentLabelValue(documentID: document.id, labelID: label.id, decimalString: "20"))
+        try context.save()
+
+        try ManageLabelValuesUseCase.setValue("30", for: document, label: label, using: context, locale: Locale(identifier: "en_US_POSIX"))
+
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+        XCTAssertEqual(values.count, 1)
+        XCTAssertEqual(values.first?.decimalString, "30")
+    }
+
+    @MainActor
+    func testRemovingLabelClearsAssociatedValue() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Invoice", unitSymbol: "€")
+        let document = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [label])
+        context.insert(label)
+        context.insert(document)
+        try context.save()
+
+        try ManageLabelValuesUseCase.setValue("42", for: document, label: label, using: context, locale: Locale(identifier: "en_US_POSIX"))
+        try ManageLabelsUseCase.remove(label, from: document, using: context)
+
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+        XCTAssertTrue(values.isEmpty)
+    }
+
+    @MainActor
+    func testDeletingDocumentClearsAssociatedValue() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Invoice", unitSymbol: "€")
+        let document = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [label])
+        context.insert(label)
+        context.insert(document)
+        try context.save()
+
+        try ManageLabelValuesUseCase.setValue("42", for: document, label: label, using: context, locale: Locale(identifier: "en_US_POSIX"))
+        try DeleteDocumentsUseCase.execute([document], mode: .removeFromLibrary, libraryURL: nil, using: context)
+
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+        XCTAssertTrue(values.isEmpty)
+    }
+
+    @MainActor
+    func testClearingLabelUnitDeletesAssociatedValues() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let label = LabelTag(name: "Invoice", unitSymbol: "€")
+        let document = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [label])
+        context.insert(label)
+        context.insert(document)
+        try context.save()
+
+        try ManageLabelValuesUseCase.setValue("42", for: document, label: label, using: context, locale: Locale(identifier: "en_US_POSIX"))
+        XCTAssertEqual(try ManageLabelsUseCase.valuesAffectedByClearingUnit(for: label, using: context), 1)
+
+        try ManageLabelsUseCase.update(label, name: "Invoice", color: .blue, icon: nil, unitSymbol: "", groupID: nil, using: context)
+
+        XCTAssertNil(label.unitSymbol)
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+        XCTAssertTrue(values.isEmpty)
+    }
+
+    @MainActor
     func testDeletingLabelDirectlyDoesNotCascadeIntoDocuments() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let label = LabelTag(name: "Invoices")
@@ -1139,7 +1508,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testRemoveDocumentFromLibraryKeepsStoredFile() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1174,7 +1543,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testDeleteDocumentWithStoredFileRemovesRecordAndPDF() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1209,7 +1578,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testDeletingStoredFilesRequiresLibraryLocation() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let document = DocumentRecord(
@@ -1230,7 +1599,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testMoveDocumentToBinSetsTrashedDate() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let document = DocumentRecord(originalFileName: "test.pdf", title: "Test", importedAt: .now, pageCount: 1)
@@ -1245,7 +1614,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testRestoreDocumentFromBinClearsTrashedDate() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let document = DocumentRecord(originalFileName: "test.pdf", title: "Test", importedAt: .now, pageCount: 1, trashedAt: .now)
@@ -1260,7 +1629,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testPendingLabelDeletionReportsAffectedDocumentCount() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let label = LabelTag(name: "Finance")
@@ -1283,7 +1652,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testPendingLabelDeletionUsesSingularDocumentMessage() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let label = LabelTag(name: "Tax")
@@ -1304,7 +1673,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testPendingLabelDeletionSkipsConfirmationWhenNoDocumentsAreAssigned() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let label = LabelTag(name: "Unassigned")
@@ -1403,7 +1772,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testAssignLabelToMultipleDocumentsAddsItToAllSelectedDocuments() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let label = LabelTag(name: "Travel")
@@ -1423,7 +1792,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testRemoveLabelFromMultipleDocumentsRemovesItFromSelectionOnly() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let label = LabelTag(name: "Legal")
@@ -1448,7 +1817,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testCreateAndAssignLabelToMultipleDocumentsCreatesOneSharedLabel() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let documentA = DocumentRecord(originalFileName: "a.pdf", title: "A", importedAt: .now, pageCount: 1)
@@ -1854,7 +2223,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testReorderLabelsUpdatesSortOrder() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let alpha = LabelTag(name: "Alpha", sortOrder: 0)
@@ -1881,7 +2250,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testChangeColorUpdatesLabelColor() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let label = LabelTag(name: "Finance", colorName: LabelColor.blue.rawValue)
@@ -1896,7 +2265,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testChangeIconUpdatesLabelIcon() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let label = LabelTag(name: "Finance")
@@ -1915,7 +2284,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testCreateLabelWithEmptyNameThrowsValidationError() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         XCTAssertThrowsError(
@@ -1928,7 +2297,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testCreateLabelWithColorAndIconSetsProperties() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let label = try ManageLabelsUseCase.createLabel(named: "Archive", color: .purple, icon: "📦", using: context)
@@ -1936,6 +2305,37 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(label.name, "Archive")
         XCTAssertEqual(label.labelColor, .purple)
         XCTAssertEqual(label.icon, "📦")
+    }
+
+    @MainActor
+    func testCreateLabelWithDuplicateNameAndDifferentUnitThrowsValidationError() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        _ = try ManageLabelsUseCase.createLabel(named: "Invoice", color: .blue, using: context)
+
+        XCTAssertThrowsError(
+            try ManageLabelsUseCase.createLabel(named: "invoice", color: .green, unitSymbol: "€", using: context)
+        ) { error in
+            XCTAssertEqual(error as? LabelValidationError, .duplicateNameWithDifferentUnit)
+        }
+    }
+
+    @MainActor
+    func testCreateOrReuseLabelForAssignmentReusesExistingUnitLabelByName() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let invoice = try ManageLabelsUseCase.createLabel(named: "Invoice", color: .blue, unitSymbol: "€", using: context)
+        let reused = try ManageLabelsUseCase.createOrReuseLabelForAssignment(named: "invoice", color: .green, using: context)
+        let labels = try context.fetch(FetchDescriptor<LabelTag>())
+
+        XCTAssertEqual(reused.id, invoice.id)
+        XCTAssertEqual(reused.unitSymbol, "€")
+        XCTAssertEqual(reused.labelColor, .blue)
+        XCTAssertEqual(labels.count, 1)
     }
 
     // MARK: - SearchDocumentsUseCase Additional Tests
@@ -2318,7 +2718,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testDeleteEmptyArrayDoesNothing() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         try DeleteDocumentsUseCase.execute([], mode: .removeFromLibrary, libraryURL: nil, using: context)
@@ -2328,7 +2728,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testMoveToBinIsIdempotent() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let document = DocumentRecord(originalFileName: "test.pdf", title: "Test", importedAt: .now, pageCount: 1)
@@ -2346,7 +2746,7 @@ final class DocNestTests: XCTestCase {
     @MainActor
     func testRestoreFromBinIsIdempotent() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, configurations: config)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
         let context = container.mainContext
 
         let document = DocumentRecord(originalFileName: "test.pdf", title: "Test", importedAt: .now, pageCount: 1)

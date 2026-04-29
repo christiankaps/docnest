@@ -97,6 +97,11 @@ final class LibraryCoordinator {
     private(set) var selectedDocumentIDsToDrag: [UUID] = []
     private(set) var sidebarCounts = LibrarySidebarCounts.empty
     private(set) var existingContentHashes: Set<String> = []
+    private(set) var allLabelValues: [DocumentLabelValue] = []
+    private var allLabelValueSnapshots: [LabelValueSnapshot] = []
+    private(set) var activeLabelValueStatistics: LabelValueStatistics?
+    private(set) var activeLabelValueStatisticsSummary: LabelValueStatisticsSummary?
+    private(set) var activeLabelValueStringsByDocumentID: [UUID: String] = [:]
     private var labelsByUUID: [UUID: LabelTag] = [:]
     private var labelUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
     private var smartFoldersByPersistentID: [PersistentIdentifier: SmartFolder] = [:]
@@ -115,6 +120,7 @@ final class LibraryCoordinator {
     private var pendingSearchRecomputeTask: Task<Void, Never>?
     private var pendingDerivedStateTask: Task<Void, Never>?
     private var pendingDisplayedShareURLsTask: Task<Void, Never>?
+    private var pendingLabelValueStatisticsTask: Task<Void, Never>?
     private var ocrBackfillGeneration = 0
     private var queuedOCRBackfillDocuments: [DocumentRecord] = []
     private var queuedOCRDateFallbacks: [PersistentIdentifier: Date?] = [:]
@@ -124,6 +130,7 @@ final class LibraryCoordinator {
     private var lastSelectionInteractionStart: TimeInterval?
     private var isImmediateDisplayedSelectionPending = false
     private var derivedStateGeneration = 0
+    private var labelValueStatisticsGeneration = 0
     let recentDocumentLimit = 10
 
     deinit {
@@ -135,6 +142,7 @@ final class LibraryCoordinator {
             pendingSearchRecomputeTask?.cancel()
             pendingDerivedStateTask?.cancel()
             pendingDisplayedShareURLsTask?.cancel()
+            pendingLabelValueStatisticsTask?.cancel()
             watchFolderController.tearDown()
         }
     }
@@ -186,9 +194,17 @@ final class LibraryCoordinator {
 
     /// Synchronizes the latest queried SwiftData models into coordinator-managed
     /// UI state and recomputes all derived views when needed.
-    func ingest(allDocuments: [DocumentRecord], allLabels: [LabelTag], allSmartFolders: [SmartFolder] = [], allLabelGroups: [LabelGroup] = [], allWatchFolders: [WatchFolder] = []) {
+    func ingest(
+        allDocuments: [DocumentRecord],
+        allLabels: [LabelTag],
+        allSmartFolders: [SmartFolder] = [],
+        allLabelGroups: [LabelGroup] = [],
+        allWatchFolders: [WatchFolder] = [],
+        allLabelValues: [DocumentLabelValue] = []
+    ) {
         syncMetadata(labels: allLabels, smartFolders: allSmartFolders, labelGroups: allLabelGroups, recompute: false)
         syncWatchFolders(allWatchFolders, refreshMonitors: false)
+        syncLabelValues(allLabelValues, recompute: false)
         syncDocuments(allDocuments, recompute: true)
     }
 
@@ -250,6 +266,14 @@ final class LibraryCoordinator {
 
         if recompute {
             recomputeFilteredDocuments()
+        }
+    }
+
+    func syncLabelValues(_ labelValues: [DocumentLabelValue], recompute: Bool = true) {
+        allLabelValues = labelValues
+        allLabelValueSnapshots = ManageLabelValuesUseCase.snapshots(from: labelValues)
+        if recompute {
+            scheduleLabelValueStatisticsRecompute()
         }
     }
 
@@ -326,6 +350,7 @@ final class LibraryCoordinator {
                 )
                 self.rebuildFilteredDocumentLookups()
                 self.pruneSelectedDocumentIDs()
+                self.scheduleLabelValueStatisticsRecompute()
 
                 #if DEBUG
                 self.debugLogFilterTiming(
@@ -532,6 +557,86 @@ final class LibraryCoordinator {
         return counts
     }
 
+    private func scheduleLabelValueStatisticsRecompute() {
+        pendingLabelValueStatisticsTask?.cancel()
+        labelValueStatisticsGeneration += 1
+        let generation = labelValueStatisticsGeneration
+
+        guard let targetLabel = effectiveStatisticsLabel() else {
+            activeLabelValueStatistics = nil
+            activeLabelValueStatisticsSummary = nil
+            activeLabelValueStringsByDocumentID = [:]
+            return
+        }
+
+        let filteredDocumentIDs = filteredDocuments.map(\.id)
+        let selectedVisibleDocumentIDs = filteredDocuments
+            .filter { selectedDocumentIDs.contains($0.persistentModelID) }
+            .map(\.id)
+        let availableScopes: Set<LabelValueStatisticsScope> = [.filtered, .selection]
+
+        let valueSnapshots = allLabelValueSnapshots
+        let labelID = targetLabel.id
+        let labelName = targetLabel.name
+        let unitSymbol = targetLabel.unitSymbol ?? ""
+
+        pendingLabelValueStatisticsTask = Task(priority: .utility) { [weak self] in
+            let filteredStatistics = ManageLabelValuesUseCase.statistics(
+                labelID: labelID,
+                labelName: labelName,
+                unitSymbol: unitSymbol,
+                scope: .filtered,
+                availableScopes: availableScopes,
+                documentIDs: filteredDocumentIDs,
+                values: valueSnapshots
+            )
+            let selectionStatistics = ManageLabelValuesUseCase.statistics(
+                labelID: labelID,
+                labelName: labelName,
+                unitSymbol: unitSymbol,
+                scope: .selection,
+                availableScopes: availableScopes,
+                documentIDs: selectedVisibleDocumentIDs,
+                values: valueSnapshots
+            )
+            let summary = LabelValueStatisticsSummary(
+                filtered: filteredStatistics,
+                selection: selectionStatistics
+            )
+            let valueStringsByDocumentID = valueSnapshots.reduce(into: [UUID: String]()) { result, snapshot in
+                guard snapshot.labelID == labelID else { return }
+                result[snapshot.documentID] = snapshot.decimalString
+            }
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard let self else { return }
+                guard !Task.isCancelled else { return }
+                guard self.labelValueStatisticsGeneration == generation else { return }
+                self.activeLabelValueStatistics = filteredStatistics
+                self.activeLabelValueStatisticsSummary = summary
+                self.activeLabelValueStringsByDocumentID = valueStringsByDocumentID
+                self.pendingLabelValueStatisticsTask = nil
+            }
+        }
+    }
+
+    private func effectiveStatisticsLabel() -> LabelTag? {
+        let labelIDs: Set<UUID>
+        switch derivedSidebarSelection {
+        case .smartFolder(let folderID):
+            labelIDs = Set(allSmartFolders.first { $0.id == folderID }?.labelIDs ?? [])
+        case .section:
+            labelIDs = resolvedLabelUUIDs(from: labelFilterSelection.appliedSelection)
+        }
+
+        let valueEnabledLabels = allLabels.filter { label in
+            labelIDs.contains(label.id) && !(label.unitSymbol?.isEmpty ?? true)
+        }
+        return valueEnabledLabels.count == 1 ? valueEnabledLabels[0] : nil
+    }
+
     private func rebuildFilteredDocumentLookups() {
         filteredDocumentByPersistentID = Dictionary(
             uniqueKeysWithValues: filteredDocuments.map { ($0.persistentModelID, $0) }
@@ -566,6 +671,7 @@ final class LibraryCoordinator {
             }
         }
         selectedDocumentIDsToDrag = selectedDocuments.compactMap { documentUUIDByPersistentID[$0.persistentModelID] }
+        scheduleLabelValueStatisticsRecompute()
     }
 
     private func selectedDocument(for persistentID: PersistentIdentifier) -> DocumentRecord? {

@@ -366,7 +366,7 @@ enum DocumentLibraryService {
             cloudKitDatabase: .none
         )
 
-        let schema = Schema(versionedSchema: DocNestSchemaV4.self)
+        let schema = Schema(versionedSchema: DocNestSchemaV5.self)
 
         return try ModelContainer(
             for: schema,
@@ -419,7 +419,7 @@ enum DocumentLibraryService {
             generatedAt: .now,
             libraryPath: libraryURL.path,
             manifestFormatVersion: manifest.formatVersion,
-            schemaVersion: "4.0.0",
+            schemaVersion: "5.0.0",
             migration: migration,
             repair: repair,
             documentCount: documentCount,

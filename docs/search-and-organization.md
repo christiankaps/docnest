@@ -9,6 +9,18 @@ Important properties:
 - labels are many-to-many with documents
 - labels are used for filtering, drag and drop assignment, export naming, and smart folders
 - deleting a label removes associations but never deletes documents
+- labels can optionally define a short unit, enabling one manual numeric value per document-label assignment
+
+## Label Values
+
+When a label has a unit, each document assigned to that label can store one optional value for that label. For example, an `Invoice` label with unit `€` can store an invoice amount for each invoice document.
+
+Value rules:
+
+- values belong to the document-label pair, not to the document globally
+- empty values mean missing, not zero
+- clearing a label unit deletes existing values for that label after confirmation
+- values are edited from the inspector; list values are contextual read-only indicators
 
 ## Label Groups
 
@@ -34,6 +46,8 @@ Smart folders:
 Label filters use AND semantics. If multiple labels are active, a document must contain all selected labels to match.
 
 This same mental model also applies to smart folders: a smart folder’s label set represents the complete required set for a match.
+
+If the effective filter context contains exactly one unit-enabled label, DocNest shows value statistics for that label at the bottom of the sidebar. Other non-unit labels can still narrow the document set. The statistics footer names the active value label and always shows the filtered documents; it also shows the visible selection when more than one visible document is selected. Missing values are counted separately and are excluded from sum, average, minimum, maximum, and median calculations.
 
 ## Search
 
