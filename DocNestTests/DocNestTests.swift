@@ -69,6 +69,11 @@ final class DocNestTests: XCTestCase {
         DocumentLibraryService.persistLibraryURL(nil)
     }
 
+    func testDocumentListHeaderShowsDocumentLabelsDividerOnlyWhenLabelsColumnIsVisible() {
+        XCTAssertTrue(DocumentListHeaderLayoutPolicy.showsDocumentLabelsDivider(labelsColumnVisible: true))
+        XCTAssertFalse(DocumentListHeaderLayoutPolicy.showsDocumentLabelsDivider(labelsColumnVisible: false))
+    }
+
     @MainActor
     func testSampleDataCanBeSeeded() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)

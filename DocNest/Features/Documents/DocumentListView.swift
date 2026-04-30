@@ -295,8 +295,15 @@ struct DocumentListView: View {
         return Group {
             if coordinator.documentListViewMode == .list {
                 HStack(spacing: 10) {
-                    sortButton("Document", column: .title)
-                        .frame(minWidth: effectiveDocumentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 0) {
+                        sortButton("Document", column: .title)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if DocumentListHeaderLayoutPolicy.showsDocumentLabelsDivider(labelsColumnVisible: effectiveOptionalColumns.labels) {
+                            ColumnHeaderDivider()
+                        }
+                    }
+                    .frame(minWidth: effectiveDocumentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
 
                     if effectiveOptionalColumns.labels {
                         ResizableColumnHeader(width: $labelsColumnWidth, minWidth: labelsColumnMinWidth, displayWidth: effectiveLabelsColumnWidth) {
@@ -1098,9 +1105,7 @@ private struct ResizableColumnHeader<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Rectangle()
-                .fill(Color.secondary.opacity(0.35))
-                .frame(width: 1, height: 20)
-                .padding(.leading, 6)
+                .columnHeaderDividerStyle()
                 .contentShape(Rectangle())
                 .onHover { isHovering in
                     applyCursorUpdate(cursorState.hoverChanged(isHovering))
@@ -1140,6 +1145,28 @@ private struct ResizableColumnHeader<Content: View>: View {
         case .arrow:
             NSCursor.arrow.set()
         }
+    }
+}
+
+struct DocumentListHeaderLayoutPolicy {
+    static func showsDocumentLabelsDivider(labelsColumnVisible: Bool) -> Bool {
+        labelsColumnVisible
+    }
+}
+
+private struct ColumnHeaderDivider: View {
+    var body: some View {
+        Rectangle()
+            .columnHeaderDividerStyle()
+    }
+}
+
+private extension Shape {
+    func columnHeaderDividerStyle() -> some View {
+        self
+            .fill(Color.secondary.opacity(0.35))
+            .frame(width: 1, height: 20)
+            .padding(.leading, 6)
     }
 }
 
