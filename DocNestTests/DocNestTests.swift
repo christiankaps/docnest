@@ -74,6 +74,13 @@ final class DocNestTests: XCTestCase {
         XCTAssertFalse(DocumentListHeaderLayoutPolicy.showsDocumentLabelsDivider(labelsColumnVisible: false))
     }
 
+    func testInspectorLabelDisplayUsesLabelIdentityWithoutUnitValueText() {
+        let label = LabelTag(name: "Invoice", unitSymbol: "€")
+
+        XCTAssertEqual(DocumentInspectorLabelDisplayPolicy.labelName(for: label), "Invoice")
+        XCTAssertNil(DocumentInspectorLabelDisplayPolicy.valueText(for: label))
+    }
+
     @MainActor
     func testSampleDataCanBeSeeded() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)

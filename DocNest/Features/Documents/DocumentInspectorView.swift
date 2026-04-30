@@ -399,13 +399,7 @@ struct DocumentInspectorView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(document.labels) { label in
                         HStack {
-                            LabelChip(name: label.name, color: label.labelColor, icon: label.icon)
-
-                            if let unit = label.unitSymbol, !unit.isEmpty {
-                                Text(unit)
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                            InspectorLabelChip(label: label)
 
                             Spacer()
 
@@ -528,7 +522,7 @@ struct DocumentInspectorView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(selectionSummary.labelsOnAllSelectedDocuments) { label in
                             HStack {
-                                LabelChip(name: label.name, color: label.labelColor, icon: label.icon)
+                                InspectorLabelChip(label: label)
                                 Spacer()
                                 Button("Remove from Selection") {
                                     removeLabel(label, from: documents)
@@ -545,9 +539,7 @@ struct DocumentInspectorView: View {
                     Text("Partially Assigned")
                         .font(AppTypography.sectionLabel)
 
-                    Text(selectionSummary.partiallyAssignedLabels.map(\.name).joined(separator: ", "))
-                        .font(AppTypography.body)
-                        .foregroundStyle(.secondary)
+                    InspectorLabelChipGrid(labels: selectionSummary.partiallyAssignedLabels)
                 }
             }
 
@@ -1273,6 +1265,43 @@ private struct BatchLabelSelectionSummary {
         }
 
         return "Add to all"
+    }
+}
+
+struct DocumentInspectorLabelDisplayPolicy {
+    static func labelName(for label: LabelTag) -> String {
+        label.name
+    }
+
+    static func valueText(for label: LabelTag) -> String? {
+        nil
+    }
+}
+
+private struct InspectorLabelChip: View {
+    let label: LabelTag
+
+    var body: some View {
+        LabelChip(
+            name: DocumentInspectorLabelDisplayPolicy.labelName(for: label),
+            color: label.labelColor,
+            icon: label.icon,
+            size: .compact,
+            valueText: DocumentInspectorLabelDisplayPolicy.valueText(for: label)
+        )
+    }
+}
+
+private struct InspectorLabelChipGrid: View {
+    let labels: [LabelTag]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 6)], alignment: .leading, spacing: 6) {
+            ForEach(labels) { label in
+                InspectorLabelChip(label: label)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
     }
 }
 
