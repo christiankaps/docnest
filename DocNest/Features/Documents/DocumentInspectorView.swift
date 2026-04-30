@@ -398,32 +398,24 @@ struct DocumentInspectorView: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(document.labels) { label in
-                        if let unit = label.unitSymbol, !unit.isEmpty {
-                            LabelValueEditorRow(
-                                document: document,
-                                label: label,
-                                unitSymbol: unit,
-                                initialValue: ManageLabelValuesUseCase.normalizedValue(
-                                    for: document.id,
-                                    labelID: label.id,
-                                    in: coordinator.allLabelValues
-                                ),
-                                onRemove: {
-                                    removeLabel(label, from: document)
-                                }
-                            )
-                        } else {
-                            HStack {
-                                LabelChip(name: label.name, color: label.labelColor, icon: label.icon)
-                                Spacer()
-                                Button {
-                                    removeLabel(label, from: document)
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
+                        HStack {
+                            LabelChip(name: label.name, color: label.labelColor, icon: label.icon)
+
+                            if let unit = label.unitSymbol, !unit.isEmpty {
+                                Text(unit)
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(.secondary)
                             }
+
+                            Spacer()
+
+                            Button {
+                                removeLabel(label, from: document)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -1295,92 +1287,6 @@ private struct BatchLabelState {
 
     var isPartiallyAssigned: Bool {
         assignedDocumentCount > 0 && assignedDocumentCount < selectedDocumentCount
-    }
-}
-
-private struct LabelValueEditorRow: View {
-    let document: DocumentRecord
-    let label: LabelTag
-    let unitSymbol: String
-    let initialValue: String?
-    let onRemove: () -> Void
-
-    @Environment(\.modelContext) private var modelContext
-    @State private var valueText = ""
-    @State private var errorMessage: String?
-    @FocusState private var isFocused: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                LabelChip(name: label.name, color: label.labelColor, icon: label.icon)
-
-                Text(unitSymbol)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 8)
-
-                TextField("No value", text: $valueText)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.body.monospacedDigit())
-                    .frame(width: 110)
-                    .focused($isFocused)
-                    .onSubmit { commitValue() }
-                    .onChange(of: isFocused) { _, focused in
-                        if !focused {
-                            commitValueIfNeeded()
-                        }
-                    }
-
-                Text(unitSymbol)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(.secondary)
-
-                Button {
-                    valueText = ""
-                    onRemove()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-            }
-
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(.red)
-            }
-        }
-        .onAppear {
-            valueText = initialValue ?? ""
-        }
-        .onChange(of: initialValue) { _, newValue in
-            guard !isFocused else { return }
-            valueText = newValue ?? ""
-        }
-    }
-
-    private func commitValueIfNeeded() {
-        let current = initialValue ?? ""
-        guard valueText.trimmingCharacters(in: .whitespacesAndNewlines) != current else { return }
-        commitValue()
-    }
-
-    private func commitValue() {
-        do {
-            if valueText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                try ManageLabelValuesUseCase.clearValue(for: document, label: label, using: modelContext)
-            } else {
-                try ManageLabelValuesUseCase.setValue(valueText, for: document, label: label, using: modelContext)
-                valueText = try ManageLabelValuesUseCase.normalizedDecimalString(from: valueText)
-            }
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
-            isFocused = true
-        }
     }
 }
 

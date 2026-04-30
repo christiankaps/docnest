@@ -212,7 +212,9 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - Full label management is available from `DocNest > Settings… > Labels`. The sidebar remains the quick-access surface for filtering, selection, creation shortcuts, and drag-and-drop organization.
 - Labels may optionally define a short free-form unit, such as `€`, `USD`, `kg`, or `h`.
 - A document assigned to a unit-enabled label may store one optional numeric value for that document-label pair.
-- Values are entered manually from the inspector. Missing values are distinct from zero.
+- Values are entered manually inline from the document list label chip. Missing values are distinct from zero.
+- The document list shows labels as the second column immediately after the document name. Unit-enabled labels show a connected rounded-rectangle split chip with the label identity and, when present, the document-label value.
+- Unit-enabled label chips without a value stay visually quiet until hover or row selection, then show a `+ value` affordance for inline entry.
 - Clearing a label unit warns with the affected document count and deletes existing values for that label after confirmation.
 - When the active filter context contains exactly one unit-enabled label, the document list shows contextual read-only values for that label and a sidebar statistics footer.
 - Label value statistics show the count of scoped documents with values and compute sum, average, minimum, maximum, and median over valued documents only. Empty values are not counted as zero or included in averages.
@@ -663,7 +665,7 @@ Current state:
 - Each label supports an optional emoji icon. When set, the emoji replaces the colored circle in sidebar rows, drag previews, and label chips throughout the app.
 - Label create and edit use a dedicated editor sheet with spacious name field, emoji picker, visual color swatch grid (LazyVGrid of all 10 color options), and group picker. This replaces the previous inline sidebar form.
 - Editing a label (double-click or context menu "Edit") opens the editor sheet pre-filled with the label's current values.
-- Document detail view supports direct assignment/removal of existing labels plus create-and-assign of new labels via keyboard or direct action.
+- Document detail view supports direct assignment/removal of existing labels plus create-and-assign of new labels via keyboard or direct action. Document-label values are edited inline in the document list rather than in the inspector.
 - Sidebar supports multi-label filtering. With multiple active labels, list shows only documents containing all selected labels.
 - Deleting a label removes only associations. Documents and original files remain unchanged.
 - Document list supports multi-selection. Inspector can add/remove labels for entire selection.

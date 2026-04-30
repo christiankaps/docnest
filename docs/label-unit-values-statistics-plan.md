@@ -28,7 +28,7 @@ Example: if `Invoice` has unit `€`, documents labeled `Invoice` can store invo
 - Statistics ignore empty/missing values for numeric calculations, including average and median.
 - The statistic surface must show both the number of documents with a value and the total document count in the current scope, so missing values are visible instead of silent.
 - Smart folder selections should show statistics when the effective smart-folder label set contains exactly one value-enabled label. Non-unit labels in the same smart folder, such as `Invoice + 2026`, still scope the visible documents but do not make the statistic ambiguous.
-- Values are entered manually in the inspector. Automatic OCR extraction of values is out of scope for this feature.
+- Values are entered manually inline from the document list label chip. Automatic OCR extraction of values is out of scope for this feature.
 - Values are plain numeric quantities formatted with the label's free-form unit string. True currency handling with ISO codes is out of scope for v1.
 - Statistics are on-screen only for v1; copy/export of statistics is out of scope.
 
@@ -184,7 +184,7 @@ Implementation options:
 - include fetched `DocumentLabelValue` rows in coordinator ingestion and derive a stable signature from relevant rows
 - use `@Query` in the root view for `DocumentLabelValue` and pass rows into `LibraryCoordinator.ingest`
 
-Whichever option is chosen, inspector edits must update the visible statistics without requiring the user to change filters.
+Whichever option is chosen, inline list value edits must update the visible statistics without requiring the user to change filters.
 
 Use the effective filter context:
 
@@ -239,21 +239,17 @@ When showing labels in edit/details surfaces, display the unit next to the label
 
 ### Document Inspector
 
-Do not put editable values inside the existing `LabelChip`. The pill should remain the stable visual identity for the label: icon, color, and name. Values need different alignment, validation, empty state, and editing affordances, so they should live in a small row control beside the label.
+Document-label value editing belongs in the document list label chip. The inspector should stay focused on label assignment and removal so there is one clear value-editing location.
 
 For single-document inspection:
 
-- In the Labels section, each assigned value-enabled label renders as a `LabelValueRow`:
-  - left side: normal `LabelChip`, with the unit shown as subtle secondary text near the chip, for example `Invoice` then `€`
-  - right side: a compact numeric text field aligned with other value fields
-  - trailing side: the free-form unit shown as a non-editable suffix inside or directly beside the field
-  - row action: the existing remove-label button remains separate from the value field
+- The inspector Labels section keeps assignment and removal controls only. Value-enabled labels may show the unit as subtle secondary text, but numeric value editing happens inline from the document list label chip.
 - Labels without units keep the current simple chip row.
-- The value field accepts localized decimal input but stores normalized decimal text.
-- Clearing the field removes the value row.
-- Invalid numeric input should not save and should show a small inline validation message.
-- Removing a label from the same inspector row must immediately clear the corresponding value row and discard any unsaved value-field text, so a later focus-loss or submit event cannot recreate an orphan value.
-- Empty value fields should use a quiet placeholder such as `No value`, not `0`, so missing values are visually distinct from actual zero.
+- The inline list value field accepts localized decimal input but stores normalized decimal text.
+- Clearing the inline field removes the value row.
+- Invalid numeric input should not save and should show compact inline validation styling.
+- Removing a label from the inspector must immediately clear the corresponding value row.
+- Empty value affordances should use quiet text such as `+ value`, not `0`, so missing values are visually distinct from actual zero.
 - Save behavior should be predictable:
   - commit on submit
   - commit on focus loss only when the value parses unambiguously
@@ -278,10 +274,9 @@ When the current filter context resolves to exactly one value-enabled label, doc
 - thumbnail mode: show a small value badge below the title or near the mini label bar, only for the active value-enabled label
 - missing values display as `-` or `No value` in subdued text
 - zero displays as a real formatted value, never as missing
-- the value indicator should not be editable from the list in v1; editing stays in the inspector
+- label chips for unit-enabled labels support inline value editing in the list
 - when no value-enabled label filter is active, omit the per-document value indicator entirely
-- double-clicking a value cell, pressing Return on a focused missing-value cell, or choosing `Set Value...` from the row context menu opens the inspector, expands it if needed, and focuses the matching value field
-- missing-value cells should have a tooltip or accessibility hint such as `Open inspector to add value`
+- missing-value label chips reveal a `+ value` affordance on hover or row selection
 
 ### Filter Statistics
 
@@ -368,16 +363,16 @@ Add focused tests in `DocNestTests`:
 - migration opens a pre-V5 library with existing labels and documents intact
 - existing test container helpers and previews include `DocumentLabelValue` so tests do not accidentally run with a partial schema
 - value input rejects overlong numbers, excessive fractional digits, exponent notation, `NaN`, and infinity-like strings
-- removing a label from the inspector row clears value state and cannot recreate the value on submit/focus loss
+- removing a label from the inspector clears value state and cannot recreate the value on submit/focus loss
 
 Add at least one UI or UI-adjacent test in `DocNestUITests` or a focused integration harness:
 
 - launch or construct a library with a value-enabled label and a labeled document
-- edit the value through the inspector, if practical
+- edit the value through the inline list label chip, if practical
 - activate the label filter
-- verify the inspector shows label identity and value editing as separate controls, not an editable number embedded inside the label pill
+- verify the inspector shows label identity/removal controls without a value editor
 - verify the contextual list value indicator appears only for the active value-enabled label filter and treats missing values differently from zero
-- verify missing value cells can reveal and focus the inspector value field
+- verify missing value label chips reveal the inline `+ value` affordance
 - verify the sidebar statistics footer shows the active value label, always shows filtered statistics, and shows selection statistics only for multi-selection
 - verify `0 of N valued` leaves numeric statistics empty instead of dividing by zero
 - verify the statistics footer appears and updates after the edit
@@ -398,7 +393,7 @@ Update requirements documentation when implementing:
 - define label units and document-label values under labels
 - describe when filter statistics appear
 - state that values are manually entered and optional
-- describe how users add a value from a missing-value list cell or the inspector
+- describe how users add a value from a missing-value label chip in the document list
 
 Update organization documentation:
 
@@ -417,7 +412,7 @@ Update library format/schema documentation:
 2. Add value parsing, formatting, mutation, pruning, and statistics domain helpers.
 3. Update label create/edit flows and `ManageLabelsUseCase` merge/delete/remove behavior.
 4. Add coordinator-derived statistics for the effective single value-enabled label filter.
-5. Add inspector value editing for assigned labels with units using the separate `LabelValueRow` pattern.
+5. Add inline list chip value editing for assigned labels with units.
 6. Add contextual read-only document-list value indicators and missing-value affordances for the active value-enabled label filter.
 7. Add the sidebar statistics footer that shows filtered statistics and adds selected statistics for multi-selection.
 8. Add tests for domain behavior, statistics, filter scoping, lifecycle cleanup, invalidation, UI wiring, and migration.
@@ -462,9 +457,9 @@ For the major release:
 - Merge risk: explicitly test label rename/update paths that merge duplicate label names.
 - Formatting risk: separate parsing, persistence, and display formatting so locale-specific UI input does not leak into storage.
 - Input abuse risk: reject overlong or non-finite numeric strings before attempting expensive parsing.
-- Pill overload risk: keep label pills as identity chips and use adjacent value controls/indicators for numeric metadata.
-- Discoverability risk: missing-value cells and label rows must provide direct affordances to reveal the inspector, focus the value field, or manage the label unit.
-- UI clutter risk: keep values in the inspector and aggregate statistics in the sidebar footer; avoid adding another large dashboard panel.
+- Pill overload risk: keep the split chip compact and limit visible labels with overflow.
+- Discoverability risk: missing-value chips must reveal direct `+ value` affordances on hover or selection.
+- UI clutter risk: keep aggregate statistics in the sidebar footer; avoid adding another large dashboard panel.
 - Scope surprise risk: show filtered and selection statistics side by side instead of requiring users to discover a scope toggle.
 - Narrow layout risk: use a compact sidebar grid so both scopes remain readable.
 - Performance risk: compute statistics from `filteredDocuments` and the value lookup map, not from repeated SwiftData fetches per row.
@@ -477,7 +472,7 @@ An independent review pass with a different model found four plan gaps, all inco
 - define uniqueness and cleanup rules for `DocumentLabelValue`, including hard document deletion
 - define statistics invalidation on unit/value changes, not just filtered-document changes
 - enumerate quick-create label surfaces and decide duplicate-name unit behavior
-- add UI or UI-adjacent coverage for inspector value editing and the statistics footer
+- add UI or UI-adjacent coverage for inline value editing and the statistics footer
 
 ## Open Questions for Implementation
 

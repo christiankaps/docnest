@@ -20,7 +20,8 @@ Value rules:
 - values belong to the document-label pair, not to the document globally
 - empty values mean missing, not zero
 - clearing a label unit deletes existing values for that label after confirmation
-- values are edited from the inspector; list values are contextual read-only indicators
+- values are edited inline from the document list label chip
+- the document list places labels directly after the document name and renders unit-enabled labels as connected split chips, for example `Invoice | 1,240 €`
 
 ## Label Groups
 

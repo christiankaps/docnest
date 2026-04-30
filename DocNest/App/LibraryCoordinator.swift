@@ -102,6 +102,7 @@ final class LibraryCoordinator {
     private(set) var activeLabelValueStatistics: LabelValueStatistics?
     private(set) var activeLabelValueStatisticsSummary: LabelValueStatisticsSummary?
     private(set) var activeLabelValueStringsByDocumentID: [UUID: String] = [:]
+    private(set) var labelValueStringsByDocumentIDAndLabelID: [UUID: [UUID: String]] = [:]
     private var labelsByUUID: [UUID: LabelTag] = [:]
     private var labelUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
     private var smartFoldersByPersistentID: [PersistentIdentifier: SmartFolder] = [:]
@@ -272,9 +273,43 @@ final class LibraryCoordinator {
     func syncLabelValues(_ labelValues: [DocumentLabelValue], recompute: Bool = true) {
         allLabelValues = labelValues
         allLabelValueSnapshots = ManageLabelValuesUseCase.snapshots(from: labelValues)
+        labelValueStringsByDocumentIDAndLabelID = allLabelValueSnapshots.reduce(into: [UUID: [UUID: String]]()) { result, snapshot in
+            result[snapshot.documentID, default: [:]][snapshot.labelID] = snapshot.decimalString
+        }
         if recompute {
             scheduleLabelValueStatisticsRecompute()
         }
+    }
+
+    func formattedLabelValue(for documentID: UUID, label: LabelTag) -> String? {
+        guard let unitSymbol = label.unitSymbol, !unitSymbol.isEmpty else { return nil }
+        guard let valueString = labelValueStringsByDocumentIDAndLabelID[documentID]?[label.id],
+              let decimal = ManageLabelValuesUseCase.decimal(from: valueString) else {
+            return nil
+        }
+        return ManageLabelValuesUseCase.formattedValue(decimal, unitSymbol: unitSymbol)
+    }
+
+    func updateCachedLabelValue(documentID: UUID, labelID: UUID, decimalString: String?) {
+        allLabelValueSnapshots.removeAll { $0.documentID == documentID && $0.labelID == labelID }
+
+        if let decimalString {
+            allLabelValueSnapshots.append(LabelValueSnapshot(documentID: documentID, labelID: labelID, decimalString: decimalString))
+            labelValueStringsByDocumentIDAndLabelID[documentID, default: [:]][labelID] = decimalString
+            if activeLabelValueStatistics?.labelID == labelID {
+                activeLabelValueStringsByDocumentID[documentID] = decimalString
+            }
+        } else {
+            labelValueStringsByDocumentIDAndLabelID[documentID]?[labelID] = nil
+            if labelValueStringsByDocumentIDAndLabelID[documentID]?.isEmpty == true {
+                labelValueStringsByDocumentIDAndLabelID[documentID] = nil
+            }
+            if activeLabelValueStatistics?.labelID == labelID {
+                activeLabelValueStringsByDocumentID[documentID] = nil
+            }
+        }
+
+        scheduleLabelValueStatisticsRecompute()
     }
 
     func syncWatchFolders(_ watchFolders: [WatchFolder], refreshMonitors: Bool = true) {

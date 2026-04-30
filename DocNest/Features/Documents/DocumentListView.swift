@@ -36,6 +36,8 @@ struct DocumentListView: View {
     }
 
     private let documentColumnMinWidth = 260.0
+    private let documentColumnCompactMinWidth = 132.0
+    private let labelsColumnMinWidth = 110.0
     private let listColumnSpacing = 10.0
     private let listHorizontalPadding = 28.0
     private let listPanelBackground = AppTheme.windowBackground
@@ -62,7 +64,7 @@ struct DocumentListView: View {
     @AppStorage("docListColumnWidthCreated") private var createdColumnWidth = 120.0
     @AppStorage("docListColumnWidthPages") private var pagesColumnWidth = 72.0
     @AppStorage("docListColumnWidthSize") private var sizeColumnWidth = 96.0
-    @AppStorage("docListColumnWidthLabels") private var labelsColumnWidth = 240.0
+    @AppStorage("docListColumnWidthLabels") private var labelsColumnWidth = 300.0
     @AppStorage("docListColumnWidthValue") private var valueColumnWidth = 120.0
     @AppStorage("docListShowImported") private var showsImportedColumn = true
     @AppStorage("docListShowCreated") private var showsCreatedColumn = true
@@ -126,6 +128,16 @@ struct DocumentListView: View {
         }
     }
 
+    private var effectiveDocumentColumnMinWidth: Double {
+        let compactWidth = availableListWidth - listHorizontalPadding - labelsColumnMinWidth - listColumnSpacing
+        return max(documentColumnCompactMinWidth, min(documentColumnMinWidth, compactWidth))
+    }
+
+    private var effectiveLabelsColumnWidth: Double {
+        let availableWidth = availableListWidth - listHorizontalPadding - effectiveDocumentColumnMinWidth - listColumnSpacing
+        return max(labelsColumnMinWidth, min(labelsColumnWidth, availableWidth))
+    }
+
     private var effectiveOptionalColumns: OptionalColumnVisibility {
         var visibility = OptionalColumnVisibility(
             imported: showsImportedColumn,
@@ -135,9 +147,10 @@ struct DocumentListView: View {
             labels: showsLabelsColumn,
             value: showsValueColumn && coordinator.activeLabelValueStatistics != nil
         )
+        visibility.labels = true
 
         let optionalColumnsAvailableWidth = max(
-            availableListWidth - listHorizontalPadding - documentColumnMinWidth,
+            availableListWidth - listHorizontalPadding - effectiveDocumentColumnMinWidth,
             0
         )
 
@@ -148,7 +161,7 @@ struct DocumentListView: View {
             if visibility.created { width += createdColumnWidth }
             if visibility.pages { width += pagesColumnWidth }
             if visibility.size { width += sizeColumnWidth }
-            if visibility.labels { width += labelsColumnWidth }
+            if visibility.labels { width += effectiveLabelsColumnWidth }
             if visibility.value { width += valueColumnWidth }
 
             width += Double(visibility.visibleCount) * listColumnSpacing
@@ -156,12 +169,12 @@ struct DocumentListView: View {
         }
 
         let hideOrder: [WritableKeyPath<OptionalColumnVisibility, Bool>] = [
-            \.labels,
-            \.value,
-            \.size,
             \.pages,
+            \.size,
+            \.value,
             \.created,
-            \.imported
+            \.imported,
+            \.labels
         ]
 
         for keyPath in hideOrder where requiredOptionalColumnsWidth(for: visibility) > optionalColumnsAvailableWidth {
@@ -283,7 +296,16 @@ struct DocumentListView: View {
             if coordinator.documentListViewMode == .list {
                 HStack(spacing: 10) {
                     sortButton("Document", column: .title)
-                        .frame(minWidth: documentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
+                        .frame(minWidth: effectiveDocumentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
+
+                    if effectiveOptionalColumns.labels {
+                        ResizableColumnHeader(width: $labelsColumnWidth, minWidth: labelsColumnMinWidth, displayWidth: effectiveLabelsColumnWidth) {
+                            Text("Labels")
+                                .font(AppTypography.columnHeader)
+                                .lineLimit(1)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
                     if effectiveOptionalColumns.imported {
                         ResizableColumnHeader(width: $importedColumnWidth, minWidth: 96) {
@@ -306,15 +328,6 @@ struct DocumentListView: View {
                     if effectiveOptionalColumns.size {
                         ResizableColumnHeader(width: $sizeColumnWidth, minWidth: 72) {
                             sortButton("Size", column: .fileSize)
-                        }
-                    }
-
-                    if effectiveOptionalColumns.labels {
-                        ResizableColumnHeader(width: $labelsColumnWidth, minWidth: 120) {
-                            Text("Labels")
-                                .font(AppTypography.columnHeader)
-                                .lineLimit(1)
-                                .foregroundStyle(.secondary)
                         }
                     }
 
@@ -417,7 +430,13 @@ struct DocumentListView: View {
     private func documentListRow(document: DocumentRecord, index: Int, allDocs: [DocumentRecord]) -> some View {
         let isSelected = coordinator.selectedDocumentIDs.contains(document.persistentModelID)
 
-        documentRow(for: document, dragSession: dragSession(for: document))
+        documentRow(
+            for: document,
+            dragSession: dragSession(for: document),
+            onRowTap: {
+                handleRowTap(document: document, in: allDocs)
+            }
+        )
             .padding(.horizontal, 12)
             .background(rowBackground(index: index, isSelected: isSelected))
             .overlay(alignment: .bottom) {
@@ -428,9 +447,6 @@ struct DocumentListView: View {
             }
             .contentShape(Rectangle())
             .id(document.persistentModelID)
-            .highPriorityGesture(TapGesture().onEnded {
-                handleRowTap(document: document, in: allDocs)
-            })
             .contextMenu { documentContextMenu(for: document) }
             .dropDestination(for: String.self) { items, _ in
                 guard let labelID = items.compactMap(DocumentLabelDragPayload.labelID(from:)).first else {
@@ -448,7 +464,6 @@ struct DocumentListView: View {
         Toggle("Document Date", isOn: $showsCreatedColumn)
         Toggle("Pages", isOn: $showsPagesColumn)
         Toggle("Size", isOn: $showsSizeColumn)
-        Toggle("Labels", isOn: $showsLabelsColumn)
         Toggle("Value", isOn: $showsValueColumn)
         Divider()
         Text("Group By")
@@ -516,12 +531,16 @@ struct DocumentListView: View {
                             onCommitRename: { commitRename(for: document) },
                             onCancelRename: { cancelRename() },
                             onBeginRename: { beginRename(for: document) },
-                            dragSession: dragSession(for: document)
+                            onSelect: {
+                                handleRowTap(document: document, in: sortedDocs)
+                            },
+                            dragSession: dragSession(for: document),
+                            labelStates: labelChipStates(for: document),
+                            onValueCommit: { label, value in
+                                try commitLabelValue(value, for: document, label: label)
+                            }
                         )
                         .id(document.persistentModelID)
-                        .highPriorityGesture(TapGesture().onEnded {
-                            handleRowTap(document: document, in: sortedDocs)
-                        })
                         .contextMenu { documentContextMenu(for: document) }
                         .accessibilityLabel("\(document.title), PDF document")
                     }
@@ -533,7 +552,11 @@ struct DocumentListView: View {
     }
 
     @ViewBuilder
-    private func documentRow(for document: DocumentRecord, dragSession: DocumentDragHelper.DragSession?) -> some View {
+    private func documentRow(
+        for document: DocumentRecord,
+        dragSession: DocumentDragHelper.DragSession?,
+        onRowTap: @escaping () -> Void
+    ) -> some View {
         HStack(alignment: .center, spacing: 10) {
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 8)
@@ -564,13 +587,37 @@ struct DocumentListView: View {
                     }
                 }
             }
-            .frame(minWidth: documentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: effectiveDocumentColumnMinWidth, maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onRowTap)
+
+            if effectiveOptionalColumns.labels {
+                ZStack(alignment: .leading) {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: onRowTap)
+
+                    DocumentLabelStrip(
+                        states: labelChipStates(for: document),
+                        isRowSelected: isSelectedDocument(document),
+                        onSelect: onRowTap,
+                        onRemove: { label in
+                            onRemoveLabelFromDocument(label, document)
+                        },
+                        onValueCommit: { label, value in
+                            try commitLabelValue(value, for: document, label: label)
+                        }
+                    )
+                }
+                .frame(width: effectiveLabelsColumnWidth, alignment: .leading)
+            }
 
             if effectiveOptionalColumns.imported {
                 Text(document.importedAt, format: .dateTime.year().month().day())
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: importedColumnWidth, alignment: .leading)
-                    .allowsHitTesting(false)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onRowTap)
             }
 
             if effectiveOptionalColumns.created {
@@ -584,28 +631,24 @@ struct DocumentListView: View {
                 }
                 .font(AppTypography.listMeta.monospacedDigit())
                 .frame(width: createdColumnWidth, alignment: .leading)
-                .allowsHitTesting(false)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onRowTap)
             }
 
             if effectiveOptionalColumns.pages {
                 Text("\(document.pageCount)")
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: pagesColumnWidth, alignment: .leading)
-                    .allowsHitTesting(false)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onRowTap)
             }
 
             if effectiveOptionalColumns.size {
                 Text(document.formattedFileSize)
                     .font(AppTypography.listMeta.monospacedDigit())
                     .frame(width: sizeColumnWidth, alignment: .leading)
-                    .allowsHitTesting(false)
-            }
-
-            if effectiveOptionalColumns.labels {
-                DocumentLabelStrip(labels: document.labels) { label in
-                    onRemoveLabelFromDocument(label, document)
-                }
-                .frame(width: labelsColumnWidth, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onRowTap)
             }
 
             if effectiveOptionalColumns.value {
@@ -615,10 +658,8 @@ struct DocumentListView: View {
                     .foregroundStyle(documentValueText == "-" ? .secondary : .primary)
                     .frame(width: valueColumnWidth, alignment: .trailing)
                     .contentShape(Rectangle())
-                    .onTapGesture(count: 2) {
-                        coordinator.isInspectorCollapsed = false
-                    }
-                    .help("Open inspector to add or edit value")
+                    .onTapGesture(perform: onRowTap)
+                    .help("Edit values inline from the matching label chip")
             }
 
             dragHandle(session: dragSession)
@@ -638,6 +679,33 @@ struct DocumentListView: View {
 
     private func onRemoveLabelFromDocument(_ label: LabelTag, _ document: DocumentRecord) {
         coordinator.toggleLabel(label, on: [document])
+    }
+
+    private func labelChipStates(for document: DocumentRecord) -> [DocumentLabelChipState] {
+        let activeStatisticsLabelID = coordinator.activeLabelValueStatistics?.labelID
+        return document.labels.map { label in
+            let rawValue = coordinator.labelValueStringsByDocumentIDAndLabelID[document.id]?[label.id]
+            return DocumentLabelChipState(
+                label: label,
+                valueText: coordinator.formattedLabelValue(for: document.id, label: label),
+                rawValue: rawValue,
+                isValueEnabled: label.unitSymbol?.isEmpty == false,
+                isActiveStatisticsLabel: activeStatisticsLabelID == label.id
+            )
+        }
+    }
+
+    private func commitLabelValue(_ rawValue: String, for document: DocumentRecord, label: LabelTag) throws -> String? {
+        if rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            try ManageLabelValuesUseCase.clearValue(for: document, label: label, using: modelContext)
+            coordinator.updateCachedLabelValue(documentID: document.id, labelID: label.id, decimalString: nil)
+            return nil
+        }
+
+        let normalizedValue = try ManageLabelValuesUseCase.normalizedDecimalString(from: rawValue)
+        try ManageLabelValuesUseCase.setValue(rawValue, for: document, label: label, using: modelContext)
+        coordinator.updateCachedLabelValue(documentID: document.id, labelID: label.id, decimalString: normalizedValue)
+        return normalizedValue
     }
 
     private func valueText(for document: DocumentRecord) -> String {
@@ -1018,6 +1086,7 @@ struct DocumentListView: View {
 private struct ResizableColumnHeader<Content: View>: View {
     @Binding var width: Double
     let minWidth: Double
+    var displayWidth: Double?
     @ViewBuilder let content: () -> Content
 
     @State private var dragStartWidth: Double?
@@ -1059,7 +1128,7 @@ private struct ResizableColumnHeader<Content: View>: View {
                 )
                 .help("Drag to resize column")
         }
-        .frame(width: width, alignment: .leading)
+        .frame(width: displayWidth ?? width, alignment: .leading)
     }
 
     private func applyCursorUpdate(_ update: ResizeHandleCursorUpdate) {
@@ -1096,67 +1165,251 @@ private enum SortDirection {
     case descending
 }
 
-private struct DocumentLabelStrip: View {
-    let labels: [LabelTag]
-    var onRemove: ((LabelTag) -> Void)?
+struct InlineLabelValueEditorState: Equatable {
+    var isEditing = false
+    var draftValue = ""
+    var errorMessage: String?
 
-    private let sortedLabels: [LabelTag]
-    private let visibleLabels: [LabelTag]
-    private let hiddenLabelCount: Int
+    mutating func beginEditing(rawValue: String?, isValueEnabled: Bool) -> Bool {
+        guard isValueEnabled else { return false }
+        draftValue = rawValue ?? ""
+        errorMessage = nil
+        isEditing = true
+        return true
+    }
 
-    init(labels: [LabelTag], onRemove: ((LabelTag) -> Void)? = nil) {
-        self.labels = labels
-        self.onRemove = onRemove
-        self.sortedLabels = labels.sorted {
-            if $0.sortOrder == $1.sortOrder {
-                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+    mutating func cancel(rawValue: String?) {
+        draftValue = rawValue ?? ""
+        errorMessage = nil
+        isEditing = false
+    }
+
+    func shouldCommitOnFocusChange(isFocused: Bool) -> Bool {
+        !isFocused && isEditing
+    }
+
+    func hasChanged(from rawValue: String?) -> Bool {
+        draftValue.trimmingCharacters(in: .whitespacesAndNewlines) != (rawValue ?? "")
+    }
+
+    mutating func finishCommit(normalizedValue: String?) {
+        draftValue = normalizedValue ?? ""
+        errorMessage = nil
+        isEditing = false
+    }
+
+    mutating func failCommit(message: String) {
+        errorMessage = message
+        isEditing = true
+    }
+
+    mutating func syncRawValue(_ rawValue: String?) {
+        guard !isEditing else { return }
+        draftValue = rawValue ?? ""
+    }
+
+    mutating func handleValueSupportChange(isValueEnabled: Bool, rawValue: String?) {
+        guard !isValueEnabled else { return }
+        cancel(rawValue: rawValue)
+    }
+}
+
+struct DocumentLabelChipState: Identifiable {
+    var id: PersistentIdentifier { label.persistentModelID }
+
+    let label: LabelTag
+    let valueText: String?
+    let rawValue: String?
+    let isValueEnabled: Bool
+    let isActiveStatisticsLabel: Bool
+}
+
+struct DocumentLabelStripDisplayPolicy {
+    let states: [DocumentLabelChipState]
+
+    var sortedStates: [DocumentLabelChipState] {
+        states.sorted {
+            if $0.label.sortOrder == $1.label.sortOrder {
+                return $0.label.name.localizedCaseInsensitiveCompare($1.label.name) == .orderedAscending
             }
-            return $0.sortOrder < $1.sortOrder
+            return $0.label.sortOrder < $1.label.sortOrder
         }
-        self.visibleLabels = Array(self.sortedLabels.prefix(2))
-        self.hiddenLabelCount = max(labels.count - self.visibleLabels.count, 0)
+    }
+
+    var hiddenLabelCount: Int {
+        max(states.count - 2, 0)
+    }
+
+    func visibleStates(isHovering: Bool, isRowSelected: Bool) -> [DocumentLabelChipState] {
+        let sortedStates = sortedStates
+        guard sortedStates.count > 2 else { return sortedStates }
+
+        let prioritized = sortedStates.enumerated().sorted { lhs, rhs in
+            let lhsPriority = visibilityPriority(for: lhs.element, isHovering: isHovering, isRowSelected: isRowSelected)
+            let rhsPriority = visibilityPriority(for: rhs.element, isHovering: isHovering, isRowSelected: isRowSelected)
+            if lhsPriority == rhsPriority {
+                return lhs.offset < rhs.offset
+            }
+            return lhsPriority < rhsPriority
+        }
+        .prefix(2)
+        .map(\.element.id)
+
+        let prioritizedIDs = Set(prioritized)
+        return sortedStates.filter { prioritizedIDs.contains($0.id) }
+    }
+
+    func shouldShowMissingValueAffordance(for state: DocumentLabelChipState, isHovering: Bool, isRowSelected: Bool) -> Bool {
+        state.isValueEnabled && state.valueText == nil && (isHovering || isRowSelected)
+    }
+
+    func hiddenLabelHelp(isHovering: Bool, isRowSelected: Bool) -> String {
+        let visibleIDs = Set(visibleStates(isHovering: isHovering, isRowSelected: isRowSelected).map(\.id))
+        let hiddenStates = sortedStates.filter { !visibleIDs.contains($0.id) }
+        let missingValueCount = hiddenStates.filter { $0.isValueEnabled && $0.valueText == nil }.count
+        if missingValueCount > 0 {
+            return "\(hiddenStates.count) hidden labels, \(missingValueCount) missing value\(missingValueCount == 1 ? "" : "s")"
+        }
+        return "\(hiddenStates.count) hidden labels"
+    }
+
+    private func visibilityPriority(for state: DocumentLabelChipState, isHovering: Bool, isRowSelected: Bool) -> Int {
+        if state.isActiveStatisticsLabel { return 0 }
+        if state.valueText != nil { return 1 }
+        if shouldShowMissingValueAffordance(for: state, isHovering: isHovering, isRowSelected: isRowSelected) { return 2 }
+        return 3
+    }
+}
+
+struct DocumentLabelStrip: View {
+    let states: [DocumentLabelChipState]
+    let isRowSelected: Bool
+    let showsEmptyPlaceholder: Bool
+    var onSelect: (() -> Void)?
+    var onRemove: ((LabelTag) -> Void)?
+    var onValueCommit: ((LabelTag, String) throws -> String?)?
+
+    @State private var isHovering = false
+
+    private let displayPolicy: DocumentLabelStripDisplayPolicy
+
+    init(
+        states: [DocumentLabelChipState],
+        isRowSelected: Bool,
+        showsEmptyPlaceholder: Bool = true,
+        onSelect: (() -> Void)? = nil,
+        onRemove: ((LabelTag) -> Void)? = nil,
+        onValueCommit: ((LabelTag, String) throws -> String?)? = nil
+    ) {
+        self.states = states
+        self.isRowSelected = isRowSelected
+        self.showsEmptyPlaceholder = showsEmptyPlaceholder
+        self.onSelect = onSelect
+        self.onRemove = onRemove
+        self.onValueCommit = onValueCommit
+        self.displayPolicy = DocumentLabelStripDisplayPolicy(states: states)
     }
 
     var body: some View {
-        if sortedLabels.isEmpty {
-            Text("No labels")
-                .font(AppTypography.labelChip)
-                .foregroundStyle(.secondary)
+        if displayPolicy.sortedStates.isEmpty {
+            if showsEmptyPlaceholder {
+                Text("No labels")
+                    .font(AppTypography.labelChip)
+                    .foregroundStyle(.secondary)
+            } else {
+                EmptyView()
+            }
         } else {
             HStack(spacing: 6) {
-                ForEach(visibleLabels) { label in
-                    RemovableLabelChip(label: label, onRemove: onRemove)
+                ForEach(visibleStates) { state in
+                    RemovableLabelChip(
+                        state: state,
+                        showsMissingValueAffordance: displayPolicy.shouldShowMissingValueAffordance(
+                            for: state,
+                            isHovering: isHovering,
+                            isRowSelected: isRowSelected
+                        ),
+                        onSelect: onSelect,
+                        onRemove: onRemove,
+                        onValueCommit: onValueCommit
+                    )
                 }
 
-                if hiddenLabelCount > 0 {
-                    Text("+\(hiddenLabelCount)")
+                if displayPolicy.hiddenLabelCount > 0 {
+                    Text("+\(displayPolicy.hiddenLabelCount)")
                         .font(AppTypography.labelChip)
                         .foregroundStyle(.secondary)
+                        .help(hiddenLabelHelp)
                 }
             }
             .lineLimit(1)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isHovering = hovering
+                }
+            }
         }
+    }
+
+    private var visibleStates: [DocumentLabelChipState] {
+        displayPolicy.visibleStates(isHovering: isHovering, isRowSelected: isRowSelected)
+    }
+
+    private var hiddenLabelHelp: String {
+        displayPolicy.hiddenLabelHelp(isHovering: isHovering, isRowSelected: isRowSelected)
     }
 }
 
 private struct RemovableLabelChip: View {
-    let label: LabelTag
+    let state: DocumentLabelChipState
+    let showsMissingValueAffordance: Bool
+    var onSelect: (() -> Void)?
     var onRemove: ((LabelTag) -> Void)?
+    var onValueCommit: ((LabelTag, String) throws -> String?)?
+
     @State private var isHovering = false
+    @State private var editState = InlineLabelValueEditorState()
+    @FocusState private var isValueFieldFocused: Bool
 
     var body: some View {
         HStack(spacing: 3) {
-            LabelChip(name: label.name, color: label.labelColor, icon: label.icon, size: .compact)
+            if editState.isEditing {
+                InlineLabelValueEditorChip(
+                    label: state.label,
+                    draftValue: Binding(
+                        get: { editState.draftValue },
+                        set: { editState.draftValue = $0 }
+                    ),
+                    isFocused: $isValueFieldFocused,
+                    hasError: editState.errorMessage != nil,
+                    onCommit: commitValue,
+                    onCancel: cancelEditing
+                )
+                .help(editState.errorMessage ?? "Press Return to save value")
+            } else {
+                LabelChip(
+                    name: state.label.name,
+                    color: state.label.labelColor,
+                    icon: state.label.icon,
+                    size: .compact,
+                    valueText: state.valueText,
+                    showsMissingValueAffordance: showsMissingValueAffordance,
+                    showsValueEditIndicator: isHovering && state.valueText != nil,
+                    onNameTap: onSelect,
+                    onValueTap: state.isValueEnabled ? beginEditing : nil
+                )
+            }
 
             if isHovering, onRemove != nil {
                 Button {
-                    onRemove?(label)
+                    onRemove?(state.label)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 11))
-                        .foregroundStyle(label.labelColor.color.opacity(0.7))
+                        .foregroundStyle(state.label.labelColor.color.opacity(0.7))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(state.label.name) label")
                 .transition(.opacity)
             }
         }
@@ -1165,10 +1418,109 @@ private struct RemovableLabelChip: View {
                 isHovering = hovering
             }
         }
+        .onChange(of: state.rawValue) { _, newValue in
+            editState.syncRawValue(newValue)
+        }
+        .onChange(of: state.isValueEnabled) { _, isValueEnabled in
+            editState.handleValueSupportChange(isValueEnabled: isValueEnabled, rawValue: state.rawValue)
+        }
+        .onChange(of: isValueFieldFocused) { _, focused in
+            guard editState.shouldCommitOnFocusChange(isFocused: focused) else { return }
+            commitValue()
+        }
+    }
+
+    private func beginEditing() {
+        guard editState.beginEditing(rawValue: state.rawValue, isValueEnabled: state.isValueEnabled) else { return }
+        Task { @MainActor in
+            isValueFieldFocused = true
+        }
+    }
+
+    private func cancelEditing() {
+        editState.cancel(rawValue: state.rawValue)
+    }
+
+    private func commitValue() {
+        guard state.isValueEnabled else {
+            cancelEditing()
+            return
+        }
+        guard let onValueCommit else {
+            cancelEditing()
+            return
+        }
+        guard editState.hasChanged(from: state.rawValue) else {
+            cancelEditing()
+            return
+        }
+
+        do {
+            let normalizedValue = try onValueCommit(state.label, editState.draftValue)
+            editState.finishCommit(normalizedValue: normalizedValue)
+        } catch {
+            editState.failCommit(message: error.localizedDescription)
+            isValueFieldFocused = true
+        }
     }
 }
 
-private struct DocumentThumbnailCell: View {
+private struct InlineLabelValueEditorChip: View {
+    let label: LabelTag
+    @Binding var draftValue: String
+    var isFocused: FocusState<Bool>.Binding
+    let hasError: Bool
+    let onCommit: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            HStack(spacing: 3) {
+                if let icon = label.icon, !icon.isEmpty {
+                    Text(icon)
+                        .font(AppTypography.labelChip)
+                        .accessibilityHidden(true)
+                }
+                Text(label.name)
+                    .font(AppTypography.labelChip)
+                    .foregroundStyle(label.labelColor.color)
+                    .lineLimit(1)
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 7)
+            .padding(.vertical, 3)
+
+            Rectangle()
+                .fill(label.labelColor.color.opacity(0.24))
+                .frame(width: 1)
+                .padding(.vertical, 4)
+                .accessibilityHidden(true)
+
+            TextField("Value", text: $draftValue)
+                .textFieldStyle(.plain)
+                .font(AppTypography.labelChip.monospacedDigit())
+                .frame(width: 64)
+                .focused(isFocused)
+                .onSubmit(onCommit)
+                .onExitCommand(perform: onCancel)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(label.labelColor.color.opacity(0.1))
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(label.labelColor.color.opacity(0.16))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(hasError ? Color.red : Color.clear, lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .accessibilityLabel("Edit \(label.name) value")
+    }
+}
+
+struct DocumentThumbnailCell: View {
     let document: DocumentRecord
     let libraryURL: URL?
     let size: Double
@@ -1178,15 +1530,16 @@ private struct DocumentThumbnailCell: View {
     var onCommitRename: () -> Void
     var onCancelRename: () -> Void
     var onBeginRename: () -> Void
+    var onSelect: () -> Void
     let dragSession: DocumentDragHelper.DragSession?
+    let labelStates: [DocumentLabelChipState]
+    let onValueCommit: ((LabelTag, String) throws -> String?)?
 
     @Environment(ThumbnailCache.self) private var thumbnailCache
     @FocusState private var isRenameFieldFocused: Bool
 
     private let badgeLabels: [LabelTag]
     private let badgeOverflowCount: Int
-    private let miniBarLabels: [LabelTag]
-    private let miniBarOverflowCount: Int
 
     init(
         document: DocumentRecord,
@@ -1198,7 +1551,10 @@ private struct DocumentThumbnailCell: View {
         onCommitRename: @escaping () -> Void,
         onCancelRename: @escaping () -> Void,
         onBeginRename: @escaping () -> Void,
-        dragSession: DocumentDragHelper.DragSession?
+        onSelect: @escaping () -> Void = {},
+        dragSession: DocumentDragHelper.DragSession?,
+        labelStates: [DocumentLabelChipState] = [],
+        onValueCommit: ((LabelTag, String) throws -> String?)? = nil
     ) {
         self.document = document
         self.libraryURL = libraryURL
@@ -1209,7 +1565,9 @@ private struct DocumentThumbnailCell: View {
         self.onCommitRename = onCommitRename
         self.onCancelRename = onCancelRename
         self.onBeginRename = onBeginRename
+        self.onSelect = onSelect
         self.dragSession = dragSession
+        self.onValueCommit = onValueCommit
 
         let sortedLabels = document.labels.sorted {
             if $0.sortOrder == $1.sortOrder {
@@ -1217,16 +1575,27 @@ private struct DocumentThumbnailCell: View {
             }
             return $0.sortOrder < $1.sortOrder
         }
+        self.labelStates = labelStates.isEmpty
+            ? sortedLabels.map {
+                DocumentLabelChipState(
+                    label: $0,
+                    valueText: nil,
+                    rawValue: nil,
+                    isValueEnabled: $0.unitSymbol?.isEmpty == false,
+                    isActiveStatisticsLabel: false
+                )
+            }
+            : labelStates
         self.badgeLabels = Array(sortedLabels.prefix(4))
         self.badgeOverflowCount = max(sortedLabels.count - self.badgeLabels.count, 0)
-        self.miniBarLabels = Array(sortedLabels.prefix(2))
-        self.miniBarOverflowCount = max(sortedLabels.count - self.miniBarLabels.count, 0)
     }
 
     var body: some View {
         VStack(spacing: 8) {
             thumbnailImage
                 .frame(width: size, height: size * 1.3)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onSelect)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(alignment: .bottomTrailing) {
                     if !document.labels.isEmpty {
@@ -1260,6 +1629,8 @@ private struct DocumentThumbnailCell: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .frame(width: size)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onSelect)
                     .onTapGesture(count: 2) {
                         guard isSelected else { return }
                         let disallowedModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
@@ -1268,7 +1639,7 @@ private struct DocumentThumbnailCell: View {
                     }
             }
 
-            if !isRenaming, !document.labels.isEmpty {
+            if DocumentThumbnailCellLayoutPolicy.showsMiniLabelBar(labelCount: document.labels.count, isRenaming: isRenaming) {
                 miniLabelBar
                     .frame(width: size)
                     .clipped()
@@ -1306,17 +1677,19 @@ private struct DocumentThumbnailCell: View {
     }
 
     private var miniLabelBar: some View {
-        return HStack(spacing: 4) {
-            ForEach(miniBarLabels) { label in
-                LabelChip(name: label.name, color: label.labelColor, icon: label.icon, size: .compact)
-            }
-            if miniBarOverflowCount > 0 {
-                Text("+\(miniBarOverflowCount)")
-                    .font(AppTypography.labelChip)
-                    .foregroundStyle(.secondary)
-            }
+        ZStack(alignment: .leading) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onSelect)
+
+            DocumentLabelStrip(
+                states: labelStates,
+                isRowSelected: isSelected,
+                showsEmptyPlaceholder: false,
+                onSelect: onSelect,
+                onValueCommit: onValueCommit
+            )
         }
-        .lineLimit(1)
     }
 
     @ViewBuilder
@@ -1351,6 +1724,12 @@ private struct DocumentThumbnailCell: View {
                         .foregroundStyle(.secondary)
                 }
         }
+    }
+}
+
+enum DocumentThumbnailCellLayoutPolicy {
+    static func showsMiniLabelBar(labelCount: Int, isRenaming: Bool) -> Bool {
+        !isRenaming && labelCount > 0
     }
 }
 

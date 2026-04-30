@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 import SwiftData
+import SwiftUI
 import PDFKit
 @testable import DocNest
 
@@ -1399,6 +1400,219 @@ final class DocNestTests: XCTestCase {
         XCTAssertNil(statistics.minimum)
         XCTAssertNil(statistics.maximum)
         XCTAssertNil(statistics.median)
+    }
+
+    @MainActor
+    func testCoordinatorFormatsDocumentLabelValuesForAnyAssignedLabel() throws {
+        let coordinator = LibraryCoordinator()
+        let invoice = LabelTag(name: "Invoice", unitSymbol: "€")
+        let hours = LabelTag(name: "Hours", unitSymbol: "h")
+        let plain = LabelTag(name: "Reviewed")
+        let document = DocumentRecord(
+            originalFileName: "invoice.pdf",
+            title: "Invoice",
+            importedAt: .now,
+            pageCount: 1,
+            labels: [invoice, hours, plain]
+        )
+        let values = [
+            DocumentLabelValue(documentID: document.id, labelID: invoice.id, decimalString: "0"),
+            DocumentLabelValue(documentID: document.id, labelID: hours.id, decimalString: "3.5")
+        ]
+
+        coordinator.syncLabelValues(values, recompute: false)
+
+        XCTAssertEqual(coordinator.labelValueStringsByDocumentIDAndLabelID[document.id]?[invoice.id], "0")
+        XCTAssertEqual(coordinator.formattedLabelValue(for: document.id, label: invoice), "0 €")
+        XCTAssertEqual(
+            coordinator.formattedLabelValue(for: document.id, label: hours),
+            ManageLabelValuesUseCase.formattedValue(Decimal(3.5), unitSymbol: "h")
+        )
+        XCTAssertNil(coordinator.formattedLabelValue(for: document.id, label: plain))
+    }
+
+    @MainActor
+    func testCoordinatorTreatsMissingAndInvalidDocumentLabelValuesAsEmpty() throws {
+        let coordinator = LibraryCoordinator()
+        let invoice = LabelTag(name: "Invoice", unitSymbol: "€")
+        let documentID = UUID()
+
+        coordinator.syncLabelValues([
+            DocumentLabelValue(documentID: documentID, labelID: invoice.id, decimalString: "not-a-number")
+        ], recompute: false)
+
+        XCTAssertNil(coordinator.formattedLabelValue(for: documentID, label: invoice))
+        XCTAssertNil(coordinator.formattedLabelValue(for: UUID(), label: invoice))
+    }
+
+    @MainActor
+    func testCoordinatorUpdatesCachedDocumentLabelValueImmediately() throws {
+        let coordinator = LibraryCoordinator()
+        let invoice = LabelTag(name: "Invoice", unitSymbol: "€")
+        let documentID = UUID()
+
+        coordinator.syncLabelValues([], recompute: false)
+        coordinator.updateCachedLabelValue(documentID: documentID, labelID: invoice.id, decimalString: "42")
+
+        XCTAssertEqual(coordinator.labelValueStringsByDocumentIDAndLabelID[documentID]?[invoice.id], "42")
+        XCTAssertEqual(coordinator.formattedLabelValue(for: documentID, label: invoice), "42 €")
+
+        coordinator.updateCachedLabelValue(documentID: documentID, labelID: invoice.id, decimalString: nil)
+
+        XCTAssertNil(coordinator.labelValueStringsByDocumentIDAndLabelID[documentID]?[invoice.id])
+        XCTAssertNil(coordinator.formattedLabelValue(for: documentID, label: invoice))
+    }
+
+    func testInlineLabelValueEditorStateCommitsOnFocusLossAndCancels() {
+        var state = InlineLabelValueEditorState()
+
+        XCTAssertTrue(state.beginEditing(rawValue: "12", isValueEnabled: true))
+        XCTAssertEqual(state.draftValue, "12")
+        XCTAssertFalse(state.hasChanged(from: "12"))
+        state.draftValue = "15"
+        XCTAssertTrue(state.hasChanged(from: "12"))
+        XCTAssertTrue(state.shouldCommitOnFocusChange(isFocused: false))
+
+        state.cancel(rawValue: "12")
+
+        XCTAssertFalse(state.isEditing)
+        XCTAssertEqual(state.draftValue, "12")
+        XCTAssertNil(state.errorMessage)
+    }
+
+    func testInlineLabelValueEditorStateTreatsUnchangedWhitespaceAsNoOp() {
+        var state = InlineLabelValueEditorState()
+
+        XCTAssertTrue(state.beginEditing(rawValue: "12", isValueEnabled: true))
+        state.draftValue = " 12 "
+
+        XCTAssertTrue(state.shouldCommitOnFocusChange(isFocused: false))
+        XCTAssertFalse(state.hasChanged(from: "12"))
+    }
+
+    func testInlineLabelValueEditorStateKeepsInvalidInputOpen() {
+        var state = InlineLabelValueEditorState()
+
+        XCTAssertTrue(state.beginEditing(rawValue: nil, isValueEnabled: true))
+        state.draftValue = "abc"
+        state.failCommit(message: "Enter a valid number.")
+
+        XCTAssertTrue(state.isEditing)
+        XCTAssertEqual(state.draftValue, "abc")
+        XCTAssertEqual(state.errorMessage, "Enter a valid number.")
+    }
+
+    func testInlineLabelValueEditorStateClosesWhenUnitSupportIsRemoved() {
+        var state = InlineLabelValueEditorState()
+
+        XCTAssertTrue(state.beginEditing(rawValue: "42", isValueEnabled: true))
+        state.draftValue = "99"
+        state.handleValueSupportChange(isValueEnabled: false, rawValue: nil)
+
+        XCTAssertFalse(state.isEditing)
+        XCTAssertEqual(state.draftValue, "")
+        XCTAssertNil(state.errorMessage)
+        XCTAssertFalse(state.beginEditing(rawValue: nil, isValueEnabled: false))
+    }
+
+    func testDocumentLabelStripDisplayPolicyPrioritizesActiveAndValuedLabels() {
+        let plain = LabelTag(name: "Archive", sortOrder: 0)
+        let missing = LabelTag(name: "Invoice", unitSymbol: "€", sortOrder: 1)
+        let valued = LabelTag(name: "Hours", unitSymbol: "h", sortOrder: 2)
+        let active = LabelTag(name: "Budget", unitSymbol: "€", sortOrder: 3)
+        let policy = DocumentLabelStripDisplayPolicy(states: [
+            DocumentLabelChipState(label: plain, valueText: nil, rawValue: nil, isValueEnabled: false, isActiveStatisticsLabel: false),
+            DocumentLabelChipState(label: missing, valueText: nil, rawValue: nil, isValueEnabled: true, isActiveStatisticsLabel: false),
+            DocumentLabelChipState(label: valued, valueText: "3 h", rawValue: "3", isValueEnabled: true, isActiveStatisticsLabel: false),
+            DocumentLabelChipState(label: active, valueText: nil, rawValue: nil, isValueEnabled: true, isActiveStatisticsLabel: true)
+        ])
+
+        let visibleNames = policy
+            .visibleStates(isHovering: false, isRowSelected: false)
+            .map(\.label.name)
+
+        XCTAssertEqual(visibleNames, ["Hours", "Budget"])
+        XCTAssertFalse(policy.shouldShowMissingValueAffordance(
+            for: DocumentLabelChipState(label: missing, valueText: nil, rawValue: nil, isValueEnabled: true, isActiveStatisticsLabel: false),
+            isHovering: false,
+            isRowSelected: false
+        ))
+    }
+
+    func testDocumentLabelStripDisplayPolicyRevealsMissingValuesOnSelectionAndReportsHiddenMissingCount() {
+        let plain = LabelTag(name: "Archive", sortOrder: 0)
+        let missing = LabelTag(name: "Invoice", unitSymbol: "€", sortOrder: 1)
+        let hiddenMissing = LabelTag(name: "Mileage", unitSymbol: "km", sortOrder: 2)
+        let policy = DocumentLabelStripDisplayPolicy(states: [
+            DocumentLabelChipState(label: plain, valueText: nil, rawValue: nil, isValueEnabled: false, isActiveStatisticsLabel: false),
+            DocumentLabelChipState(label: missing, valueText: nil, rawValue: nil, isValueEnabled: true, isActiveStatisticsLabel: false),
+            DocumentLabelChipState(label: hiddenMissing, valueText: nil, rawValue: nil, isValueEnabled: true, isActiveStatisticsLabel: false)
+        ])
+
+        let visibleNames = policy
+            .visibleStates(isHovering: false, isRowSelected: true)
+            .map(\.label.name)
+
+        XCTAssertEqual(visibleNames, ["Invoice", "Mileage"])
+        XCTAssertEqual(policy.hiddenLabelCount, 1)
+        XCTAssertEqual(policy.hiddenLabelHelp(isHovering: false, isRowSelected: true), "1 hidden labels")
+        XCTAssertTrue(policy.shouldShowMissingValueAffordance(
+            for: DocumentLabelChipState(label: missing, valueText: nil, rawValue: nil, isValueEnabled: true, isActiveStatisticsLabel: false),
+            isHovering: false,
+            isRowSelected: true
+        ))
+    }
+
+    @MainActor
+    func testThumbnailCellSuppressesEmptyLabelBarAndBuildsFallbackStates() {
+        let unlabeledDocument = DocumentRecord(
+            originalFileName: "unlabeled.pdf",
+            title: "Unlabeled",
+            importedAt: .now,
+            pageCount: 1
+        )
+        let unlabeledCell = DocumentThumbnailCell(
+            document: unlabeledDocument,
+            libraryURL: nil,
+            size: 140,
+            isSelected: false,
+            isRenaming: false,
+            renamingTitle: .constant(""),
+            onCommitRename: {},
+            onCancelRename: {},
+            onBeginRename: {},
+            onSelect: {},
+            dragSession: nil
+        )
+        XCTAssertTrue(unlabeledCell.labelStates.isEmpty)
+        XCTAssertFalse(DocumentThumbnailCellLayoutPolicy.showsMiniLabelBar(labelCount: unlabeledDocument.labels.count, isRenaming: false))
+
+        let invoice = LabelTag(name: "Invoice", unitSymbol: "€")
+        let labeledDocument = DocumentRecord(
+            originalFileName: "invoice.pdf",
+            title: "Invoice",
+            importedAt: .now,
+            pageCount: 1,
+            labels: [invoice]
+        )
+        let labeledCell = DocumentThumbnailCell(
+            document: labeledDocument,
+            libraryURL: nil,
+            size: 140,
+            isSelected: false,
+            isRenaming: false,
+            renamingTitle: .constant(""),
+            onCommitRename: {},
+            onCancelRename: {},
+            onBeginRename: {},
+            onSelect: {},
+            dragSession: nil
+        )
+
+        XCTAssertEqual(labeledCell.labelStates.map(\.label.id), [invoice.id])
+        XCTAssertTrue(labeledCell.labelStates.first?.isValueEnabled == true)
+        XCTAssertTrue(DocumentThumbnailCellLayoutPolicy.showsMiniLabelBar(labelCount: labeledDocument.labels.count, isRenaming: false))
+        XCTAssertFalse(DocumentThumbnailCellLayoutPolicy.showsMiniLabelBar(labelCount: labeledDocument.labels.count, isRenaming: true))
     }
 
     @MainActor
