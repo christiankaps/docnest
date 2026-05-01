@@ -105,6 +105,14 @@ struct ImportPDFDocumentsResult {
 /// so duplicate handling, recursive folder expansion, self-import protection,
 /// storage behavior, and record creation remain consistent.
 enum ImportPDFDocumentsUseCase {
+    #if DEBUG
+    static var resolveFileURLsDidStartForTesting: (() -> Void)?
+    static var stagedImportForTesting: (() -> Void)?
+    static var commitPreparedImportsDidStartForTesting: (() -> Void)?
+    static var savedPreparedImportsForTesting: (() -> Void)?
+    static var committedCancellationRollbackSaveForTesting: (() throws -> Void)?
+    #endif
+
     private struct ImportMetadata {
         let contentHash: String
         let fileSize: Int64
@@ -121,6 +129,11 @@ enum ImportPDFDocumentsUseCase {
         let fileSize: Int64
         let contentHash: String
         let storedFilePath: String
+    }
+
+    private struct ResolvedFileURLs {
+        let urls: [URL]
+        let tempDirectories: [URL]
     }
 
     /// Resolves the supplied URLs, imports all supported PDFs into the active
@@ -170,8 +183,29 @@ enum ImportPDFDocumentsUseCase {
             }
         }
 
-        var zipTempDirectories: [URL] = []
-        let resolvedURLs = resolveFileURLs(fileURLs, tempDirectories: &zipTempDirectories) + downloadedTempFiles
+        let resolvedFileURLs = await resolveFileURLsAsync(fileURLs)
+        let zipTempDirectories = resolvedFileURLs.tempDirectories
+        let resolvedURLs = resolvedFileURLs.urls + downloadedTempFiles
+
+        if Task.isCancelled {
+            for tempFile in downloadedTempFiles {
+                try? FileManager.default.removeItem(at: tempFile)
+            }
+            for tempDir in zipTempDirectories {
+                try? FileManager.default.removeItem(at: tempDir)
+            }
+            return ImportPDFDocumentsResult(
+                importedCount: 0,
+                duplicates: [],
+                unsupportedFiles: [],
+                downloadFailures: downloadFailures,
+                failures: failures,
+                hadNoImportablePDFs: false,
+                autoAssignedLabels: [],
+                importedDocuments: []
+            )
+        }
+
         let hadNoImportablePDFs = resolvedURLs.isEmpty && !fileURLs.isEmpty && failures.isEmpty
         if let onProgress {
             await onProgress(0, resolvedURLs.count)
@@ -231,6 +265,9 @@ enum ImportPDFDocumentsUseCase {
                     )
                     preparedImports.append(stagedImport)
                     knownContentHashes.insert(preparedImport.contentHash)
+                    #if DEBUG
+                    stagedImportForTesting?()
+                    #endif
                 }
             } catch {
                 failures.append(
@@ -244,6 +281,28 @@ enum ImportPDFDocumentsUseCase {
             if let onProgress {
                 await onProgress(index + 1, resolvedURLs.count)
             }
+        }
+
+        if Task.isCancelled {
+            for preparedImport in preparedImports {
+                DocumentStorageService.deleteStoredFile(at: preparedImport.storedFilePath, libraryURL: libraryURL)
+            }
+            for tempFile in downloadedTempFiles {
+                try? FileManager.default.removeItem(at: tempFile)
+            }
+            for tempDir in zipTempDirectories {
+                try? FileManager.default.removeItem(at: tempDir)
+            }
+            return ImportPDFDocumentsResult(
+                importedCount: 0,
+                duplicates: [],
+                unsupportedFiles: [],
+                downloadFailures: downloadFailures,
+                failures: failures,
+                hadNoImportablePDFs: false,
+                autoAssignedLabels: [],
+                importedDocuments: []
+            )
         }
 
         for tempFile in downloadedTempFiles {
@@ -413,6 +472,26 @@ enum ImportPDFDocumentsUseCase {
         var importedStoredPaths: [String] = []
         var failures = failures
 
+        #if DEBUG
+        commitPreparedImportsDidStartForTesting?()
+        #endif
+
+        guard !Task.isCancelled else {
+            for preparedImport in preparedImports {
+                DocumentStorageService.deleteStoredFile(at: preparedImport.storedFilePath, libraryURL: libraryURL)
+            }
+            return ImportPDFDocumentsResult(
+                importedCount: 0,
+                duplicates: duplicates,
+                unsupportedFiles: unsupportedFiles,
+                downloadFailures: downloadFailures,
+                failures: failures,
+                hadNoImportablePDFs: false,
+                autoAssignedLabels: [],
+                importedDocuments: []
+            )
+        }
+
         for preparedImport in preparedImports {
             let record = DocumentRecord(
                 originalFileName: preparedImport.originalFileName,
@@ -430,6 +509,25 @@ enum ImportPDFDocumentsUseCase {
             modelContext.insert(record)
             importedRecords.append(record)
             importedStoredPaths.append(preparedImport.storedFilePath)
+        }
+
+        guard !Task.isCancelled else {
+            for record in importedRecords {
+                modelContext.delete(record)
+            }
+            for storedFilePath in importedStoredPaths {
+                DocumentStorageService.deleteStoredFile(at: storedFilePath, libraryURL: libraryURL)
+            }
+            return ImportPDFDocumentsResult(
+                importedCount: 0,
+                duplicates: duplicates,
+                unsupportedFiles: unsupportedFiles,
+                downloadFailures: downloadFailures,
+                failures: failures,
+                hadNoImportablePDFs: false,
+                autoAssignedLabels: [],
+                importedDocuments: []
+            )
         }
 
         do {
@@ -458,6 +556,58 @@ enum ImportPDFDocumentsUseCase {
                 failures: failures,
                 hadNoImportablePDFs: hadNoImportablePDFs,
                 autoAssignedLabels: autoAssignedLabelNames,
+                importedDocuments: []
+            )
+        }
+
+        #if DEBUG
+        savedPreparedImportsForTesting?()
+        #endif
+
+        if Task.isCancelled {
+            for record in importedRecords {
+                modelContext.delete(record)
+            }
+            do {
+                #if DEBUG
+                if let committedCancellationRollbackSaveForTesting {
+                    try committedCancellationRollbackSaveForTesting()
+                } else {
+                    try modelContext.save()
+                }
+                #else
+                try modelContext.save()
+                #endif
+                for storedFilePath in importedStoredPaths {
+                    DocumentStorageService.deleteStoredFile(at: storedFilePath, libraryURL: libraryURL)
+                }
+            } catch {
+                modelContext.rollback()
+                failures.append(
+                    .init(
+                        fileName: nil,
+                        message: "The cancelled import could not be rolled back."
+                    )
+                )
+                return ImportPDFDocumentsResult(
+                    importedCount: importedRecords.count,
+                    duplicates: duplicates,
+                    unsupportedFiles: unsupportedFiles,
+                    downloadFailures: downloadFailures,
+                    failures: failures,
+                    hadNoImportablePDFs: hadNoImportablePDFs,
+                    autoAssignedLabels: autoAssignedLabelNames,
+                    importedDocuments: importedRecords
+                )
+            }
+            return ImportPDFDocumentsResult(
+                importedCount: 0,
+                duplicates: duplicates,
+                unsupportedFiles: unsupportedFiles,
+                downloadFailures: downloadFailures,
+                failures: failures,
+                hadNoImportablePDFs: false,
+                autoAssignedLabels: [],
                 importedDocuments: []
             )
         }
@@ -512,12 +662,42 @@ enum ImportPDFDocumentsUseCase {
     /// Expands any directory and zip URLs into their contained PDF files recursively,
     /// passing through individual file URLs unchanged.
     /// Extracted zip contents are placed in temporary directories returned via `tempDirectories`.
-    private static func resolveFileURLs(_ urls: [URL], tempDirectories: inout [URL]) -> [URL] {
+    private static func resolveFileURLsAsync(_ urls: [URL]) async -> ResolvedFileURLs {
+        let resolverTask = Task.detached(priority: .utility) {
+            #if DEBUG
+            resolveFileURLsDidStartForTesting?()
+            #endif
+
+            var tempDirectories: [URL] = []
+            do {
+                let urls = try resolveFileURLs(urls, tempDirectories: &tempDirectories)
+                return ResolvedFileURLs(urls: urls, tempDirectories: tempDirectories)
+            } catch is CancellationError {
+                for tempDirectory in tempDirectories {
+                    try? FileManager.default.removeItem(at: tempDirectory)
+                }
+                return ResolvedFileURLs(urls: [], tempDirectories: [])
+            } catch {
+                return ResolvedFileURLs(urls: [], tempDirectories: tempDirectories)
+            }
+        }
+
+        return await withTaskCancellationHandler {
+            await resolverTask.value
+        } onCancel: {
+            resolverTask.cancel()
+        }
+    }
+
+    private static func resolveFileURLs(_ urls: [URL], tempDirectories: inout [URL]) throws -> [URL] {
         var resolved: [URL] = []
 
         for url in urls {
+            try Task.checkCancellation()
             if isDirectory(url) {
-                resolved.append(contentsOf: enumeratePDFs(in: url))
+                resolved.append(contentsOf: try enumeratePDFs(in: url) {
+                    try Task.checkCancellation()
+                })
             } else if isZipFile(url) {
                 let accessedSecurityScope = url.startAccessingSecurityScopedResource()
                 defer {
@@ -526,9 +706,11 @@ enum ImportPDFDocumentsUseCase {
                     }
                 }
 
-                if let extractedDir = extractZipFile(at: url) {
+                if let extractedDir = try extractZipFile(at: url) {
                     tempDirectories.append(extractedDir)
-                    resolved.append(contentsOf: enumeratePDFs(in: extractedDir))
+                    resolved.append(contentsOf: try enumeratePDFs(in: extractedDir) {
+                        try Task.checkCancellation()
+                    })
                 }
             } else {
                 resolved.append(url)
@@ -577,12 +759,15 @@ enum ImportPDFDocumentsUseCase {
 
     /// Extracts a zip archive to a temporary directory using the system `ditto` command.
     /// Returns the URL of the temporary directory, or `nil` on failure.
-    private static func extractZipFile(at url: URL) -> URL? {
+    private static func extractZipFile(at url: URL) throws -> URL? {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("DocNestZipImport-\(UUID().uuidString)", isDirectory: true)
 
         do {
+            try Task.checkCancellation()
             try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             return nil
         }
@@ -593,7 +778,16 @@ enum ImportPDFDocumentsUseCase {
 
         do {
             try process.run()
-            process.waitUntilExit()
+            while process.isRunning {
+                try Task.checkCancellation()
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+        } catch is CancellationError {
+            if process.isRunning {
+                process.terminate()
+            }
+            try? FileManager.default.removeItem(at: tempDir)
+            throw CancellationError()
         } catch {
             try? FileManager.default.removeItem(at: tempDir)
             return nil

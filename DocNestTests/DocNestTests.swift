@@ -64,9 +64,37 @@ private enum TestImportFixtures {
 }
 
 final class DocNestTests: XCTestCase {
+    private var repositoryRootURL: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
     override func tearDown() {
         super.tearDown()
         DocumentLibraryService.persistLibraryURL(nil)
+    }
+
+    func testDocumentTypesDeclareBundleRoles() throws {
+        let plistURL = repositoryRootURL.appendingPathComponent("DocNest/Info.plist")
+        let data = try Data(contentsOf: plistURL)
+        let plistObject = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+        let plist = try XCTUnwrap(plistObject as? [String: Any])
+        let documentTypes = try XCTUnwrap(plist["CFBundleDocumentTypes"] as? [[String: Any]])
+
+        XCTAssertFalse(documentTypes.isEmpty)
+        for documentType in documentTypes {
+            let role = try XCTUnwrap(documentType["CFBundleTypeRole"] as? String)
+            XCTAssertTrue(["Editor", "Viewer", "Shell", "None"].contains(role))
+        }
+    }
+
+    func testBuildDmgScriptPropagatesCreateDmgFailures() throws {
+        let scriptURL = repositoryRootURL.appendingPathComponent("scripts/build-dmg.sh")
+        let script = try String(contentsOf: scriptURL)
+
+        XCTAssertFalse(script.contains("|| true"))
+        XCTAssertTrue(script.contains("hdiutil imageinfo"))
     }
 
     func testDocumentListHeaderShowsDocumentLabelsDividerOnlyWhenLabelsColumnIsVisible() {
@@ -412,6 +440,256 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(result.importedCount, 0)
         XCTAssertTrue(result.hasNoImportablePDFs)
         XCTAssertEqual(result.summaryMessage, "No PDF documents found to import.")
+    }
+
+    @MainActor
+    func testImportPDFDocumentsUseCaseHonorsCancellationDuringFolderResolution() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let importRoot = tempRoot.appendingPathComponent("CancelledImport", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: importRoot, withIntermediateDirectories: true)
+        for index in 0..<20 {
+            try TestImportFixtures.createPDF(
+                at: importRoot.appendingPathComponent("document-\(index).pdf"),
+                text: "Document \(index)"
+            )
+        }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("CancelledLibrary")
+        )
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let resolutionStarted = expectation(description: "Folder resolution started")
+        ImportPDFDocumentsUseCase.resolveFileURLsDidStartForTesting = {
+            resolutionStarted.fulfill()
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        defer {
+            ImportPDFDocumentsUseCase.resolveFileURLsDidStartForTesting = nil
+        }
+
+        let importTask = Task {
+            await ImportPDFDocumentsUseCase.execute(
+                urls: [importRoot],
+                into: libraryURL,
+                using: context
+            )
+        }
+        await fulfillment(of: [resolutionStarted], timeout: 2)
+        importTask.cancel()
+        let result = await importTask.value
+
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        XCTAssertEqual(result.importedCount, 0)
+        XCTAssertFalse(result.hasNoImportablePDFs)
+        XCTAssertTrue(documents.isEmpty)
+    }
+
+    @MainActor
+    func testImportPDFDocumentsUseCaseDoesNotCommitStagedDocumentsAfterCancellation() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let importRoot = tempRoot.appendingPathComponent("PartiallyCancelledImport", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: importRoot, withIntermediateDirectories: true)
+        for index in 0..<5 {
+            try TestImportFixtures.createPDF(
+                at: importRoot.appendingPathComponent("document-\(index).pdf"),
+                text: "Document \(index)"
+            )
+        }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("PartiallyCancelledLibrary")
+        )
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let stagedImport = expectation(description: "At least one import was staged")
+        let lock = NSLock()
+        var didFulfillStagedImport = false
+        ImportPDFDocumentsUseCase.stagedImportForTesting = {
+            lock.lock()
+            let shouldFulfill = !didFulfillStagedImport
+            didFulfillStagedImport = true
+            lock.unlock()
+
+            if shouldFulfill {
+                stagedImport.fulfill()
+                Thread.sleep(forTimeInterval: 0.2)
+            }
+        }
+        defer {
+            ImportPDFDocumentsUseCase.stagedImportForTesting = nil
+        }
+
+        let importTask = Task {
+            await ImportPDFDocumentsUseCase.execute(
+                urls: [importRoot],
+                into: libraryURL,
+                using: context
+            )
+        }
+        await fulfillment(of: [stagedImport], timeout: 3)
+        importTask.cancel()
+        let result = await importTask.value
+
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        let originalsURL = DocumentLibraryService.originalsDirectory(for: libraryURL)
+        let storedPDFs = (FileManager.default.enumerator(
+            at: originalsURL,
+            includingPropertiesForKeys: nil
+        )?.compactMap { $0 as? URL } ?? [])
+            .filter { $0.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame }
+
+        XCTAssertEqual(result.importedCount, 0)
+        XCTAssertFalse(result.hasNoImportablePDFs)
+        XCTAssertTrue(documents.isEmpty)
+        XCTAssertTrue(storedPDFs.isEmpty)
+    }
+
+    @MainActor
+    func testImportPDFDocumentsUseCaseDoesNotCommitWhenCancelledAtCommitBoundary() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sourcePDFURL = tempRoot.appendingPathComponent("commit-cancel.pdf")
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("CommitCancelledLibrary")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try TestImportFixtures.createPDF(at: sourcePDFURL, text: "Commit Cancel")
+
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let commitStarted = expectation(description: "Commit started")
+        let taskLock = NSLock()
+        var importTask: Task<ImportPDFDocumentsResult, Never>?
+        ImportPDFDocumentsUseCase.commitPreparedImportsDidStartForTesting = {
+            commitStarted.fulfill()
+            DispatchQueue.global().async {
+                taskLock.lock()
+                let task = importTask
+                taskLock.unlock()
+                task?.cancel()
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        defer {
+            ImportPDFDocumentsUseCase.commitPreparedImportsDidStartForTesting = nil
+        }
+
+        let task = Task {
+            await ImportPDFDocumentsUseCase.execute(
+                urls: [sourcePDFURL],
+                into: libraryURL,
+                using: context
+            )
+        }
+        taskLock.lock()
+        importTask = task
+        taskLock.unlock()
+
+        await fulfillment(of: [commitStarted], timeout: 3)
+        let result = await task.value
+
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        let originalsURL = DocumentLibraryService.originalsDirectory(for: libraryURL)
+        let storedPDFs = (FileManager.default.enumerator(
+            at: originalsURL,
+            includingPropertiesForKeys: nil
+        )?.compactMap { $0 as? URL } ?? [])
+            .filter { $0.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame }
+
+        XCTAssertEqual(result.importedCount, 0)
+        XCTAssertTrue(documents.isEmpty)
+        XCTAssertTrue(storedPDFs.isEmpty)
+    }
+
+    @MainActor
+    func testCancelledImportKeepsFilesWhenCommittedRollbackSaveFails() async throws {
+        enum RollbackSaveError: Error {
+            case failed
+        }
+
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sourcePDFURL = tempRoot.appendingPathComponent("committed-rollback-failure.pdf")
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("CommittedRollbackFailureLibrary")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try TestImportFixtures.createPDF(at: sourcePDFURL, text: "Committed Rollback Failure")
+
+        let container = try TestImportFixtures.makeInMemoryContainer()
+        let context = container.mainContext
+        let savedImport = expectation(description: "Import metadata was saved")
+        let rollbackAttempted = expectation(description: "Committed cancellation rollback was attempted")
+        let taskLock = NSLock()
+        var importTask: Task<ImportPDFDocumentsResult, Never>?
+        ImportPDFDocumentsUseCase.savedPreparedImportsForTesting = {
+            savedImport.fulfill()
+            taskLock.lock()
+            let task = importTask
+            taskLock.unlock()
+            task?.cancel()
+        }
+        ImportPDFDocumentsUseCase.committedCancellationRollbackSaveForTesting = {
+            rollbackAttempted.fulfill()
+            throw RollbackSaveError.failed
+        }
+        defer {
+            ImportPDFDocumentsUseCase.savedPreparedImportsForTesting = nil
+            ImportPDFDocumentsUseCase.committedCancellationRollbackSaveForTesting = nil
+        }
+
+        let task = Task {
+            await ImportPDFDocumentsUseCase.execute(
+                urls: [sourcePDFURL],
+                into: libraryURL,
+                using: context
+            )
+        }
+        taskLock.lock()
+        importTask = task
+        taskLock.unlock()
+
+        await fulfillment(of: [savedImport, rollbackAttempted], timeout: 3)
+        let result = await task.value
+
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        let originalsURL = DocumentLibraryService.originalsDirectory(for: libraryURL)
+        let storedPDFs = (FileManager.default.enumerator(
+            at: originalsURL,
+            includingPropertiesForKeys: nil
+        )?.compactMap { $0 as? URL } ?? [])
+            .filter { $0.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame }
+
+        XCTAssertEqual(result.importedCount, 1)
+        XCTAssertTrue(result.hasFailures)
+        XCTAssertEqual(documents.count, 1)
+        XCTAssertEqual(storedPDFs.count, 1)
+        XCTAssertTrue(
+            documents.first?.storedFilePath.map {
+                DocumentStorageService.fileExists(at: $0, libraryURL: libraryURL)
+            } ?? false
+        )
     }
 
     @MainActor
@@ -955,6 +1233,143 @@ final class DocNestTests: XCTestCase {
 
         XCTAssertTrue(storedFilePath.hasPrefix("Originals/"))
         XCTAssertTrue(DocumentStorageService.fileExists(at: storedFilePath, libraryURL: libraryURL))
+    }
+
+    func testStoredFileRenameCanBeRestoredAfterMetadataFailure() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Rename Rollback Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let storedFilePath = "Originals/2026/03/invoice.pdf"
+        let storedFileURL = libraryURL.appendingPathComponent(storedFilePath)
+        try FileManager.default.createDirectory(
+            at: storedFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("pdf".utf8).write(to: storedFileURL)
+
+        let renameResult = try DocumentStorageService.renameStoredFile(
+            at: storedFilePath,
+            newTitle: "Renamed Invoice",
+            contentHash: "abcdef123456",
+            libraryURL: libraryURL
+        )
+
+        XCTAssertNotEqual(renameResult.updatedPath, storedFilePath)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storedFileURL.path))
+        XCTAssertTrue(DocumentStorageService.fileExists(at: renameResult.updatedPath, libraryURL: libraryURL))
+
+        try DocumentStorageService.restoreRenamedStoredFile(renameResult, libraryURL: libraryURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storedFileURL.path))
+        XCTAssertFalse(DocumentStorageService.fileExists(at: renameResult.updatedPath, libraryURL: libraryURL))
+    }
+
+    func testStoredFileRestoreReportsMissingRenamedFile() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Missing Rename Rollback Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let storedFilePath = "Originals/2026/03/invoice.pdf"
+        let storedFileURL = libraryURL.appendingPathComponent(storedFilePath)
+        try FileManager.default.createDirectory(
+            at: storedFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("pdf".utf8).write(to: storedFileURL)
+
+        let renameResult = try DocumentStorageService.renameStoredFile(
+            at: storedFilePath,
+            newTitle: "Renamed Invoice",
+            contentHash: "abcdef123456",
+            libraryURL: libraryURL
+        )
+        try FileManager.default.removeItem(
+            at: DocumentStorageService.fileURL(
+                for: renameResult.updatedPath,
+                libraryURL: libraryURL
+            )
+        )
+
+        XCTAssertThrowsError(try DocumentStorageService.restoreRenamedStoredFile(renameResult, libraryURL: libraryURL)) { error in
+            guard case DocumentStorageService.StoredFileRestoreError.renamedFileMissing(let path) = error else {
+                XCTFail("Expected missing renamed file error, got \(error)")
+                return
+            }
+            XCTAssertEqual(path, renameResult.updatedPath)
+        }
+    }
+
+    func testRenameRollbackFailureKeepsDocumentOnRenamedPath() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Failed Restore Rollback Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let storedFilePath = "Originals/2026/03/invoice.pdf"
+        let storedFileURL = libraryURL.appendingPathComponent(storedFilePath)
+        try FileManager.default.createDirectory(
+            at: storedFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("pdf".utf8).write(to: storedFileURL)
+
+        let document = DocumentRecord(
+            originalFileName: "invoice.pdf",
+            title: "Invoice",
+            documentDate: nil,
+            importedAt: Date(timeIntervalSince1970: 0),
+            pageCount: 1,
+            fileSize: 3,
+            contentHash: "abcdef123456",
+            storedFilePath: storedFilePath
+        )
+        let previousTitle = document.title
+        let previousStoredFilePath = document.storedFilePath
+        let renameResult = try DocumentStorageService.renameStoredFile(
+            at: storedFilePath,
+            newTitle: "Renamed Invoice",
+            contentHash: document.contentHash,
+            libraryURL: libraryURL
+        )
+        document.title = "Renamed Invoice"
+        document.storedFilePath = renameResult.updatedPath
+
+        try FileManager.default.removeItem(
+            at: DocumentStorageService.fileURL(
+                for: renameResult.updatedPath,
+                libraryURL: libraryURL
+            )
+        )
+
+        do {
+            try DocumentStorageService.restoreRenamedStoredFile(renameResult, libraryURL: libraryURL)
+            document.title = previousTitle
+            document.storedFilePath = previousStoredFilePath
+        } catch {
+            document.storedFilePath = renameResult.updatedPath
+        }
+
+        XCTAssertEqual(document.title, "Renamed Invoice")
+        XCTAssertEqual(document.storedFilePath, renameResult.updatedPath)
+        XCTAssertNotEqual(document.storedFilePath, previousStoredFilePath)
     }
 
     @MainActor
@@ -1649,6 +2064,35 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testMergingLabelValuesDeduplicatesSourceRowsForDestinationDocument() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
+        let context = container.mainContext
+
+        let sourceLabel = LabelTag(name: "Invoice", unitSymbol: "€")
+        let destinationLabel = LabelTag(name: "Finance", unitSymbol: "€")
+        let document = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1, labels: [sourceLabel])
+        context.insert(sourceLabel)
+        context.insert(destinationLabel)
+        context.insert(document)
+        context.insert(DocumentLabelValue(documentID: document.id, labelID: sourceLabel.id, decimalString: "10"))
+        context.insert(DocumentLabelValue(documentID: document.id, labelID: sourceLabel.id, decimalString: "20"))
+        try context.save()
+
+        try ManageLabelValuesUseCase.mergeValues(
+            fromLabelID: sourceLabel.id,
+            intoLabelID: destinationLabel.id,
+            using: context
+        )
+        try context.save()
+
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+        XCTAssertEqual(values.count, 1)
+        XCTAssertEqual(values.first?.labelID, destinationLabel.id)
+        XCTAssertEqual(values.first?.documentID, document.id)
+    }
+
+    @MainActor
     func testRemovingLabelClearsAssociatedValue() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config)
@@ -2286,6 +2730,63 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testUnvalidatedDragExportItemDoesNotCheckStoredFileExistence() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Missing Drag Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let document = DocumentRecord(
+            originalFileName: "missing.pdf",
+            title: "Missing",
+            importedAt: .now,
+            pageCount: 1,
+            storedFilePath: "Originals/2026/03/missing.pdf"
+        )
+
+        let item = try XCTUnwrap(
+            ExportDocumentsUseCase.unvalidatedDragExportItem(for: document, libraryURL: libraryURL)
+        )
+
+        XCTAssertEqual(item.sourceURL, libraryURL.appendingPathComponent("Originals/2026/03/missing.pdf"))
+        XCTAssertEqual(item.suggestedFileName, "Missing.pdf")
+    }
+
+    @MainActor
+    func testTemporaryExportURLsSkipMissingSourcesAndExportRemainingItems() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+
+        let sourceURL = tempRoot.appendingPathComponent("source.pdf")
+        let pdfDocument = PDFDocument()
+        pdfDocument.insert(PDFPage(), at: 0)
+        XCTAssertTrue(pdfDocument.write(to: sourceURL))
+
+        let validItem = ExportDocumentsUseCase.DragExportItem(
+            sourceURL: sourceURL,
+            suggestedFileName: "Source.pdf"
+        )
+        let missingItem = ExportDocumentsUseCase.DragExportItem(
+            sourceURL: tempRoot.appendingPathComponent("missing.pdf"),
+            suggestedFileName: "Missing.pdf"
+        )
+
+        let exportedURLs = try ExportDocumentsUseCase.temporaryExportURLs(for: [validItem, missingItem])
+
+        XCTAssertEqual(exportedURLs.map(\.lastPathComponent), ["Source.pdf"])
+        XCTAssertTrue(exportedURLs.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+    }
+
+    @MainActor
     func testTemporaryExportURLsRemoveDirectoryWhenCopyFails() throws {
         let rootDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("docnest-drag-export", isDirectory: true)
@@ -2310,12 +2811,12 @@ final class DocNestTests: XCTestCase {
             sourceURL: sourceURL,
             suggestedFileName: "Source.pdf"
         )
-        let missingItem = ExportDocumentsUseCase.DragExportItem(
-            sourceURL: tempRoot.appendingPathComponent("missing.pdf"),
-            suggestedFileName: "Missing.pdf"
+        let invalidDestinationItem = ExportDocumentsUseCase.DragExportItem(
+            sourceURL: sourceURL,
+            suggestedFileName: "MissingParent/Source.pdf"
         )
 
-        XCTAssertThrowsError(try ExportDocumentsUseCase.temporaryExportURLs(for: [validItem, missingItem]))
+        XCTAssertThrowsError(try ExportDocumentsUseCase.temporaryExportURLs(for: [validItem, invalidDestinationItem]))
 
         let existingDirectoriesAfter = Set((try? FileManager.default.contentsOfDirectory(
             at: rootDirectory,
@@ -2416,6 +2917,116 @@ final class DocNestTests: XCTestCase {
             bestKeys.first,
             Data("/tmp/LibraryA.docnestlibrary\nOriginals/report.pdf".utf8).base64EncodedString() + "_840x900"
         )
+    }
+
+    @MainActor
+    func testThumbnailCachePrunesTrackedMetadata() {
+        let cache = ThumbnailCache(countLimit: 2)
+
+        for index in 0..<60 {
+            cache.registerTrackedKeyForTesting("thumbnail-\(index)")
+        }
+
+        XCTAssertLessThanOrEqual(cache.trackedMetadataCountForTesting, 52)
+    }
+
+    @MainActor
+    func testThumbnailCacheDrainsQueuedLoadsWhenSlotsFree() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("Queued Thumbnail Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let cache = ThumbnailCache(countLimit: 20, inFlightLimit: 1)
+        cache.thumbnailLoadDidStartForTesting = {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        for index in 0..<5 {
+            _ = cache.thumbnail(
+                for: "Originals/2026/03/missing-\(index).pdf",
+                libraryURL: libraryURL,
+                size: CGSize(width: 120, height: 160)
+            )
+        }
+
+        XCTAssertGreaterThan(cache.pendingThumbnailRequestCountForTesting, 0)
+
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline,
+              cache.pendingThumbnailRequestCountForTesting > 0 || cache.inFlightTaskCountForTesting > 0 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        XCTAssertEqual(cache.pendingThumbnailRequestCountForTesting, 0)
+        XCTAssertEqual(cache.inFlightTaskCountForTesting, 0)
+        XCTAssertEqual(cache.loadCompletionRevisions.count, 5)
+    }
+
+    @MainActor
+    func testThumbnailCachePruningKeepsPendingLoadsQueued() {
+        let libraryURL = URL(fileURLWithPath: "/tmp/QueuedThumbnailPrune.docnestlibrary")
+        let cache = ThumbnailCache(countLimit: 1, inFlightLimit: 1)
+        cache.thumbnailLoadDidStartForTesting = {
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
+        for index in 0..<60 {
+            _ = cache.thumbnail(
+                for: "Originals/2026/03/missing-\(index).pdf",
+                libraryURL: libraryURL,
+                size: CGSize(width: 120, height: 160)
+            )
+        }
+
+        XCTAssertGreaterThan(cache.pendingThumbnailRequestCountForTesting, 50)
+        cache.cancelAllInFlightTasks()
+    }
+
+    @MainActor
+    func testThumbnailCacheKeepsBackedOffPendingLoadsQueued() {
+        let libraryURL = URL(fileURLWithPath: "/tmp/QueuedThumbnailBackoff.docnestlibrary")
+        let cache = ThumbnailCache(countLimit: 5, inFlightLimit: 1)
+
+        cache.enqueueBackedOffThumbnailRequestForTesting(
+            storedFilePath: "Originals/2026/03/missing.pdf",
+            libraryURL: libraryURL,
+            size: CGSize(width: 120, height: 160)
+        )
+        cache.startPendingThumbnailLoadsForTesting()
+
+        XCTAssertEqual(cache.pendingThumbnailRequestCountForTesting, 1)
+        XCTAssertEqual(cache.inFlightTaskCountForTesting, 0)
+    }
+
+    @MainActor
+    func testThumbnailCacheRetriesBackedOffPendingLoadsAfterInterval() async throws {
+        let libraryURL = URL(fileURLWithPath: "/tmp/QueuedThumbnailRetry.docnestlibrary")
+        let cache = ThumbnailCache(countLimit: 5, inFlightLimit: 1, failedLoadRetryInterval: 0.05)
+
+        cache.enqueueBackedOffThumbnailRequestForTesting(
+            storedFilePath: "Originals/2026/03/missing.pdf",
+            libraryURL: libraryURL,
+            size: CGSize(width: 120, height: 160)
+        )
+        cache.startPendingThumbnailLoadsForTesting()
+
+        XCTAssertEqual(cache.pendingThumbnailRequestCountForTesting, 1)
+
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline,
+              cache.pendingThumbnailRequestCountForTesting > 0 || cache.inFlightTaskCountForTesting > 0 {
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+
+        XCTAssertEqual(cache.pendingThumbnailRequestCountForTesting, 0)
+        XCTAssertEqual(cache.inFlightTaskCountForTesting, 0)
+        XCTAssertEqual(cache.loadCompletionRevisions.count, 1)
     }
 
     @MainActor

@@ -6,6 +6,23 @@ import Foundation
 /// collision handling, and relative-path semantics stay consistent across import,
 /// rename, export, and deletion workflows.
 enum DocumentStorageService {
+    enum StoredFileRestoreError: LocalizedError {
+        case renamedFileMissing(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .renamedFileMissing(let path):
+                return "The renamed stored file could not be found at \(path)."
+            }
+        }
+    }
+
+    struct StoredFileRenameResult {
+        let originalPath: String
+        let updatedPath: String
+        let movedFile: Bool
+    }
+
     /// Copies an imported source file into the library's managed storage area and
     /// returns the stored file's path relative to the library root.
     static func copyToStorage(
@@ -35,16 +52,21 @@ enum DocumentStorageService {
     }
 
     /// Renames the stored file to match a new document title.
-    /// Returns the updated relative path, or the original path if renaming is not possible.
+    /// Returns the updated relative path and enough rollback state for callers that
+    /// must keep filesystem and metadata changes transactional.
     static func renameStoredFile(
         at currentPath: String,
         newTitle: String,
         contentHash: String,
         libraryURL: URL
-    ) -> String {
+    ) throws -> StoredFileRenameResult {
         let currentURL = fileURL(for: currentPath, libraryURL: libraryURL)
         guard FileManager.default.fileExists(atPath: currentURL.path) else {
-            return currentPath
+            return StoredFileRenameResult(
+                originalPath: currentPath,
+                updatedPath: currentPath,
+                movedFile: false
+            )
         }
 
         let directory = currentURL.deletingLastPathComponent()
@@ -60,15 +82,39 @@ enum DocumentStorageService {
 
         // If the resolved name is the same file, no rename needed
         guard newURL != currentURL else {
-            return currentPath
+            return StoredFileRenameResult(
+                originalPath: currentPath,
+                updatedPath: currentPath,
+                movedFile: false
+            )
         }
 
-        do {
-            try FileManager.default.moveItem(at: currentURL, to: newURL)
-            return relativePath(of: newURL, in: libraryURL)
-        } catch {
-            return currentPath
+        try FileManager.default.moveItem(at: currentURL, to: newURL)
+        return StoredFileRenameResult(
+            originalPath: currentPath,
+            updatedPath: relativePath(of: newURL, in: libraryURL),
+            movedFile: true
+        )
+    }
+
+    static func restoreRenamedStoredFile(
+        _ renameResult: StoredFileRenameResult,
+        libraryURL: URL
+    ) throws {
+        guard renameResult.movedFile else { return }
+
+        let updatedURL = fileURL(for: renameResult.updatedPath, libraryURL: libraryURL)
+        let originalURL = fileURL(for: renameResult.originalPath, libraryURL: libraryURL)
+        guard updatedURL != originalURL else { return }
+        guard FileManager.default.fileExists(atPath: updatedURL.path) else {
+            throw StoredFileRestoreError.renamedFileMissing(renameResult.updatedPath)
         }
+
+        try FileManager.default.createDirectory(
+            at: originalURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.moveItem(at: updatedURL, to: originalURL)
     }
 
     static func deleteStoredFile(at path: String, libraryURL: URL) {

@@ -527,49 +527,52 @@ enum ManageLabelValuesUseCase {
     }
 
     static func documentCountWithValues(forLabelID labelID: UUID, using modelContext: ModelContext) throws -> Int {
-        let values = try modelContext.fetch(FetchDescriptor<DocumentLabelValue>())
-        return Set(values.filter { $0.labelID == labelID }.map(\.documentID)).count
+        let values = try fetchValues(forLabelID: labelID, using: modelContext)
+        return Set(values.map(\.documentID)).count
     }
 
     static func deleteValues(forLabelID labelID: UUID, using modelContext: ModelContext) throws {
-        let values = try modelContext.fetch(FetchDescriptor<DocumentLabelValue>())
-        for value in values where value.labelID == labelID {
+        let values = try fetchValues(forLabelID: labelID, using: modelContext)
+        for value in values {
             modelContext.delete(value)
         }
     }
 
     static func deleteValues(forDocumentIDs documentIDs: Set<UUID>, using modelContext: ModelContext) throws {
         guard !documentIDs.isEmpty else { return }
-        let values = try modelContext.fetch(FetchDescriptor<DocumentLabelValue>())
-        for value in values where documentIDs.contains(value.documentID) {
+        let values = try fetchValues(forDocumentIDs: documentIDs, using: modelContext)
+        for value in values {
             modelContext.delete(value)
         }
     }
 
     static func deleteValues(documentID: UUID, labelID: UUID, using modelContext: ModelContext) throws {
-        let values = try modelContext.fetch(FetchDescriptor<DocumentLabelValue>())
-        for value in values where value.documentID == documentID && value.labelID == labelID {
+        let values = try fetchValues(documentID: documentID, labelID: labelID, using: modelContext)
+        for value in values {
             modelContext.delete(value)
         }
     }
 
     static func deleteValues(for documents: [DocumentRecord], label: LabelTag, using modelContext: ModelContext) throws {
         let documentIDs = Set(documents.map(\.id))
-        let values = try modelContext.fetch(FetchDescriptor<DocumentLabelValue>())
-        for value in values where value.labelID == label.id && documentIDs.contains(value.documentID) {
+        guard !documentIDs.isEmpty else { return }
+        let values = try fetchValues(forLabelID: label.id, using: modelContext)
+        for value in values where documentIDs.contains(value.documentID) {
             modelContext.delete(value)
         }
     }
 
     static func mergeValues(fromLabelID sourceLabelID: UUID, intoLabelID destinationLabelID: UUID, using modelContext: ModelContext) throws {
-        let values = try modelContext.fetch(FetchDescriptor<DocumentLabelValue>())
-        let destinationDocumentIDs = Set(values.filter { $0.labelID == destinationLabelID }.map(\.documentID))
-        for value in values where value.labelID == sourceLabelID {
+        let sourceValues = try fetchValues(forLabelID: sourceLabelID, using: modelContext)
+        let destinationValues = try fetchValues(forLabelID: destinationLabelID, using: modelContext)
+        var destinationDocumentIDs = Set(destinationValues.map(\.documentID))
+        for value in sourceValues {
             if destinationDocumentIDs.contains(value.documentID) {
                 modelContext.delete(value)
             } else {
                 value.labelID = destinationLabelID
                 value.updatedAt = .now
+                destinationDocumentIDs.insert(value.documentID)
             }
         }
     }
@@ -590,8 +593,7 @@ enum ManageLabelValuesUseCase {
     }
 
     private static func setNormalizedValue(_ normalized: String, documentID: UUID, labelID: UUID, using modelContext: ModelContext) throws {
-        var values = try modelContext.fetch(FetchDescriptor<DocumentLabelValue>())
-            .filter { $0.documentID == documentID && $0.labelID == labelID }
+        var values = try fetchValues(documentID: documentID, labelID: labelID, using: modelContext)
         if let first = values.first {
             first.decimalString = normalized
             first.updatedAt = .now
@@ -603,6 +605,34 @@ enum ManageLabelValuesUseCase {
             modelContext.insert(DocumentLabelValue(documentID: documentID, labelID: labelID, decimalString: normalized))
         }
         try modelContext.save()
+    }
+
+    private static func fetchValues(forLabelID labelID: UUID, using modelContext: ModelContext) throws -> [DocumentLabelValue] {
+        let descriptor = FetchDescriptor<DocumentLabelValue>(
+            predicate: #Predicate<DocumentLabelValue> { value in
+                value.labelID == labelID
+            }
+        )
+        return try modelContext.fetch(descriptor)
+    }
+
+    private static func fetchValues(forDocumentIDs documentIDs: Set<UUID>, using modelContext: ModelContext) throws -> [DocumentLabelValue] {
+        let documentIDs = Array(documentIDs)
+        let descriptor = FetchDescriptor<DocumentLabelValue>(
+            predicate: #Predicate<DocumentLabelValue> { value in
+                documentIDs.contains(value.documentID)
+            }
+        )
+        return try modelContext.fetch(descriptor)
+    }
+
+    private static func fetchValues(documentID: UUID, labelID: UUID, using modelContext: ModelContext) throws -> [DocumentLabelValue] {
+        let descriptor = FetchDescriptor<DocumentLabelValue>(
+            predicate: #Predicate<DocumentLabelValue> { value in
+                value.documentID == documentID && value.labelID == labelID
+            }
+        )
+        return try modelContext.fetch(descriptor)
     }
 
     private static func validateDecimalString(_ value: String) throws {

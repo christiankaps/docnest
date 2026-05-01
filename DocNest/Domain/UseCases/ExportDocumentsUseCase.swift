@@ -223,6 +223,24 @@ enum ExportDocumentsUseCase {
         )
     }
 
+    /// Captures drag metadata without checking the filesystem.
+    ///
+    /// Document rows call this during rendering; actual drag materialization still
+    /// validates the source when the AppKit drag callback copies the file.
+    static func unvalidatedDragExportItem(
+        for document: DocumentRecord,
+        libraryURL: URL
+    ) -> DragExportItem? {
+        guard let storedFilePath = document.storedFilePath else {
+            return nil
+        }
+
+        return DragExportItem(
+            sourceURL: DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL),
+            suggestedFileName: suggestedFileName(for: document)
+        )
+    }
+
     /// Copies drag-export source files into one temporary staging directory.
     ///
     /// Filenames are collision-resolved within that directory so Finder receives
@@ -240,6 +258,9 @@ enum ExportDocumentsUseCase {
         exportedURLs.reserveCapacity(items.count)
         do {
             for item in items {
+                guard FileManager.default.fileExists(atPath: item.sourceURL.path) else {
+                    continue
+                }
                 let uniqueName = resolveCollision(
                     baseName: item.suggestedFileName,
                     in: exportDirectory,
@@ -254,7 +275,11 @@ enum ExportDocumentsUseCase {
             throw error
         }
 
-        scheduleTemporaryExportCleanup(for: exportDirectory)
+        if exportedURLs.isEmpty {
+            try? FileManager.default.removeItem(at: exportDirectory)
+        } else {
+            scheduleTemporaryExportCleanup(for: exportDirectory)
+        }
         return exportedURLs
     }
 

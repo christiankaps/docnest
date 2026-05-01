@@ -24,6 +24,7 @@ fail() { printf "\033[1;31mError: %s\033[0m\n" "$1" >&2; exit 1; }
 # ─── Preflight ───────────────────────────────────────────────────
 command -v xcodebuild >/dev/null || fail "xcodebuild not found"
 command -v create-dmg >/dev/null || fail "create-dmg not found (install with: brew install create-dmg)"
+command -v hdiutil >/dev/null || fail "hdiutil not found"
 
 # ─── Clean previous build ───────────────────────────────────────
 step "Cleaning previous build artifacts"
@@ -83,11 +84,11 @@ create-dmg \
     --hide-extension "$APP_NAME.app" \
     --no-internet-enable \
     "$DMG_OUTPUT" \
-    "$STAGING_DIR" \
-    || true  # create-dmg exits non-zero when DMG already exists, which we handle above
+    "$STAGING_DIR"
 
 # ─── Verify ──────────────────────────────────────────────────────
-if [ -f "$DMG_OUTPUT" ]; then
+if [ -s "$DMG_OUTPUT" ]; then
+    hdiutil imageinfo "$DMG_OUTPUT" >/dev/null || fail "DMG failed validation"
     DMG_SIZE=$(du -h "$DMG_OUTPUT" | cut -f1)
     step "Done"
     bold "DMG: $DMG_OUTPUT ($DMG_SIZE)"

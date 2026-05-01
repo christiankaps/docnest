@@ -20,19 +20,36 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
         }
     }
 
+    private struct ThumbnailRequest {
+        let storedFilePath: String
+        let libraryURL: URL
+        let size: CGSize
+        let key: String
+    }
+
     private(set) var readyThumbnailRevisions: [String: Int] = [:]
     private(set) var loadCompletionRevisions: [String: Int] = [:]
     private let backingCache = NSCache<NSString, ThumbnailEntry>()
     private var inFlightTasks: [String: Task<Void, Never>] = [:]
+    private var pendingThumbnailRequests: [String: ThumbnailRequest] = [:]
+    private var pendingThumbnailRequestKeys: [String] = []
     private var failedLoadDates: [String: Date] = [:]
+    private var metadataAccessDates: [String: Date] = [:]
     private let countLimit: Int
-    private let failedLoadRetryInterval: TimeInterval = 1
+    private let metadataCountLimit: Int
+    private let inFlightLimit: Int
+    private let failedLoadRetryInterval: TimeInterval
+    private var pendingRetryTask: Task<Void, Never>?
+    private var pendingRetryDate: Date?
 
-    init(countLimit: Int = 500) {
-        self.countLimit = countLimit
+    init(countLimit: Int = 500, inFlightLimit: Int = 8, failedLoadRetryInterval: TimeInterval = 1) {
+        self.countLimit = max(countLimit, 1)
+        self.metadataCountLimit = max(countLimit * 2, countLimit + 50, 1)
+        self.inFlightLimit = max(inFlightLimit, 1)
+        self.failedLoadRetryInterval = max(failedLoadRetryInterval, 0)
         super.init()
-        backingCache.countLimit = countLimit
-        backingCache.totalCostLimit = countLimit * 512 * 1024
+        backingCache.countLimit = self.countLimit
+        backingCache.totalCostLimit = self.countLimit * 512 * 1024
         backingCache.delegate = self
     }
 
@@ -41,6 +58,7 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
     /// so the calling view will re-render once the thumbnail becomes available.
     func thumbnail(for storedFilePath: String, libraryURL: URL, size: CGSize) -> NSImage? {
         let key = cacheKey(storedFilePath: storedFilePath, libraryURL: libraryURL, size: size)
+        markTrackedKey(key)
 
         if let entry = backingCache.object(forKey: key as NSString) {
             return entry.image
@@ -67,6 +85,7 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
             libraryURL: libraryURL,
             size: preferredSize
         )
+        markTrackedKey(preferredKey)
         _ = loadCompletionRevisions[preferredKey]
 
         if let entry = backingCache.object(forKey: preferredKey as NSString) {
@@ -100,6 +119,7 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
 
     func isObserved(storedFilePath: String, libraryURL: URL, size: CGSize) -> Bool {
         let key = cacheKey(storedFilePath: storedFilePath, libraryURL: libraryURL, size: size)
+        markTrackedKey(key)
         _ = readyThumbnailRevisions[key]
         _ = loadCompletionRevisions[key]
         return backingCache.object(forKey: key as NSString) != nil || inFlightTasks[key] != nil
@@ -112,6 +132,7 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
             libraryURL: libraryURL,
             size: preferredSize
         )
+        markTrackedKey(key)
         _ = loadCompletionRevisions[key]
         return inFlightTasks[key] != nil
     }
@@ -121,26 +142,94 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
             task.cancel()
         }
         inFlightTasks.removeAll()
+        pendingThumbnailRequests.removeAll()
+        pendingThumbnailRequestKeys.removeAll()
+        pendingRetryTask?.cancel()
+        pendingRetryTask = nil
+        pendingRetryDate = nil
     }
 
     private func loadThumbnailAsync(storedFilePath: String, libraryURL: URL, size: CGSize, key: String) {
         guard inFlightTasks[key] == nil else { return }
+        markTrackedKey(key)
 
-        let fileURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)
+        let request = ThumbnailRequest(
+            storedFilePath: storedFilePath,
+            libraryURL: libraryURL,
+            size: size,
+            key: key
+        )
+        guard inFlightTasks.count < inFlightLimit else {
+            enqueueThumbnailRequest(request)
+            return
+        }
+
+        pendingThumbnailRequests.removeValue(forKey: key)
+        pendingThumbnailRequestKeys.removeAll { $0 == key }
+        startThumbnailLoad(request)
+    }
+
+    private func enqueueThumbnailRequest(_ request: ThumbnailRequest) {
+        if pendingThumbnailRequests[request.key] == nil {
+            pendingThumbnailRequestKeys.append(request.key)
+        }
+        pendingThumbnailRequests[request.key] = request
+        markTrackedKey(request.key)
+    }
+
+    private func startPendingThumbnailLoads() {
+        var inspectedCount = 0
+        let initialPendingCount = pendingThumbnailRequestKeys.count
+        while inFlightTasks.count < inFlightLimit,
+              inspectedCount < initialPendingCount,
+              !pendingThumbnailRequestKeys.isEmpty {
+            let key = pendingThumbnailRequestKeys.removeFirst()
+            inspectedCount += 1
+            guard let request = pendingThumbnailRequests[key] else {
+                continue
+            }
+            guard backingCache.object(forKey: key as NSString) == nil else {
+                pendingThumbnailRequests.removeValue(forKey: key)
+                continue
+            }
+            guard canRetryLoad(for: key) else {
+                pendingThumbnailRequestKeys.append(key)
+                schedulePendingRetry(for: key)
+                continue
+            }
+            pendingThumbnailRequests.removeValue(forKey: key)
+            startThumbnailLoad(request)
+        }
+    }
+
+    private func startThumbnailLoad(_ request: ThumbnailRequest) {
+        let key = request.key
+        let fileURL = DocumentStorageService.fileURL(
+            for: request.storedFilePath,
+            libraryURL: request.libraryURL
+        )
+
+        #if DEBUG
+        let thumbnailLoadDidStartForTesting = thumbnailLoadDidStartForTesting
+        #endif
 
         inFlightTasks[key] = Task.detached(priority: .utility) { [weak self] in
             var didCacheThumbnail = false
             var wasCancelled = false
             defer {
+                let completedWithCachedThumbnail = didCacheThumbnail
+                let completedWithCancellation = wasCancelled
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.inFlightTasks.removeValue(forKey: key)
-                    if wasCancelled || didCacheThumbnail {
+                    if completedWithCancellation || completedWithCachedThumbnail {
                         self.failedLoadDates.removeValue(forKey: key)
                     } else {
                         self.failedLoadDates[key] = .now
                     }
                     self.loadCompletionRevisions[key, default: 0] += 1
+                    self.markTrackedKey(key)
+                    self.startPendingThumbnailLoads()
                 }
             }
 
@@ -148,7 +237,14 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
                 wasCancelled = true
                 return
             }
-            guard DocumentStorageService.fileExists(at: storedFilePath, libraryURL: libraryURL) else { return }
+            #if DEBUG
+            thumbnailLoadDidStartForTesting?()
+            #endif
+
+            guard DocumentStorageService.fileExists(
+                at: request.storedFilePath,
+                libraryURL: request.libraryURL
+            ) else { return }
             guard !Task.isCancelled else {
                 wasCancelled = true
                 return
@@ -156,21 +252,25 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
             guard let pdfDocument = PDFDocument(url: fileURL),
                   let page = pdfDocument.page(at: 0) else { return }
 
-            let nsImage = page.thumbnail(of: NSSize(width: size.width, height: size.height), for: .mediaBox)
+            let nsImage = page.thumbnail(
+                of: NSSize(width: request.size.width, height: request.size.height),
+                for: .mediaBox
+            )
             guard let imageData = nsImage.tiffRepresentation else { return }
             guard !Task.isCancelled else {
                 wasCancelled = true
                 return
             }
 
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                guard let cachedImage = NSImage(data: imageData) else { return }
-                let estimatedCost = Int(size.width * size.height * 4)
+            didCacheThumbnail = await MainActor.run { [weak self] in
+                guard let self else { return false }
+                guard let cachedImage = NSImage(data: imageData) else { return false }
+                let estimatedCost = Int(request.size.width * request.size.height * 4)
                 let entry = ThumbnailEntry(key: key, image: cachedImage)
                 self.backingCache.setObject(entry, forKey: key as NSString, cost: estimatedCost)
                 self.readyThumbnailRevisions[key, default: 0] += 1
-                didCacheThumbnail = true
+                self.markTrackedKey(key)
+                return true
             }
         }
     }
@@ -178,7 +278,7 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
     nonisolated func cache(_ cache: NSCache<AnyObject, AnyObject>, willEvictObject obj: Any) {
         guard let entry = obj as? ThumbnailEntry else { return }
         Task { @MainActor [weak self] in
-            self?.readyThumbnailRevisions.removeValue(forKey: entry.key)
+            self?.removeTrackedMetadata(for: entry.key)
         }
     }
 
@@ -241,4 +341,107 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
         guard let failedAt = failedLoadDates[key] else { return true }
         return Date.now.timeIntervalSince(failedAt) >= failedLoadRetryInterval
     }
+
+    private func retryDelay(for key: String) -> TimeInterval? {
+        guard let failedAt = failedLoadDates[key] else { return nil }
+        let retryAt = failedAt.addingTimeInterval(failedLoadRetryInterval)
+        return max(retryAt.timeIntervalSinceNow, 0)
+    }
+
+    private func schedulePendingRetry(for key: String) {
+        guard let retryDelay = retryDelay(for: key) else { return }
+        let retryDate = Date().addingTimeInterval(retryDelay)
+        if let pendingRetryDate, pendingRetryDate <= retryDate {
+            return
+        }
+
+        pendingRetryTask?.cancel()
+        pendingRetryDate = retryDate
+        pendingRetryTask = Task { @MainActor [weak self] in
+            let nanoseconds = UInt64(max(retryDelay, 0) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard let self, !Task.isCancelled else { return }
+            self.pendingRetryTask = nil
+            self.pendingRetryDate = nil
+            self.startPendingThumbnailLoads()
+        }
+    }
+
+    private func markTrackedKey(_ key: String) {
+        metadataAccessDates[key] = .now
+        pruneTrackedMetadataIfNeeded()
+    }
+
+    private func pruneTrackedMetadataIfNeeded() {
+        guard metadataAccessDates.count > metadataCountLimit else { return }
+
+        let protectedKeys = Set(inFlightTasks.keys)
+            .union(readyThumbnailRevisions.keys)
+            .union(pendingThumbnailRequests.keys)
+        let removableKeys = metadataAccessDates
+            .filter { key, _ in !protectedKeys.contains(key) }
+            .sorted { lhs, rhs in lhs.value < rhs.value }
+            .map(\.key)
+
+        for key in removableKeys where metadataAccessDates.count > metadataCountLimit {
+            removeTrackedMetadata(for: key)
+        }
+    }
+
+    private func removeTrackedMetadata(for key: String) {
+        readyThumbnailRevisions.removeValue(forKey: key)
+        loadCompletionRevisions.removeValue(forKey: key)
+        failedLoadDates.removeValue(forKey: key)
+        metadataAccessDates.removeValue(forKey: key)
+        pendingThumbnailRequests.removeValue(forKey: key)
+        pendingThumbnailRequestKeys.removeAll { $0 == key }
+        if pendingThumbnailRequests.isEmpty {
+            pendingRetryTask?.cancel()
+            pendingRetryTask = nil
+            pendingRetryDate = nil
+        }
+    }
+
+    #if DEBUG
+    var thumbnailLoadDidStartForTesting: (() -> Void)?
+
+    func registerTrackedKeyForTesting(_ key: String) {
+        loadCompletionRevisions[key, default: 0] += 1
+        failedLoadDates[key] = .now
+        markTrackedKey(key)
+    }
+
+    var trackedMetadataCountForTesting: Int {
+        metadataAccessDates.count
+    }
+
+    var pendingThumbnailRequestCountForTesting: Int {
+        pendingThumbnailRequests.count
+    }
+
+    var inFlightTaskCountForTesting: Int {
+        inFlightTasks.count
+    }
+
+    func enqueueBackedOffThumbnailRequestForTesting(
+        storedFilePath: String,
+        libraryURL: URL,
+        size: CGSize
+    ) {
+        let key = cacheKey(storedFilePath: storedFilePath, libraryURL: libraryURL, size: size)
+        failedLoadDates[key] = .now
+        enqueueThumbnailRequest(
+            ThumbnailRequest(
+                storedFilePath: storedFilePath,
+                libraryURL: libraryURL,
+                size: size,
+                key: key
+            )
+        )
+    }
+
+    func startPendingThumbnailLoadsForTesting() {
+        startPendingThumbnailLoads()
+    }
+    #endif
 }

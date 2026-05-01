@@ -7,10 +7,12 @@
 		<dict>
 			<key>CFBundleTypeIconFile</key>
 			<string>DocNestLibrary.icns</string>
-			<key>CFBundleTypeName</key>
-			<string>DocNest Library</string>
-			<key>LSHandlerRank</key>
-			<string>Owner</string>
+				<key>CFBundleTypeName</key>
+				<string>DocNest Library</string>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>LSHandlerRank</key>
+				<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>com.kaps.docnest.library</string>

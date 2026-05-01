@@ -766,21 +766,55 @@ struct DocumentInspectorView: View {
             return
         }
 
+        let previousTitle = document.title
+        let previousStoredFilePath = document.storedFilePath
+        var renameResult: DocumentStorageService.StoredFileRenameResult?
+        var renameLibraryURL: URL?
+
         document.title = trimmed
 
         if let storedFilePath = document.storedFilePath, let libraryURL {
-            document.storedFilePath = DocumentStorageService.renameStoredFile(
-                at: storedFilePath,
-                newTitle: trimmed,
-                contentHash: document.contentHash,
-                libraryURL: libraryURL
-            )
+            do {
+                let result = try DocumentStorageService.renameStoredFile(
+                    at: storedFilePath,
+                    newTitle: trimmed,
+                    contentHash: document.contentHash,
+                    libraryURL: libraryURL
+                )
+                renameResult = result
+                renameLibraryURL = libraryURL
+                document.storedFilePath = result.updatedPath
+            } catch {
+                document.title = previousTitle
+                document.storedFilePath = previousStoredFilePath
+                inspectorErrorMessage = error.localizedDescription
+                isEditingTitle = false
+                return
+            }
         }
 
         do {
             try modelContext.save()
             coordinator.recomputeFilteredDocuments()
         } catch {
+            if let renameResult, let renameLibraryURL {
+                do {
+                    try DocumentStorageService.restoreRenamedStoredFile(
+                        renameResult,
+                        libraryURL: renameLibraryURL
+                    )
+                    document.title = previousTitle
+                    document.storedFilePath = previousStoredFilePath
+                } catch {
+                    document.storedFilePath = renameResult.updatedPath
+                    inspectorErrorMessage = "Could not save the renamed document, and the stored file could not be restored: \(error.localizedDescription)"
+                    isEditingTitle = false
+                    return
+                }
+            } else {
+                document.title = previousTitle
+                document.storedFilePath = previousStoredFilePath
+            }
             inspectorErrorMessage = error.localizedDescription
         }
         isEditingTitle = false

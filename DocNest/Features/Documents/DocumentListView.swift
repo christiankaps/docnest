@@ -844,7 +844,7 @@ struct DocumentListView: View {
         for document: DocumentRecord,
         libraryURL: URL
     ) -> ExportDocumentsUseCase.DragExportItem? {
-        ExportDocumentsUseCase.dragExportItem(for: document, libraryURL: libraryURL)
+        ExportDocumentsUseCase.unvalidatedDragExportItem(for: document, libraryURL: libraryURL)
     }
 
     private func handleArrowKey(_ keyPress: KeyPress, in sortedDocs: [DocumentRecord]) -> KeyPress.Result {
@@ -906,25 +906,55 @@ struct DocumentListView: View {
 
         let previousTitle = document.title
         let previousStoredFilePath = document.storedFilePath
+        var renameResult: DocumentStorageService.StoredFileRenameResult?
+        var renameLibraryURL: URL?
 
         document.title = trimmed
 
         if let storedFilePath = document.storedFilePath, let libraryURL = coordinator.libraryURL {
-            document.storedFilePath = DocumentStorageService.renameStoredFile(
-                at: storedFilePath,
-                newTitle: trimmed,
-                contentHash: document.contentHash,
-                libraryURL: libraryURL
-            )
+            do {
+                let result = try DocumentStorageService.renameStoredFile(
+                    at: storedFilePath,
+                    newTitle: trimmed,
+                    contentHash: document.contentHash,
+                    libraryURL: libraryURL
+                )
+                renameResult = result
+                renameLibraryURL = libraryURL
+                document.storedFilePath = result.updatedPath
+            } catch {
+                document.title = previousTitle
+                document.storedFilePath = previousStoredFilePath
+                coordinator.importSummaryMessage = "Could not rename the stored document file: \(error.localizedDescription)"
+                renamingDocumentID = nil
+                focusedRenameDocumentID = nil
+                return
+            }
         }
 
         do {
             try modelContext.save()
             coordinator.recomputeFilteredDocuments()
         } catch {
-            // Roll back to keep database and filesystem consistent
-            document.title = previousTitle
-            document.storedFilePath = previousStoredFilePath
+            if let renameResult, let renameLibraryURL {
+                do {
+                    try DocumentStorageService.restoreRenamedStoredFile(
+                        renameResult,
+                        libraryURL: renameLibraryURL
+                    )
+                    document.title = previousTitle
+                    document.storedFilePath = previousStoredFilePath
+                } catch {
+                    document.storedFilePath = renameResult.updatedPath
+                    coordinator.importSummaryMessage = "Could not save the renamed document, and the stored file could not be restored: \(error.localizedDescription)"
+                    renamingDocumentID = nil
+                    focusedRenameDocumentID = nil
+                    return
+                }
+            } else {
+                document.title = previousTitle
+                document.storedFilePath = previousStoredFilePath
+            }
             coordinator.importSummaryMessage = "Could not save the renamed document: \(error.localizedDescription)"
         }
 
