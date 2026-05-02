@@ -70,7 +70,7 @@ For a value-enabled label without a document value, do not show a permanent empt
 [ 🧾 Invoice ]
 ```
 
-On hover or row selection, reveal a subdued trailing affordance:
+On mouse-over, reveal a subdued trailing affordance:
 
 ```text
 [ 🧾 Invoice | + value ]
@@ -99,7 +99,7 @@ Hover or keyboard focus on the value segment:
 [ 🧾 Invoice | 1,240 € ✎ ]
 ```
 
-Empty value on hover, keyboard focus, or selected row:
+Empty value on mouse-over:
 
 ```text
 [ 🧾 Invoice | + value ]
@@ -191,9 +191,9 @@ The strip should:
 - when overflow exists, prefer visible slots in this order:
   - active statistics label, when it is assigned to this document
   - value-enabled labels with document values
-  - value-enabled labels missing values, but only while the row is hovered or selected
+  - value-enabled labels missing values, but only while the row is hovered
   - remaining labels in normal sort order
-- pass `valueText` and hover-selected missing state into `RemovableLabelChip`
+- pass `valueText` and hover-only missing state into `RemovableLabelChip`
 
 The overflow chip remains compact, but its accessibility/help text should include hidden value context, for example `2 hidden labels, 1 missing value`. Clicking the overflow chip can keep the existing behavior if one exists, or remain informational if there is no current action.
 
@@ -227,7 +227,7 @@ After the pill feature ships, reassess whether the `Value` column should become 
 Empty values must be treated as missing metadata:
 
 - normal idle pill: no value segment
-- hovered or selected row: show `+ value`
+- hovered row: show `+ value`
 - statistics continue counting the document as missing for that label
 - no average/sum/min/max/median calculations include missing values
 - clearing an existing value returns the pill to the empty behavior
@@ -310,7 +310,7 @@ Add focused tests where practical:
 - interaction test, if stable, for clicking a filled value entering inline edit mode
 - interaction test, if stable, for clicking `+ value` entering inline edit mode
 - commit test for inline value save and clear behavior, preferably through the same use case path
-- test or preview for hover/selected empty state revealing `+ value`
+- test or preview for hover-only empty state revealing `+ value`
 - test that overflow help text reports hidden value-enabled labels and missing values
 - test that clearing a label unit while a row is visible removes the value segment and missing affordance
 - UI-adjacent test or snapshot for the document list column order showing labels directly after the document name

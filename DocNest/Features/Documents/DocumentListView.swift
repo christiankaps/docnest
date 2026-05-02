@@ -1297,13 +1297,13 @@ struct DocumentLabelStripDisplayPolicy {
         max(states.count - 2, 0)
     }
 
-    func visibleStates(isHovering: Bool, isRowSelected: Bool) -> [DocumentLabelChipState] {
+    func visibleStates(isHovering: Bool, isRowSelected _: Bool) -> [DocumentLabelChipState] {
         let sortedStates = sortedStates
         guard sortedStates.count > 2 else { return sortedStates }
 
         let prioritized = sortedStates.enumerated().sorted { lhs, rhs in
-            let lhsPriority = visibilityPriority(for: lhs.element, isHovering: isHovering, isRowSelected: isRowSelected)
-            let rhsPriority = visibilityPriority(for: rhs.element, isHovering: isHovering, isRowSelected: isRowSelected)
+            let lhsPriority = visibilityPriority(for: lhs.element, isHovering: isHovering)
+            let rhsPriority = visibilityPriority(for: rhs.element, isHovering: isHovering)
             if lhsPriority == rhsPriority {
                 return lhs.offset < rhs.offset
             }
@@ -1316,8 +1316,8 @@ struct DocumentLabelStripDisplayPolicy {
         return sortedStates.filter { prioritizedIDs.contains($0.id) }
     }
 
-    func shouldShowMissingValueAffordance(for state: DocumentLabelChipState, isHovering: Bool, isRowSelected: Bool) -> Bool {
-        state.isValueEnabled && state.valueText == nil && (isHovering || isRowSelected)
+    func shouldShowMissingValueAffordance(for state: DocumentLabelChipState, isHovering: Bool, isRowSelected _: Bool) -> Bool {
+        state.isValueEnabled && state.valueText == nil && isHovering
     }
 
     func hiddenLabelHelp(isHovering: Bool, isRowSelected: Bool) -> String {
@@ -1330,10 +1330,10 @@ struct DocumentLabelStripDisplayPolicy {
         return "\(hiddenStates.count) hidden labels"
     }
 
-    private func visibilityPriority(for state: DocumentLabelChipState, isHovering: Bool, isRowSelected: Bool) -> Int {
+    private func visibilityPriority(for state: DocumentLabelChipState, isHovering: Bool) -> Int {
         if state.isActiveStatisticsLabel { return 0 }
         if state.valueText != nil { return 1 }
-        if shouldShowMissingValueAffordance(for: state, isHovering: isHovering, isRowSelected: isRowSelected) { return 2 }
+        if shouldShowMissingValueAffordance(for: state, isHovering: isHovering, isRowSelected: false) { return 2 }
         return 3
     }
 }

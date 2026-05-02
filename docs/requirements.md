@@ -214,7 +214,7 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - A document assigned to a unit-enabled label may store one optional numeric value for that document-label pair.
 - Values are entered manually inline from the document list label chip. Missing values are distinct from zero.
 - The document list shows labels as the second column immediately after the document name. Unit-enabled labels show a connected rounded-rectangle split chip with the label identity and, when present, the document-label value.
-- Unit-enabled label chips without a value stay visually quiet until hover or row selection, then show a `+ value` affordance for inline entry.
+- Unit-enabled label chips without a value stay visually quiet until mouse-over, then show a `+ value` affordance for inline entry.
 - Clearing a label unit warns with the affected document count and deletes existing values for that label after confirmation.
 - When the active filter context contains exactly one unit-enabled label, the document list shows contextual read-only values for that label and a sidebar statistics footer.
 - Label value statistics show the count of scoped documents with values and compute sum, average, minimum, maximum, and median over valued documents only. Empty values are not counted as zero or included in averages.

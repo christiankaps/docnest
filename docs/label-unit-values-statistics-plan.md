@@ -276,7 +276,7 @@ When the current filter context resolves to exactly one value-enabled label, doc
 - zero displays as a real formatted value, never as missing
 - label chips for unit-enabled labels support inline value editing in the list
 - when no value-enabled label filter is active, omit the per-document value indicator entirely
-- missing-value label chips reveal a `+ value` affordance on hover or row selection
+- missing-value label chips reveal a `+ value` affordance on mouse-over
 
 ### Filter Statistics
 
@@ -458,7 +458,7 @@ For the major release:
 - Formatting risk: separate parsing, persistence, and display formatting so locale-specific UI input does not leak into storage.
 - Input abuse risk: reject overlong or non-finite numeric strings before attempting expensive parsing.
 - Pill overload risk: keep the split chip compact and limit visible labels with overflow.
-- Discoverability risk: missing-value chips must reveal direct `+ value` affordances on hover or selection.
+- Discoverability risk: missing-value chips must reveal direct `+ value` affordances on mouse-over.
 - UI clutter risk: keep aggregate statistics in the sidebar footer; avoid adding another large dashboard panel.
 - Scope surprise risk: show filtered and selection statistics side by side instead of requiring users to discover a scope toggle.
 - Narrow layout risk: use a compact sidebar grid so both scopes remain readable.

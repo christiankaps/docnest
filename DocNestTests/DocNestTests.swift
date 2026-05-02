@@ -1966,7 +1966,7 @@ final class DocNestTests: XCTestCase {
         ))
     }
 
-    func testDocumentLabelStripDisplayPolicyRevealsMissingValuesOnSelectionAndReportsHiddenMissingCount() {
+    func testDocumentLabelStripDisplayPolicyRevealsMissingValuesOnHoverOnlyAndReportsHiddenMissingCount() {
         let plain = LabelTag(name: "Archive", sortOrder: 0)
         let missing = LabelTag(name: "Invoice", unitSymbol: "€", sortOrder: 1)
         let hiddenMissing = LabelTag(name: "Mileage", unitSymbol: "km", sortOrder: 2)
@@ -1980,13 +1980,24 @@ final class DocNestTests: XCTestCase {
             .visibleStates(isHovering: false, isRowSelected: true)
             .map(\.label.name)
 
-        XCTAssertEqual(visibleNames, ["Invoice", "Mileage"])
+        XCTAssertEqual(visibleNames, ["Archive", "Invoice"])
         XCTAssertEqual(policy.hiddenLabelCount, 1)
-        XCTAssertEqual(policy.hiddenLabelHelp(isHovering: false, isRowSelected: true), "1 hidden labels")
-        XCTAssertTrue(policy.shouldShowMissingValueAffordance(
+        XCTAssertEqual(policy.hiddenLabelHelp(isHovering: false, isRowSelected: true), "1 hidden labels, 1 missing value")
+        XCTAssertFalse(policy.shouldShowMissingValueAffordance(
             for: DocumentLabelChipState(label: missing, valueText: nil, rawValue: nil, isValueEnabled: true, isActiveStatisticsLabel: false),
             isHovering: false,
             isRowSelected: true
+        ))
+
+        let hoverVisibleNames = policy
+            .visibleStates(isHovering: true, isRowSelected: false)
+            .map(\.label.name)
+
+        XCTAssertEqual(hoverVisibleNames, ["Invoice", "Mileage"])
+        XCTAssertTrue(policy.shouldShowMissingValueAffordance(
+            for: DocumentLabelChipState(label: missing, valueText: nil, rawValue: nil, isValueEnabled: true, isActiveStatisticsLabel: false),
+            isHovering: true,
+            isRowSelected: false
         ))
     }
 
