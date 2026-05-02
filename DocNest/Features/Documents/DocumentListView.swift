@@ -1537,10 +1537,15 @@ private struct InlineLabelValueEditorChip: View {
                     Text(icon)
                         .font(AppTypography.labelChip)
                         .accessibilityHidden(true)
+                } else {
+                    Circle()
+                        .fill(label.labelColor.color)
+                        .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
                 }
                 Text(label.name)
                     .font(AppTypography.labelChip)
-                    .foregroundStyle(label.labelColor.color)
+                    .foregroundStyle(Color.primary.opacity(0.82))
                     .lineLimit(1)
             }
             .padding(.leading, 8)
@@ -1548,9 +1553,9 @@ private struct InlineLabelValueEditorChip: View {
             .padding(.vertical, 3)
 
             Rectangle()
-                .fill(label.labelColor.color.opacity(0.24))
+                .fill(Color.primary.opacity(0.08))
                 .frame(width: 1)
-                .padding(.vertical, 4)
+                .padding(.vertical, 5)
                 .accessibilityHidden(true)
 
             TextField("Value", text: $draftValue)
@@ -1560,17 +1565,22 @@ private struct InlineLabelValueEditorChip: View {
                 .focused(isFocused)
                 .onSubmit(onCommit)
                 .onExitCommand(perform: onCancel)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(label.labelColor.color.opacity(0.1))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(label.labelColor.color.opacity(0.18))
+                )
+                .padding(.horizontal, 3)
+                .padding(.vertical, 2)
         }
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(label.labelColor.color.opacity(0.16))
+                .fill(label.labelColor.color.opacity(0.10))
         )
         .overlay {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(hasError ? Color.red : Color.clear, lineWidth: 1)
+                .strokeBorder(hasError ? Color.red : label.labelColor.color.opacity(0.18), lineWidth: 1)
         }
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .accessibilityLabel("Edit \(label.name) value")

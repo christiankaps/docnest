@@ -22,9 +22,9 @@ struct LabelChip: View {
 
             if let valueSegmentText {
                 Rectangle()
-                    .fill(color.color.opacity(0.24))
+                    .fill(Color.primary.opacity(0.08))
                     .frame(width: 1)
-                    .padding(.vertical, verticalPadding + 1)
+                    .padding(.vertical, verticalPadding + 2)
                     .accessibilityHidden(true)
 
                 valueSegment(text: valueSegmentText)
@@ -32,7 +32,11 @@ struct LabelChip: View {
         }
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(color.color.opacity(0.16))
+                .fill(chipFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(chipStroke, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .accessibilityElement(children: .contain)
@@ -46,10 +50,15 @@ struct LabelChip: View {
                 Text(icon)
                     .font(chipFont)
                     .accessibilityHidden(true)
+            } else {
+                Circle()
+                    .fill(color.color)
+                    .frame(width: markerSize, height: markerSize)
+                    .accessibilityHidden(true)
             }
             Text(name)
                 .font(chipFont)
-                .foregroundStyle(color.color)
+                .foregroundStyle(Color.primary.opacity(0.82))
                 .lineLimit(1)
         }
         .padding(.leading, horizontalPadding)
@@ -81,10 +90,15 @@ struct LabelChip: View {
                     .accessibilityHidden(true)
             }
         }
-        .foregroundStyle(valueText == nil ? Color.secondary : Color.primary)
+        .foregroundStyle(valueForeground)
         .padding(.horizontal, valueHorizontalPadding)
-        .padding(.vertical, verticalPadding)
-        .background(color.color.opacity(valueText == nil ? 0.06 : 0.1))
+        .padding(.vertical, max(verticalPadding - 1, 2))
+        .background(
+            RoundedRectangle(cornerRadius: max(cornerRadius - 2, 4), style: .continuous)
+                .fill(valueFill)
+        )
+        .padding(.horizontal, 3)
+        .padding(.vertical, 2)
 
         if let onValueTap {
             Button(action: onValueTap) {
@@ -157,5 +171,34 @@ struct LabelChip: View {
         case .compact: 8
         case .regular: 10
         }
+    }
+
+    private var markerSize: CGFloat {
+        switch size {
+        case .compact: 6
+        case .regular: 7
+        }
+    }
+
+    private var chipFill: Color {
+        color.color.opacity(valueSegmentText == nil ? 0.12 : 0.10)
+    }
+
+    private var chipStroke: Color {
+        color.color.opacity(0.18)
+    }
+
+    private var valueFill: Color {
+        if valueText == nil {
+            return Color.primary.opacity(0.045)
+        }
+        return color.color.opacity(0.18)
+    }
+
+    private var valueForeground: Color {
+        if valueText == nil {
+            return Color.secondary.opacity(0.88)
+        }
+        return Color.primary.opacity(0.86)
     }
 }
