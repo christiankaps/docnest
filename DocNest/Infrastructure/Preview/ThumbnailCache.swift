@@ -29,18 +29,19 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
 
     private(set) var readyThumbnailRevisions: [String: Int] = [:]
     private(set) var loadCompletionRevisions: [String: Int] = [:]
-    private let backingCache = NSCache<NSString, ThumbnailEntry>()
-    private var inFlightTasks: [String: Task<Void, Never>] = [:]
-    private var pendingThumbnailRequests: [String: ThumbnailRequest] = [:]
-    private var pendingThumbnailRequestKeys: [String] = []
-    private var failedLoadDates: [String: Date] = [:]
-    private var metadataAccessDates: [String: Date] = [:]
+    @ObservationIgnored private let backingCache = NSCache<NSString, ThumbnailEntry>()
+    @ObservationIgnored private var inFlightTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var pendingThumbnailRequests: [String: ThumbnailRequest] = [:]
+    @ObservationIgnored private var pendingThumbnailRequestKeys: [String] = []
+    @ObservationIgnored private var failedLoadDates: [String: Date] = [:]
+    @ObservationIgnored private var metadataAccessDates: [String: Date] = [:]
     private let countLimit: Int
     private let metadataCountLimit: Int
     private let inFlightLimit: Int
     private let failedLoadRetryInterval: TimeInterval
-    private var pendingRetryTask: Task<Void, Never>?
-    private var pendingRetryDate: Date?
+    @ObservationIgnored private var pendingRetryTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingRetryDate: Date?
+    @ObservationIgnored private var pendingRenderStatePruneTask: Task<Void, Never>?
 
     init(countLimit: Int = 500, inFlightLimit: Int = 8, failedLoadRetryInterval: TimeInterval = 1) {
         self.countLimit = max(countLimit, 1)
@@ -51,6 +52,15 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
         backingCache.countLimit = self.countLimit
         backingCache.totalCostLimit = self.countLimit * 512 * 1024
         backingCache.delegate = self
+    }
+
+    deinit {
+        backingCache.delegate = nil
+        for task in inFlightTasks.values {
+            task.cancel()
+        }
+        pendingRetryTask?.cancel()
+        pendingRenderStatePruneTask?.cancel()
     }
 
     /// Returns a cached thumbnail immediately, or `nil` while kicking off an
@@ -147,6 +157,8 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
         pendingRetryTask?.cancel()
         pendingRetryTask = nil
         pendingRetryDate = nil
+        pendingRenderStatePruneTask?.cancel()
+        pendingRenderStatePruneTask = nil
     }
 
     private func loadThumbnailAsync(storedFilePath: String, libraryURL: URL, size: CGSize, key: String) {
@@ -228,7 +240,7 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
                         self.failedLoadDates[key] = .now
                     }
                     self.loadCompletionRevisions[key, default: 0] += 1
-                    self.markTrackedKey(key)
+                    self.markTrackedKey(key, pruneRenderState: true)
                     self.startPendingThumbnailLoads()
                 }
             }
@@ -269,7 +281,7 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
                 let entry = ThumbnailEntry(key: key, image: cachedImage)
                 self.backingCache.setObject(entry, forKey: key as NSString, cost: estimatedCost)
                 self.readyThumbnailRevisions[key, default: 0] += 1
-                self.markTrackedKey(key)
+                self.markTrackedKey(key, pruneRenderState: true)
                 return true
             }
         }
@@ -367,30 +379,53 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
         }
     }
 
-    private func markTrackedKey(_ key: String) {
+    private func markTrackedKey(_ key: String, pruneRenderState: Bool = false) {
         metadataAccessDates[key] = .now
-        pruneTrackedMetadataIfNeeded()
+        if pruneRenderState {
+            pruneTrackedMetadataIfNeeded(pruneRenderState: true)
+        } else {
+            scheduleRenderStatePruneIfNeeded()
+        }
     }
 
-    private func pruneTrackedMetadataIfNeeded() {
+    private func scheduleRenderStatePruneIfNeeded() {
+        guard metadataAccessDates.count > metadataCountLimit ||
+              loadCompletionRevisions.count > metadataCountLimit else {
+            return
+        }
+        guard pendingRenderStatePruneTask == nil else { return }
+
+        pendingRenderStatePruneTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard let self, !Task.isCancelled else { return }
+            self.pendingRenderStatePruneTask = nil
+            self.pruneTrackedMetadataIfNeeded(pruneRenderState: true)
+        }
+    }
+
+    private func pruneTrackedMetadataIfNeeded(pruneRenderState: Bool) {
         guard metadataAccessDates.count > metadataCountLimit else { return }
 
-        let protectedKeys = Set(inFlightTasks.keys)
-            .union(readyThumbnailRevisions.keys)
+        var protectedKeys = Set(inFlightTasks.keys)
             .union(pendingThumbnailRequests.keys)
+        if pruneRenderState {
+            protectedKeys.formUnion(readyThumbnailRevisions.keys)
+        }
         let removableKeys = metadataAccessDates
             .filter { key, _ in !protectedKeys.contains(key) }
             .sorted { lhs, rhs in lhs.value < rhs.value }
             .map(\.key)
 
         for key in removableKeys where metadataAccessDates.count > metadataCountLimit {
-            removeTrackedMetadata(for: key)
+            removeTrackedMetadata(for: key, removeRenderRevisions: pruneRenderState)
         }
     }
 
-    private func removeTrackedMetadata(for key: String) {
-        readyThumbnailRevisions.removeValue(forKey: key)
-        loadCompletionRevisions.removeValue(forKey: key)
+    private func removeTrackedMetadata(for key: String, removeRenderRevisions: Bool = true) {
+        if removeRenderRevisions {
+            readyThumbnailRevisions.removeValue(forKey: key)
+            loadCompletionRevisions.removeValue(forKey: key)
+        }
         failedLoadDates.removeValue(forKey: key)
         metadataAccessDates.removeValue(forKey: key)
         pendingThumbnailRequests.removeValue(forKey: key)
@@ -408,7 +443,13 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
     func registerTrackedKeyForTesting(_ key: String) {
         loadCompletionRevisions[key, default: 0] += 1
         failedLoadDates[key] = .now
-        markTrackedKey(key)
+        markTrackedKey(key, pruneRenderState: true)
+    }
+
+    func registerUnprunedCompletedLoadForTesting(_ key: String) {
+        loadCompletionRevisions[key, default: 0] += 1
+        failedLoadDates[key] = .now
+        metadataAccessDates[key] = .now
     }
 
     var trackedMetadataCountForTesting: Int {
@@ -442,6 +483,23 @@ final class ThumbnailCache: NSObject, NSCacheDelegate {
 
     func startPendingThumbnailLoadsForTesting() {
         startPendingThumbnailLoads()
+    }
+
+    func cacheThumbnailForTesting(
+        storedFilePath: String,
+        libraryURL: URL,
+        size: CGSize,
+        image: NSImage
+    ) {
+        let key = cacheKey(storedFilePath: storedFilePath, libraryURL: libraryURL, size: size)
+        let estimatedCost = Int(size.width * size.height * 4)
+        backingCache.setObject(
+            ThumbnailEntry(key: key, image: image),
+            forKey: key as NSString,
+            cost: estimatedCost
+        )
+        readyThumbnailRevisions[key, default: 0] += 1
+        markTrackedKey(key)
     }
     #endif
 }

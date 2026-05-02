@@ -3030,6 +3030,91 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testThumbnailCachePreviewBookkeepingDoesNotMutateRenderRevisions() {
+        let libraryURL = URL(fileURLWithPath: "/tmp/ThumbnailObservation.docnestlibrary")
+        let storedFilePath = "Originals/2026/03/preview.pdf"
+        let cache = ThumbnailCache(countLimit: 2, inFlightLimit: 1, failedLoadRetryInterval: 0.05)
+        let preferredSize = CGSize(width: 240, height: 320)
+        let image = NSImage(size: NSSize(width: preferredSize.width, height: preferredSize.height))
+        cache.cacheThumbnailForTesting(
+            storedFilePath: storedFilePath,
+            libraryURL: libraryURL,
+            size: preferredSize,
+            image: image
+        )
+        let readyRevisions = cache.readyThumbnailRevisions
+        let completionRevisions = cache.loadCompletionRevisions
+
+        for _ in 0..<5 {
+            guard case .exact = cache.previewThumbnailResult(
+                for: storedFilePath,
+                libraryURL: libraryURL,
+                preferredSize: preferredSize
+            ) else {
+                XCTFail("Expected cached thumbnail from inspector preview path")
+                return
+            }
+            XCTAssertFalse(cache.isPreviewThumbnailLoading(
+                for: storedFilePath,
+                libraryURL: libraryURL,
+                preferredSize: preferredSize
+            ))
+        }
+
+        XCTAssertEqual(cache.readyThumbnailRevisions, readyRevisions)
+        XCTAssertEqual(cache.loadCompletionRevisions, completionRevisions)
+        XCTAssertEqual(cache.trackedMetadataCountForTesting, 1)
+    }
+
+    @MainActor
+    func testThumbnailCachePreviewPruningDoesNotMutateRenderRevisionsInline() async throws {
+        let libraryURL = URL(fileURLWithPath: "/tmp/ThumbnailObservation.docnestlibrary")
+        let storedFilePath = "Originals/2026/03/preview.pdf"
+        let cache = ThumbnailCache(countLimit: 1, inFlightLimit: 1, failedLoadRetryInterval: 0.05)
+        let preferredSize = CGSize(width: 240, height: 320)
+        let image = NSImage(size: NSSize(width: preferredSize.width, height: preferredSize.height))
+        cache.cacheThumbnailForTesting(
+            storedFilePath: storedFilePath,
+            libraryURL: libraryURL,
+            size: preferredSize,
+            image: image
+        )
+        for index in 0..<60 {
+            cache.registerUnprunedCompletedLoadForTesting("stale-thumbnail-\(index)")
+        }
+        let initialMetadataCount = cache.trackedMetadataCountForTesting
+        let readyRevisions = cache.readyThumbnailRevisions
+        let completionRevisions = cache.loadCompletionRevisions
+
+        guard case .exact = cache.previewThumbnailResult(
+            for: storedFilePath,
+            libraryURL: libraryURL,
+            preferredSize: preferredSize
+        ) else {
+            XCTFail("Expected cached thumbnail from inspector preview path")
+            return
+        }
+        XCTAssertFalse(cache.isPreviewThumbnailLoading(
+            for: storedFilePath,
+            libraryURL: libraryURL,
+            preferredSize: preferredSize
+        ))
+
+        XCTAssertEqual(cache.readyThumbnailRevisions, readyRevisions)
+        XCTAssertEqual(cache.loadCompletionRevisions, completionRevisions)
+
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline,
+              cache.trackedMetadataCountForTesting >= initialMetadataCount {
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+
+        XCTAssertEqual(cache.readyThumbnailRevisions, readyRevisions)
+        XCTAssertLessThan(cache.loadCompletionRevisions.count, completionRevisions.count)
+        XCTAssertLessThan(cache.trackedMetadataCountForTesting, initialMetadataCount)
+    }
+
+    @MainActor
     func testPDFPreviewAlignmentMovesViewToFirstPageTop() throws {
         let image = NSImage(size: NSSize(width: 200, height: 300))
         image.lockFocus()
