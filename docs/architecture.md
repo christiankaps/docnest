@@ -12,6 +12,19 @@ DocNest is a native macOS SwiftUI application with a pragmatic layered structure
 
 The codebase is intentionally not split into many modules. Separation happens by responsibility and runtime role inside one app target.
 
+## Target Platform
+
+DocNest targets native macOS desktop usage. The product and architecture assume:
+
+- Swift and SwiftUI as the primary application and UI stack
+- AppKit where macOS-specific integration is required, such as windows, panels, pasteboard, Services, menus, drag sessions, and Finder-oriented behavior
+- SwiftData for library-local metadata persistence and schema migration
+- PDFKit and Quick Look-style infrastructure for PDF preview and document inspection
+- Vision OCR for scanned or image-based PDF text extraction
+- local filesystem access as a core product capability, with `.docnestlibrary` packages acting as user-controlled library containers
+
+DocNest does not currently target iOS, iPadOS, web, cloud collaboration, or multi-user server deployment. Cross-platform abstractions should not be introduced unless they simplify current macOS behavior or are required by an explicit product decision.
+
 ## Layer Responsibilities
 
 ### App
@@ -54,6 +67,18 @@ Important files:
 ### Shared
 
 `Shared` contains reusable UI and helper types that are cross-cutting but not business-specific, such as typography, chips, focused commands, and small state helpers.
+
+## Dependency Direction
+
+The preferred dependency direction is:
+
+- App coordinates feature views and service setup.
+- Features call domain use cases and observe coordinator state.
+- Domain entities and use cases express product rules without owning UI state.
+- Infrastructure implements concrete filesystem, persistence, OCR, preview, and monitoring behavior.
+- Shared types stay small and reusable; they should not become hidden domain services.
+
+UI code should not duplicate import, export, search, label, or storage rules that already belong to a use case or infrastructure service.
 
 ## Main Runtime Flows
 

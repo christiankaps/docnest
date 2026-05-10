@@ -63,6 +63,7 @@ Users can open originals, reveal them in Finder, share them, or export them with
 - [README.md](/Users/kaps/Projects/docnest/README.md): entry point for the repository
 - [requirements.md](/Users/kaps/Projects/docnest/docs/requirements.md): detailed product behavior and scope
 - [architecture.md](/Users/kaps/Projects/docnest/docs/architecture.md): application structure and runtime responsibilities
+- [ui-concepts.md](/Users/kaps/Projects/docnest/docs/ui-concepts.md): basic UX concepts and interaction principles
 - [project-structure.md](/Users/kaps/Projects/docnest/docs/project-structure.md): directory layout and code ownership
 - [import-pipeline.md](/Users/kaps/Projects/docnest/docs/import-pipeline.md): import behavior across all entry points
 - [library-format.md](/Users/kaps/Projects/docnest/docs/library-format.md): `.docnestlibrary` package layout and invariants

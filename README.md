@@ -82,6 +82,7 @@ Start here:
 
 - [docs/overview.md](docs/overview.md) for product concepts and workflow map
 - [docs/architecture.md](docs/architecture.md) for application structure and runtime responsibilities
+- [docs/ui-concepts.md](docs/ui-concepts.md) for basic UX concepts and interaction principles
 - [docs/import-pipeline.md](docs/import-pipeline.md) for import behavior across all entry points
 - [docs/library-format.md](docs/library-format.md) for the `.docnestlibrary` package layout
 - [docs/search-and-organization.md](docs/search-and-organization.md) for labels, smart folders, filtering, and search
