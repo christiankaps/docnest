@@ -57,6 +57,8 @@ Before editing, check the worktree. Do not revert or overwrite unrelated user ch
 - The release branch is `master` or `main`, whichever is the repository's default branch.
 - When preparing a release, use the repository's default branch as the source branch unless an explicit repository instruction overrides it.
 - Use GitHub or git remote metadata to determine the repository default branch. Do not assume `main` or `master`.
+- Agents are allowed and expected to use `gh` and network access for release work.
+- After creating a GitHub release, do not wait for or watch the GitHub Actions release workflow until the DMG is uploaded unless the user explicitly asks for that verification. Create the release and report the release URL.
 
 Before creating a release:
 

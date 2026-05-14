@@ -25,9 +25,11 @@ This means local Xcode project defaults are not the canonical shipped version.
 ## Standard Release Flow
 
 1. Commit the finished changes.
-2. Push the target branch `master`.
+2. Push the repository default branch.
 3. Create the GitHub release with the intended tag.
 4. Let the release build pipeline produce the distributable app artifacts from that tag.
+
+Agents may use `gh` and network access for release work. After creating the GitHub release, agents should report the release URL and stop; they should not wait for or watch the GitHub Actions release workflow until the DMG is uploaded unless explicitly asked to verify that upload.
 
 ## Release Selection Guidance
 
@@ -48,6 +50,7 @@ The repository uses GitHub releases as the public release record. In normal oper
 - the newest release may be marked as latest
 - generated release notes can be used
 - artifacts are built from the release tag rather than from an arbitrary local project version
+- release agents should create the release and let the release workflow run asynchronously unless upload verification is explicitly requested
 
 ## Local Packaging Helper
 

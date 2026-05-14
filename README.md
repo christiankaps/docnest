@@ -58,11 +58,12 @@ open /tmp/docnest-derived/Build/Products/Debug/DocNest.app
 GitHub release builds compile the app from the release tag and bake the version into the bundle at build time.
 
 - release tags use the schema `YYYY.MAJOR.MINOR`
-- new releases are cut from `master`
+- new releases are cut from the repository default branch
 - the next release version should be chosen from the latest published GitHub release
 - `MARKETING_VERSION` is derived from the GitHub release tag
 - `CURRENT_PROJECT_VERSION` is derived from the workflow run number
 - the About window displays both the release version and build number
+- release agents may use `gh` and network access, and should create the release without waiting for or watching the DMG workflow unless upload verification is explicitly requested
 
 There is also a local packaging helper:
 
