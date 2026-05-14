@@ -177,16 +177,23 @@ func renderIcon(
     return NSImage(size: outputSize, flipped: false) { rect in
         NSGraphicsContext.current?.imageInterpolation = .high
 
-        NSGraphicsContext.saveGraphicsState()
-        maskPath(for: crop.mask, in: rect).addClip()
-
         let image = NSImage(cgImage: croppedImage, size: outputSize)
-        image.draw(in: rect, from: NSRect(origin: .zero, size: outputSize), operation: .sourceOver, fraction: 1)
-        if let previewVariant {
-            applyPreviewAdjustment(previewVariant, in: rect)
+        for maskPath in maskPaths(for: crop.mask, in: rect) {
+            NSGraphicsContext.saveGraphicsState()
+            maskPath.addClip()
+            image.draw(in: rect, from: NSRect(origin: .zero, size: outputSize), operation: .sourceOver, fraction: 1)
+            NSGraphicsContext.restoreGraphicsState()
         }
 
-        NSGraphicsContext.restoreGraphicsState()
+        if let previewVariant {
+            for maskPath in maskPaths(for: crop.mask, in: rect) {
+                NSGraphicsContext.saveGraphicsState()
+                maskPath.addClip()
+                applyPreviewAdjustment(previewVariant, in: rect)
+                NSGraphicsContext.restoreGraphicsState()
+            }
+        }
+
         return true
     }
 }
@@ -210,41 +217,76 @@ func applyPreviewAdjustment(_ variant: IconPreviewVariant, in rect: CGRect) {
     }
 }
 
-func maskPath(for mask: IconMask, in rect: CGRect) -> NSBezierPath {
+func maskPaths(for mask: IconMask, in rect: CGRect) -> [NSBezierPath] {
     switch mask {
     case .app:
-        return NSBezierPath(
+        return [NSBezierPath(
             roundedRect: rect.insetBy(dx: rect.width * 0.012, dy: rect.height * 0.012),
             xRadius: rect.width * 0.205,
             yRadius: rect.height * 0.205
-        )
+        )]
     case .libraryPackage:
-        let path = NSBezierPath()
         let stackRect = CGRect(
             x: rect.minX + rect.width * 0.075,
             y: rect.minY + rect.height * 0.035,
-            width: rect.width * 0.835,
+            width: rect.width * 0.76,
             height: rect.height * 0.245
         )
         let documentRect = CGRect(
             x: rect.minX + rect.width * 0.075,
             y: rect.minY + rect.height * 0.125,
-            width: rect.width * 0.835,
+            width: rect.width * 0.75,
             height: rect.height * 0.825
         )
 
-        path.append(NSBezierPath(
+        let stackPath = NSBezierPath(
             roundedRect: stackRect,
             xRadius: rect.width * 0.055,
             yRadius: rect.width * 0.055
-        ))
-        path.append(NSBezierPath(
-            roundedRect: documentRect,
-            xRadius: rect.width * 0.075,
-            yRadius: rect.width * 0.075
-        ))
-        return path
+        )
+        return [stackPath, foldedDocumentMaskPath(in: documentRect)]
     }
+}
+
+func foldedDocumentMaskPath(in rect: CGRect) -> NSBezierPath {
+    let radius = rect.width * 0.075
+    let foldStartX = rect.minX + rect.width * 0.60
+    let foldShoulder = CGPoint(x: rect.maxX - rect.width * 0.13, y: rect.maxY - rect.height * 0.27)
+    let foldSide = CGPoint(x: rect.maxX, y: rect.maxY - rect.height * 0.39)
+
+    let path = NSBezierPath()
+    path.move(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+    path.line(to: CGPoint(x: foldStartX, y: rect.maxY))
+    path.curve(
+        to: foldShoulder,
+        controlPoint1: CGPoint(x: foldStartX + rect.width * 0.07, y: rect.maxY - rect.height * 0.02),
+        controlPoint2: CGPoint(x: foldShoulder.x - rect.width * 0.04, y: foldShoulder.y + rect.height * 0.07)
+    )
+    path.curve(
+        to: foldSide,
+        controlPoint1: CGPoint(x: foldShoulder.x + rect.width * 0.07, y: foldShoulder.y - rect.height * 0.01),
+        controlPoint2: CGPoint(x: foldSide.x, y: foldSide.y + rect.height * 0.06)
+    )
+    path.line(to: CGPoint(x: rect.maxX, y: rect.minY + radius))
+    path.curve(
+        to: CGPoint(x: rect.maxX - radius, y: rect.minY),
+        controlPoint1: CGPoint(x: rect.maxX, y: rect.minY + radius * 0.45),
+        controlPoint2: CGPoint(x: rect.maxX - radius * 0.45, y: rect.minY)
+    )
+    path.line(to: CGPoint(x: rect.minX + radius, y: rect.minY))
+    path.curve(
+        to: CGPoint(x: rect.minX, y: rect.minY + radius),
+        controlPoint1: CGPoint(x: rect.minX + radius * 0.45, y: rect.minY),
+        controlPoint2: CGPoint(x: rect.minX, y: rect.minY + radius * 0.45)
+    )
+    path.line(to: CGPoint(x: rect.minX, y: rect.maxY - radius))
+    path.curve(
+        to: CGPoint(x: rect.minX + radius, y: rect.maxY),
+        controlPoint1: CGPoint(x: rect.minX, y: rect.maxY - radius * 0.45),
+        controlPoint2: CGPoint(x: rect.minX + radius * 0.45, y: rect.maxY)
+    )
+    path.close()
+    return path
 }
 
 func writePNG(_ image: NSImage, to fileURL: URL) throws {
