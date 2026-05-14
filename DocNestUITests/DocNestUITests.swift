@@ -8,6 +8,7 @@ final class DocNestUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         terminateRunningDocNestApplications()
+        clearPersistedLibraryDefaults()
     }
 
     @MainActor
@@ -66,6 +67,36 @@ final class DocNestUITests: XCTestCase {
             app.buttons["Toggle Sidebar"].exists,
             "RootView should not add a second custom sidebar toggle button."
         )
+    }
+
+    @MainActor
+    func testOpenLibraryToolbarShowsRecentLibrarySwitcherMenu() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Switcher Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try createLibraryFixture(at: libraryURL)
+
+        let app = XCUIApplication()
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES",
+                                "-selectedLibraryPath", libraryURL.path]
+        app.launch()
+
+        XCTAssertTrue(
+            app.otherElements[openLibraryRootIdentifier].waitForExistence(timeout: 10),
+            "Expected the open-library root view to appear after restoring a library fixture"
+        )
+
+        let switcher = app.menuButtons["library-switcher-menu"]
+        XCTAssertTrue(switcher.waitForExistence(timeout: 10))
+
+        switcher.click()
+
+        XCTAssertTrue(app.menuItems["Clear Recent Libraries"].waitForExistence(timeout: 5))
     }
 
     @MainActor
@@ -144,6 +175,14 @@ final class DocNestUITests: XCTestCase {
 
             Thread.sleep(forTimeInterval: 0.1)
         }
+    }
+
+    private func clearPersistedLibraryDefaults() {
+        guard let defaults = UserDefaults(suiteName: appBundleIdentifier) else { return }
+        defaults.removeObject(forKey: "selectedLibraryPath")
+        defaults.removeObject(forKey: "selectedLibraryBookmark")
+        defaults.removeObject(forKey: "recentLibraries")
+        defaults.synchronize()
     }
 
 }

@@ -90,6 +90,9 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - User can create a new library.
 - User can open an existing library.
 - App remembers the last successfully opened library and tries to reopen it automatically on next launch.
+- While a library is open, the toolbar shows the current library name as a clickable menu for switching to one of the five most recently opened previous libraries.
+- If a recent-library switch fails, the app must keep the currently open library active, remove the failed library from the recent list, and present the normal library error alert.
+- The recent-library menu includes a clear action that removes the full recent-library history.
 - App must not automatically reopen a remembered library when that library has been moved to Trash. In that case the remembered library reference is cleared or ignored and the app starts in its normal no-library state.
 - If no last-opened library is known, or the stored library can no longer be validated, the app must not show a modal popup. Instead, it shows a welcome state directly in normal window content with actions to open or create a library.
 - The save dialog for library creation shows only the library name without the internal extension (.docnestlibrary); the app appends the extension automatically.
@@ -642,6 +645,7 @@ Current state:
 - Pressing Space or double-clicking a document opens a native Quick Look preview via QLPreviewPanel, similar to Finder behavior.
 - Arrow keys navigate the document list; when Quick Look is open, navigation automatically updates the preview.
 - The document list focus ring is suppressed for a cleaner appearance.
+- The toolbar library switcher shows the open library's name (without file extension), reveals recent libraries, and includes a clear-recents action.
 - The toolbar Library menu includes "Show in Finder" when a library is open, revealing the library package in Finder.
 - The window title shows the open library's name (without file extension) or "DocNest" when no library is open.
 - Export supports single-document (NSSavePanel) and multi-document (NSOpenPanel folder picker) workflows.

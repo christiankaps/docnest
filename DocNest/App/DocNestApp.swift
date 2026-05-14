@@ -674,6 +674,10 @@ final class LibrarySessionController: ObservableObject {
     private static let isRunningUnderTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     @Published private(set) var selectedLibraryURL: URL?
     @Published private(set) var modelContainer: ModelContainer?
+    @Published private(set) var recentLibraries = DocumentLibraryService.recentLibraryReferences(
+        excluding: nil,
+        limit: Int.max
+    )
     @Published var libraryErrorMessage: String?
     @Published var pendingImportURLs: [URL] = []
 
@@ -683,6 +687,10 @@ final class LibrarySessionController: ObservableObject {
     private var terminationObserver: Any?
     private var activeLibraryAccessSession: DocumentLibraryService.LibraryAccessSession?
     private var integrityRefreshTask: Task<Void, Never>?
+
+    var recentLibrariesExcludingCurrent: [DocumentLibraryService.RecentLibraryReference] {
+        DocumentLibraryService.recentLibraryReferences(excluding: selectedLibraryURL)
+    }
 
     func queueImportURLs(_ urls: [URL]) {
         pendingImportURLs.append(contentsOf: urls)
@@ -732,6 +740,25 @@ final class LibrarySessionController: ObservableObject {
         openValidatedLibrary(DocumentLibraryService.accessLibrary(at: url))
     }
 
+    func openRecentLibrary(_ reference: DocumentLibraryService.RecentLibraryReference) {
+        let didOpen = openValidatedLibrary(DocumentLibraryService.accessRecentLibrary(reference))
+        if didOpen {
+            if let selectedLibraryURL,
+               selectedLibraryURL.standardizedFileURL.path != reference.url.standardizedFileURL.path {
+                DocumentLibraryService.removeRecentLibrary(reference.url)
+                refreshRecentLibraries()
+            }
+        } else {
+            DocumentLibraryService.removeRecentLibrary(reference.url)
+            refreshRecentLibraries()
+        }
+    }
+
+    func clearRecentLibraries() {
+        DocumentLibraryService.clearRecentLibraries()
+        refreshRecentLibraries()
+    }
+
     func closeLibrary() {
         integrityRefreshTask?.cancel()
         integrityRefreshTask = nil
@@ -748,12 +775,22 @@ final class LibrarySessionController: ObservableObject {
         modelContainer = nil
     }
 
-    private func openValidatedLibrary(_ accessSession: DocumentLibraryService.LibraryAccessSession) {
+    @discardableResult
+    private func openValidatedLibrary(_ accessSession: DocumentLibraryService.LibraryAccessSession) -> Bool {
+        if isSelectedLibrary(accessSession.url) {
+            if accessSession.startedAccessingSecurityScope {
+                accessSession.url.stopAccessingSecurityScopedResource()
+            }
+            return true
+        }
+
+        var acquiredLockURL: URL?
         do {
             let packageRepair = try DocumentLibraryService.repairLibraryPackageIfNeeded(at: accessSession.url)
             let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: accessSession.url)
             let migration = try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
             try DocumentLibraryService.acquireLock(for: validatedURL)
+            acquiredLockURL = validatedURL
             try openLibrary(
                 DocumentLibraryService.LibraryAccessSession(
                     url: validatedURL,
@@ -766,11 +803,16 @@ final class LibrarySessionController: ObservableObject {
                 migration: migration,
                 packageRepair: packageRepair
             )
+            return true
         } catch {
+            if let acquiredLockURL {
+                DocumentLibraryService.releaseLock(for: acquiredLockURL)
+            }
             if accessSession.startedAccessingSecurityScope {
                 accessSession.url.stopAccessingSecurityScopedResource()
             }
             libraryErrorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -789,24 +831,46 @@ final class LibrarySessionController: ObservableObject {
         selectedLibraryURL = accessSession.url
         activeLibraryAccessSession = accessSession
         DocumentLibraryService.persistLibraryURL(accessSession.url)
+        DocumentLibraryService.recordRecentLibrary(accessSession.url)
+        refreshRecentLibraries()
         libraryErrorMessage = nil
         startLockHeartbeat(for: accessSession.url)
         observeAppTermination(for: accessSession.url)
         integrityRefreshTask?.cancel()
-        integrityRefreshTask = Task { [libraryURL = accessSession.url, manifest, migration, packageRepair] in
-            do {
-                _ = try await DocumentLibraryService.refreshIntegrityArtifacts(
-                    for: libraryURL,
-                    manifest: manifest,
-                    migration: migration,
-                    packageRepair: packageRepair
-                )
-            } catch is CancellationError {
-                return
-            } catch {
-                Self.logger.error("Failed to refresh integrity artifacts: \(error.localizedDescription, privacy: .public)")
+        if !Self.isRunningUnderTests {
+            integrityRefreshTask = Task { [libraryURL = accessSession.url, manifest, migration, packageRepair] in
+                do {
+                    _ = try await DocumentLibraryService.refreshIntegrityArtifacts(
+                        for: libraryURL,
+                        manifest: manifest,
+                        migration: migration,
+                        packageRepair: packageRepair
+                    )
+                } catch is CancellationError {
+                    return
+                } catch {
+                    Self.logger.error("Failed to refresh integrity artifacts: \(error.localizedDescription, privacy: .public)")
+                }
             }
+        } else {
+            integrityRefreshTask = nil
         }
+    }
+
+    private func refreshRecentLibraries() {
+        recentLibraries = DocumentLibraryService.recentLibraryReferences(
+            excluding: nil,
+            limit: Int.max
+        )
+    }
+
+    private func isSelectedLibrary(_ url: URL) -> Bool {
+        guard let selectedLibraryURL else {
+            return false
+        }
+
+        return selectedLibraryURL.standardizedFileURL.resolvingSymlinksInPath().path
+            == url.standardizedFileURL.resolvingSymlinksInPath().path
     }
 
     // MARK: - Lock Heartbeat

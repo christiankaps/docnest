@@ -73,6 +73,7 @@ final class DocNestTests: XCTestCase {
     override func tearDown() {
         super.tearDown()
         DocumentLibraryService.persistLibraryURL(nil)
+        DocumentLibraryService.clearRecentLibraries()
     }
 
     func testDocumentTypesDeclareBundleRoles() throws {
@@ -232,6 +233,63 @@ final class DocNestTests: XCTestCase {
         DocumentLibraryService.persistLibraryURL(nil)
 
         XCTAssertNil(DocumentLibraryService.restorePersistedLibraryAccess())
+    }
+
+    func testRecentLibraryReferencesKeepMostRecentPreviousLibraries() {
+        let urls = (0..<7).map {
+            URL(fileURLWithPath: "/tmp/DocNest Recent \($0).docnestlibrary").standardizedFileURL
+        }
+
+        for url in urls {
+            DocumentLibraryService.recordRecentLibrary(url)
+        }
+        DocumentLibraryService.recordRecentLibrary(urls[2])
+
+        let allReferences = DocumentLibraryService.recentLibraryReferences(excluding: nil, limit: Int.max)
+        XCTAssertEqual(allReferences.map(\.url), [urls[2], urls[6], urls[5], urls[4], urls[3], urls[1]])
+
+        let previousReferences = DocumentLibraryService.recentLibraryReferences(excluding: urls[2])
+        XCTAssertEqual(previousReferences.map(\.url), [urls[6], urls[5], urls[4], urls[3], urls[1]])
+    }
+
+    func testClearingRecentLibraryReferencesRemovesHistory() {
+        let libraryURL = URL(fileURLWithPath: "/tmp/Clear Recents.docnestlibrary").standardizedFileURL
+        DocumentLibraryService.recordRecentLibrary(libraryURL)
+
+        DocumentLibraryService.clearRecentLibraries()
+
+        XCTAssertTrue(DocumentLibraryService.recentLibraryReferences(excluding: nil, limit: Int.max).isEmpty)
+    }
+
+    func testRecordingRecentLibraryRemovesBookmarkAliasToSameLocation() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Moved Library.docnestlibrary", isDirectory: true)
+        let staleLibraryURL = tempRoot.appendingPathComponent("Old Library Location.docnestlibrary", isDirectory: true).standardizedFileURL
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryURL = try DocumentLibraryService.createLibrary(at: libraryURL)
+        let bookmarkData = try createdLibraryURL.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        let staleReference = DocumentLibraryService.RecentLibraryReference(
+            path: staleLibraryURL.path,
+            bookmarkData: bookmarkData
+        )
+        let encodedReferences = try JSONEncoder().encode([staleReference])
+        UserDefaults.standard.set(encodedReferences, forKey: "recentLibraries")
+
+        DocumentLibraryService.recordRecentLibrary(createdLibraryURL)
+
+        XCTAssertEqual(
+            DocumentLibraryService.recentLibraryReferences(excluding: nil, limit: Int.max).map(\.url),
+            [createdLibraryURL]
+        )
     }
 
     func testSelectedLibraryURLReadsLaunchArgumentOverride() {
@@ -1084,6 +1142,152 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(documentsInLibraryA.count, 1)
         XCTAssertEqual(documentsInLibraryA.first?.title, "Invoice")
         XCTAssertTrue(FileManager.default.fileExists(atPath: DocumentLibraryService.metadataStoreURL(for: createdLibraryAURL).path))
+    }
+
+    @MainActor
+    func testLibrarySessionSwitchesToRecentLibraryAndTracksPreviousLibrary() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryAURL = tempRoot.appendingPathComponent("Library A.docnestlibrary", isDirectory: true)
+        let libraryBURL = tempRoot.appendingPathComponent("Library B.docnestlibrary", isDirectory: true)
+        let controller = LibrarySessionController()
+
+        defer {
+            controller.closeLibrary()
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryAURL = try DocumentLibraryService.createLibrary(at: libraryAURL)
+        let createdLibraryBURL = try DocumentLibraryService.createLibrary(at: libraryBURL)
+
+        controller.openLibraryFromFinder(createdLibraryAURL)
+        controller.openLibraryFromFinder(createdLibraryBURL)
+
+        XCTAssertEqual(controller.selectedLibraryURL, createdLibraryBURL)
+        XCTAssertEqual(controller.recentLibrariesExcludingCurrent.map(\.url), [createdLibraryAURL])
+
+        let recentLibrary = try XCTUnwrap(controller.recentLibrariesExcludingCurrent.first)
+        controller.openRecentLibrary(recentLibrary)
+
+        XCTAssertEqual(controller.selectedLibraryURL, createdLibraryAURL)
+        XCTAssertEqual(controller.recentLibrariesExcludingCurrent.map(\.url), [createdLibraryBURL])
+        XCTAssertEqual(DocumentLibraryService.restorePersistedLibraryAccess()?.url, createdLibraryAURL)
+    }
+
+    @MainActor
+    func testLibrarySessionRemovesStaleRecentPathAfterBookmarkResolvedSwitch() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let currentLibraryURL = tempRoot.appendingPathComponent("Current Library.docnestlibrary", isDirectory: true)
+        let movedLibraryURL = tempRoot.appendingPathComponent("Moved Library.docnestlibrary", isDirectory: true)
+        let staleLibraryURL = tempRoot.appendingPathComponent("Old Library Location.docnestlibrary", isDirectory: true).standardizedFileURL
+        let controller = LibrarySessionController()
+
+        defer {
+            controller.closeLibrary()
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdCurrentLibraryURL = try DocumentLibraryService.createLibrary(at: currentLibraryURL)
+        let createdMovedLibraryURL = try DocumentLibraryService.createLibrary(at: movedLibraryURL)
+        let bookmarkData = try createdMovedLibraryURL.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        let staleReference = DocumentLibraryService.RecentLibraryReference(
+            path: staleLibraryURL.path,
+            bookmarkData: bookmarkData
+        )
+        let encodedReferences = try JSONEncoder().encode([staleReference])
+        UserDefaults.standard.set(encodedReferences, forKey: "recentLibraries")
+
+        controller.openLibraryFromFinder(createdCurrentLibraryURL)
+        let recentLibrary = try XCTUnwrap(controller.recentLibrariesExcludingCurrent.first)
+
+        controller.openRecentLibrary(recentLibrary)
+
+        XCTAssertEqual(controller.selectedLibraryURL, createdMovedLibraryURL)
+        XCTAssertEqual(
+            DocumentLibraryService.recentLibraryReferences(excluding: nil, limit: Int.max).map(\.url),
+            [createdMovedLibraryURL, createdCurrentLibraryURL]
+        )
+        XCTAssertFalse(
+            DocumentLibraryService.recentLibraryReferences(excluding: nil, limit: Int.max)
+                .contains { $0.url == staleLibraryURL }
+        )
+    }
+
+    @MainActor
+    func testLibrarySessionTreatsRecentBookmarkResolvingToCurrentLibraryAsNoOp() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let currentLibraryURL = tempRoot.appendingPathComponent("Current Library.docnestlibrary", isDirectory: true)
+        let staleLibraryURL = tempRoot.appendingPathComponent("Old Current Location.docnestlibrary", isDirectory: true).standardizedFileURL
+        let controller = LibrarySessionController()
+
+        defer {
+            controller.closeLibrary()
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdCurrentLibraryURL = try DocumentLibraryService.createLibrary(at: currentLibraryURL)
+        let bookmarkData = try createdCurrentLibraryURL.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        let staleReference = DocumentLibraryService.RecentLibraryReference(
+            path: staleLibraryURL.path,
+            bookmarkData: bookmarkData
+        )
+        controller.openLibraryFromFinder(createdCurrentLibraryURL)
+        let previousContainer = try XCTUnwrap(controller.modelContainer)
+
+        let encodedReferences = try JSONEncoder().encode([staleReference])
+        UserDefaults.standard.set(encodedReferences, forKey: "recentLibraries")
+
+        XCTAssertTrue(controller.recentLibrariesExcludingCurrent.isEmpty)
+
+        controller.openRecentLibrary(staleReference)
+
+        XCTAssertEqual(controller.selectedLibraryURL, createdCurrentLibraryURL)
+        XCTAssertTrue(controller.modelContainer === previousContainer)
+        XCTAssertTrue(controller.recentLibrariesExcludingCurrent.isEmpty)
+        XCTAssertFalse(
+            DocumentLibraryService.recentLibraryReferences(excluding: nil, limit: Int.max)
+                .contains { $0.url == staleLibraryURL }
+        )
+    }
+
+    @MainActor
+    func testLibrarySessionKeepsCurrentLibraryWhenRecentLibraryFailsToOpen() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let currentLibraryURL = tempRoot.appendingPathComponent("Current Library.docnestlibrary", isDirectory: true)
+        let missingLibraryURL = tempRoot.appendingPathComponent("Missing Library.docnestlibrary", isDirectory: true).standardizedFileURL
+        let controller = LibrarySessionController()
+
+        defer {
+            controller.closeLibrary()
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        DocumentLibraryService.recordRecentLibrary(missingLibraryURL)
+        let createdCurrentLibraryURL = try DocumentLibraryService.createLibrary(at: currentLibraryURL)
+        controller.openLibraryFromFinder(createdCurrentLibraryURL)
+        let previousContainer = try XCTUnwrap(controller.modelContainer)
+        let failedReference = try XCTUnwrap(controller.recentLibrariesExcludingCurrent.first)
+
+        controller.openRecentLibrary(failedReference)
+
+        XCTAssertEqual(controller.selectedLibraryURL, createdCurrentLibraryURL)
+        XCTAssertTrue(controller.modelContainer === previousContainer)
+        XCTAssertNotNil(controller.libraryErrorMessage)
+        XCTAssertFalse(
+            DocumentLibraryService.recentLibraryReferences(excluding: nil, limit: Int.max)
+                .contains { $0.url == missingLibraryURL }
+        )
     }
 
     @MainActor
