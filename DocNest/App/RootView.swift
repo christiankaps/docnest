@@ -163,9 +163,6 @@ struct RootView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .principal) {
             HStack(spacing: 8) {
-                LibrarySwitcherMenu(librarySession: librarySession)
-                    .frame(maxWidth: 220)
-
                 SearchToolbarField(
                     text: Bindable(coordinator).searchText,
                     focusRequestToken: coordinator.searchFocusRequestToken
@@ -263,53 +260,6 @@ struct RootView: View {
         coordinator.selectedDocumentIDs = Set(documents.map(\.persistentModelID))
     }
 
-}
-
-private struct LibrarySwitcherMenu: View {
-    @ObservedObject var librarySession: LibrarySessionController
-
-    private var currentLibraryName: String {
-        librarySession.selectedLibraryURL?.deletingPathExtension().lastPathComponent ?? "DocNest"
-    }
-
-    var body: some View {
-        Menu {
-            let recentLibraries = librarySession.recentLibrariesExcludingCurrent
-            if recentLibraries.isEmpty {
-                Text("No Recent Libraries")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(recentLibraries) { reference in
-                    Button {
-                        librarySession.openRecentLibrary(reference)
-                    } label: {
-                        Label(reference.displayName, systemImage: "books.vertical")
-                    }
-                    .help(reference.path)
-                }
-            }
-
-            Divider()
-
-            Button("Clear Recent Libraries", role: .destructive) {
-                librarySession.clearRecentLibraries()
-            }
-            .disabled(librarySession.recentLibraries.isEmpty)
-        } label: {
-            Label {
-                Text(currentLibraryName)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            } icon: {
-                Image(systemName: "books.vertical")
-            }
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize(horizontal: false, vertical: true)
-        .help("Switch library")
-        .accessibilityIdentifier("library-switcher-menu")
-        .accessibilityLabel("Library Switcher")
-    }
 }
 
 private struct RootViewImportModifier: ViewModifier {

@@ -32,9 +32,7 @@ The sidebar is permanent in open-library mode. The inspector can be toggled, but
 
 ### Toolbar
 
-The toolbar is the command surface for high-frequency actions such as switching recent libraries, import, search, presentation mode, sharing, inspector visibility, OCR progress, and appearance. It should use native macOS toolbar behavior and avoid duplicating commands already available in obvious context menus.
-
-The current library name appears as a compact toolbar menu in open-library mode. It should feel like a native title control: clicking it opens recent libraries for quick switching, while failed switches leave the current library open and remove the broken recent entry.
+The toolbar is the command surface for high-frequency actions such as import, search, presentation mode, sharing, inspector visibility, OCR progress, and appearance. It should use native macOS toolbar behavior and avoid duplicating commands already available in obvious context menus.
 
 ### Sidebar
 

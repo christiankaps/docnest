@@ -122,25 +122,9 @@ enum DocumentLibraryService {
         let startedAccessingSecurityScope: Bool
     }
 
-    struct RecentLibraryReference: Codable, Equatable, Identifiable {
-        let path: String
-        let bookmarkData: Data?
-
-        var id: String { path }
-
-        var url: URL {
-            URL(fileURLWithPath: path).standardizedFileURL
-        }
-
-        var displayName: String {
-            url.deletingPathExtension().lastPathComponent
-        }
-    }
-
     private static let persistedLibraryPathKey = "selectedLibraryPath"
     private static let persistedLibraryBookmarkKey = "selectedLibraryBookmark"
-    private static let recentLibrariesKey = "recentLibraries"
-    private static let recentLibraryHistoryLimit = 6
+    private static let retiredRecentLibrariesKey = "recentLibraries"
     private static let launchArgumentSelectedLibraryPath = "-selectedLibraryPath"
     private static let manifestFileName = "library.json"
     private static let lockFileName = ".lock"
@@ -155,6 +139,8 @@ enum DocumentLibraryService {
     /// Restores the previously selected library, preferring an explicit launch
     /// argument over persisted bookmark or path state.
     static func restorePersistedLibraryAccess() -> LibraryAccessSession? {
+        clearRetiredRecentLibraries()
+
         if let launchArgumentLibraryURL = selectedLibraryURL(from: ProcessInfo.processInfo.arguments) {
             return accessLibrary(at: launchArgumentLibraryURL)
         }
@@ -199,6 +185,8 @@ enum DocumentLibraryService {
 
     /// Persists or clears the library reference used for startup restoration.
     static func persistLibraryURL(_ url: URL?) {
+        clearRetiredRecentLibraries()
+
         if let url {
             let standardizedURL = url.standardizedFileURL
             UserDefaults.standard.set(standardizedURL.path, forKey: persistedLibraryPathKey)
@@ -216,6 +204,10 @@ enum DocumentLibraryService {
         }
     }
 
+    private static func clearRetiredRecentLibraries() {
+        UserDefaults.standard.removeObject(forKey: retiredRecentLibrariesKey)
+    }
+
     static func accessLibrary(at url: URL) -> LibraryAccessSession {
         let standardizedURL = url.standardizedFileURL
         let startedAccessingSecurityScope = standardizedURL.startAccessingSecurityScopedResource()
@@ -223,57 +215,6 @@ enum DocumentLibraryService {
             url: standardizedURL,
             startedAccessingSecurityScope: startedAccessingSecurityScope
         )
-    }
-
-    static func recentLibraryReferences(
-        excluding currentLibraryURL: URL? = nil,
-        limit: Int = 5
-    ) -> [RecentLibraryReference] {
-        let currentPath = currentLibraryURL.map(canonicalPath)
-        return storedRecentLibraryReferences()
-            .filter { canonicalPath(for: resolvedURL(for: $0)) != currentPath }
-            .prefix(limit)
-            .map { $0 }
-    }
-
-    static func recordRecentLibrary(_ url: URL) {
-        let reference = RecentLibraryReference(
-            path: url.standardizedFileURL.path,
-            bookmarkData: bookmarkData(for: url)
-        )
-        let resolvedReferencePath = canonicalPath(for: reference.url)
-        var references = storedRecentLibraryReferences()
-        references.removeAll {
-            $0.path == reference.path || canonicalPath(for: resolvedURL(for: $0)) == resolvedReferencePath
-        }
-        references.insert(reference, at: 0)
-        persistRecentLibraryReferences(Array(references.prefix(recentLibraryHistoryLimit)))
-    }
-
-    static func removeRecentLibrary(_ url: URL) {
-        let path = url.standardizedFileURL.path
-        let references = storedRecentLibraryReferences().filter { $0.path != path }
-        persistRecentLibraryReferences(references)
-    }
-
-    static func clearRecentLibraries() {
-        UserDefaults.standard.removeObject(forKey: recentLibrariesKey)
-    }
-
-    static func accessRecentLibrary(_ reference: RecentLibraryReference) -> LibraryAccessSession {
-        if let bookmarkData = reference.bookmarkData {
-            var isStale = false
-            if let resolvedURL = try? URL(
-                resolvingBookmarkData: bookmarkData,
-                options: [.withSecurityScope],
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            ).standardizedFileURL {
-                return accessLibrary(at: resolvedURL)
-            }
-        }
-
-        return accessLibrary(at: reference.url)
     }
 
     static func promptForExistingLibrary() -> URL? {
@@ -760,71 +701,6 @@ enum DocumentLibraryService {
         }
 
         return URL(fileURLWithPath: path).standardizedFileURL
-    }
-
-    private static func storedRecentLibraryReferences() -> [RecentLibraryReference] {
-        guard let data = UserDefaults.standard.data(forKey: recentLibrariesKey),
-              let references = try? JSONDecoder().decode([RecentLibraryReference].self, from: data) else {
-            return []
-        }
-
-        var seenPaths: Set<String> = []
-        return references.compactMap { reference in
-            let standardizedPath = reference.url.path
-            let resolvedPath = canonicalPath(for: resolvedURL(for: reference))
-            guard seenPaths.insert(resolvedPath).inserted else {
-                return nil
-            }
-
-            return RecentLibraryReference(
-                path: standardizedPath,
-                bookmarkData: reference.bookmarkData
-            )
-        }
-    }
-
-    private static func persistRecentLibraryReferences(_ references: [RecentLibraryReference]) {
-        if references.isEmpty {
-            UserDefaults.standard.removeObject(forKey: recentLibrariesKey)
-            return
-        }
-
-        if let data = try? JSONEncoder().encode(references) {
-            UserDefaults.standard.set(data, forKey: recentLibrariesKey)
-        }
-    }
-
-    private static func bookmarkData(for url: URL) -> Data? {
-        let standardizedURL = url.standardizedFileURL
-        guard FileManager.default.fileExists(atPath: standardizedURL.path) else {
-            return nil
-        }
-
-        return try? standardizedURL.bookmarkData(
-            options: [.withSecurityScope],
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        )
-    }
-
-    private static func resolvedURL(for reference: RecentLibraryReference) -> URL {
-        if let bookmarkData = reference.bookmarkData {
-            var isStale = false
-            if let resolvedURL = try? URL(
-                resolvingBookmarkData: bookmarkData,
-                options: [.withSecurityScope],
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            ).standardizedFileURL {
-                return resolvedURL
-            }
-        }
-
-        return reference.url
-    }
-
-    private static func canonicalPath(for url: URL) -> String {
-        url.standardizedFileURL.resolvingSymlinksInPath().path
     }
 
     private static func normalizedLibraryURL(from url: URL) -> URL {
