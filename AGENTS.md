@@ -38,13 +38,21 @@ Before editing, check the worktree. Do not revert or overwrite unrelated user ch
 
 - For new features and bug fixes, write tests unless the project truly has no practical way to cover the behavior.
 - Prefer focused tests during implementation, but the final gate after clean reviews is the full test suite.
-- Use the repository testing guide in [docs/testing.md](/Users/kaps/Projects/docnest/docs/testing.md) for the canonical commands.
+- Use the repository testing guide in [docs/testing.md](docs/testing.md) for the canonical commands.
 
 ## Documentation Expectations
 
 - If a new feature is implemented, update the requirements documentation in the same change.
 - If app behavior changes, update the requirements documentation in the same change.
 - Keep high-level documentation aligned with shipped behavior before considering the change complete.
+
+## Private Data and Secrets
+
+- Never commit private data, secrets, credentials, or user-identifying local environment details.
+- Treat email addresses, passwords, API keys, access tokens, signing keys, private certificates, and local paths containing usernames as private unless the repository already intentionally uses a public placeholder.
+- Before staging or committing, inspect new and modified files for accidental private data. Replace private values with placeholders such as `user@example.com`, `<password>`, `<api-key>`, or `/Users/example/...`.
+- Do not include private data in tests, fixtures, documentation, comments, release notes, screenshots, generated artifacts, or command transcripts.
+- If private data is already present in the worktree, stop and ask before preserving, moving, or deleting it. If private data may already have been committed, stop and report the risk instead of creating more commits.
 
 ## Release Instructions
 
