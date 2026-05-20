@@ -59,6 +59,8 @@ The deep reviewer runs only after the fast reviewer reports no actionable findin
 ## Testing Expectations
 
 - For new features and bug fixes, write tests unless the project truly has no practical way to cover the behavior.
+- Tests should verify documented behavior and public contracts rather than implementation details, private structure, incidental ordering, or current helper internals.
+- Prefer tests that could still pass after a valid refactor. Only test implementation details when they are themselves the documented contract or the only practical way to protect against data loss, migration failure, or another high-risk regression.
 - Prefer focused tests during implementation, but the final gate after clean reviews is the full test suite.
 - Use the repository testing guide in [docs/testing.md](docs/testing.md) for the canonical commands.
 
@@ -67,6 +69,8 @@ The deep reviewer runs only after the fast reviewer reports no actionable findin
 - If a new feature is implemented, update the requirements documentation in the same change.
 - If app behavior changes, update the requirements documentation in the same change.
 - Keep high-level documentation aligned with shipped behavior before considering the change complete.
+- Document APIs and behavior precisely enough that a useful test can be written from the documentation alone.
+- Do not expose unnecessary implementation details in public-facing documentation. Describe observable behavior, inputs, outputs, invariants, errors, persistence guarantees, and compatibility expectations instead of private algorithms or helper structure.
 
 ## Private Data and Secrets
 
