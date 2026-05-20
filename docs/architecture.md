@@ -33,10 +33,10 @@ The `App` layer sets up the process, the main window, command menus, focused val
 
 Important files:
 
-- [DocNestApp.swift](/Users/kaps/Projects/docnest/DocNest/App/DocNestApp.swift)
-- [RootView.swift](/Users/kaps/Projects/docnest/DocNest/App/RootView.swift)
-- [LibraryCoordinator.swift](/Users/kaps/Projects/docnest/DocNest/App/LibraryCoordinator.swift)
-- [ServicesProvider.swift](/Users/kaps/Projects/docnest/DocNest/App/ServicesProvider.swift)
+- [DocNestApp.swift](DocNest/App/DocNestApp.swift)
+- [RootView.swift](DocNest/App/RootView.swift)
+- [LibraryCoordinator.swift](DocNest/App/LibraryCoordinator.swift)
+- [ServicesProvider.swift](DocNest/App/ServicesProvider.swift)
 
 ### Domain
 
@@ -44,10 +44,10 @@ The `Domain` layer models persisted concepts and reusable business operations. U
 
 Important files:
 
-- [DocumentRecord.swift](/Users/kaps/Projects/docnest/DocNest/Domain/Entities/DocumentRecord.swift)
-- [LabelTag.swift](/Users/kaps/Projects/docnest/DocNest/Domain/Entities/LabelTag.swift)
-- [ImportPDFDocumentsUseCase.swift](/Users/kaps/Projects/docnest/DocNest/Domain/UseCases/ImportPDFDocumentsUseCase.swift)
-- [SearchDocumentsUseCase.swift](/Users/kaps/Projects/docnest/DocNest/Domain/UseCases/SearchDocumentsUseCase.swift)
+- [DocumentRecord.swift](DocNest/Domain/Entities/DocumentRecord.swift)
+- [LabelTag.swift](DocNest/Domain/Entities/LabelTag.swift)
+- [ImportPDFDocumentsUseCase.swift](DocNest/Domain/UseCases/ImportPDFDocumentsUseCase.swift)
+- [SearchDocumentsUseCase.swift](DocNest/Domain/UseCases/SearchDocumentsUseCase.swift)
 
 ### Features
 
@@ -59,10 +59,10 @@ The `Infrastructure` layer contains concrete services for package access, storag
 
 Important files:
 
-- [DocumentLibraryService.swift](/Users/kaps/Projects/docnest/DocNest/Infrastructure/Library/DocumentLibraryService.swift)
-- [DocumentStorageService.swift](/Users/kaps/Projects/docnest/DocNest/Infrastructure/Library/DocumentStorageService.swift)
-- [FolderMonitorService.swift](/Users/kaps/Projects/docnest/DocNest/Infrastructure/Library/FolderMonitorService.swift)
-- [DocNestSchemaVersioning.swift](/Users/kaps/Projects/docnest/DocNest/Infrastructure/Library/DocNestSchemaVersioning.swift)
+- [DocumentLibraryService.swift](DocNest/Infrastructure/Library/DocumentLibraryService.swift)
+- [DocumentStorageService.swift](DocNest/Infrastructure/Library/DocumentStorageService.swift)
+- [FolderMonitorService.swift](DocNest/Infrastructure/Library/FolderMonitorService.swift)
+- [DocNestSchemaVersioning.swift](DocNest/Infrastructure/Library/DocNestSchemaVersioning.swift)
 
 ### Shared
 

@@ -42,9 +42,9 @@ scripts/
 
 Representative files:
 
-- [DocNestApp.swift](/Users/kaps/Projects/docnest/DocNest/App/DocNestApp.swift)
-- [RootView.swift](/Users/kaps/Projects/docnest/DocNest/App/RootView.swift)
-- [LibraryCoordinator.swift](/Users/kaps/Projects/docnest/DocNest/App/LibraryCoordinator.swift)
+- [DocNestApp.swift](DocNest/App/DocNestApp.swift)
+- [RootView.swift](DocNest/App/RootView.swift)
+- [LibraryCoordinator.swift](DocNest/App/LibraryCoordinator.swift)
 
 ### Domain
 
@@ -74,12 +74,12 @@ Representative files:
 
 ## Xcode and Project Definition
 
-- The repository contains a versioned project definition in [project.yml](/Users/kaps/Projects/docnest/project.yml).
-- The generated Xcode project lives at [DocNest.xcodeproj](/Users/kaps/Projects/docnest/DocNest.xcodeproj/project.pbxproj).
+- The repository contains a versioned project definition in [project.yml](project.yml).
+- The generated Xcode project lives at [DocNest.xcodeproj](DocNest.xcodeproj/project.pbxproj).
 - The on-disk folder structure maps closely to the Xcode group structure.
 
 ## Related Documentation
 
-- [overview.md](/Users/kaps/Projects/docnest/docs/overview.md)
-- [architecture.md](/Users/kaps/Projects/docnest/docs/architecture.md)
-- [requirements.md](/Users/kaps/Projects/docnest/docs/requirements.md)
+- [overview.md](docs/overview.md)
+- [architecture.md](docs/architecture.md)
+- [requirements.md](docs/requirements.md)

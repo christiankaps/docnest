@@ -71,5 +71,5 @@ RELEASE_VERSION=2026.7 BUILD_NUMBER=42 scripts/build-dmg.sh
 Any change to release rules, version semantics, or build metadata handling should update:
 
 - this document
-- [README.md](/Users/kaps/Projects/docnest/README.md)
+- [README.md](README.md)
 - any scripts or workflow configuration that implement the change

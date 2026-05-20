@@ -50,7 +50,7 @@ Before editing, check the worktree. Do not revert or overwrite unrelated user ch
 
 - Never commit private data, secrets, credentials, or user-identifying local environment details.
 - Treat email addresses, passwords, API keys, access tokens, signing keys, private certificates, and local paths containing usernames as private unless the repository already intentionally uses a public placeholder.
-- Before staging or committing, inspect new and modified files for accidental private data. Replace private values with placeholders such as `user@example.com`, `<password>`, `<api-key>`, or `/Users/example/...`.
+- Before staging or committing, inspect new and modified files for accidental private data. Replace private values with placeholders such as `<email>`, `<password>`, `<api-key>`, or `<local-path>`.
 - Do not include private data in tests, fixtures, documentation, comments, release notes, screenshots, generated artifacts, or command transcripts.
 - If private data is already present in the worktree, stop and ask before preserving, moving, or deleting it. If private data may already have been committed, stop and report the risk instead of creating more commits.
 

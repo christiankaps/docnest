@@ -8,7 +8,7 @@ script = ""
 [[actions]]
 name = "Run"
 icon = "run"
-command = "xcodebuild -project /Users/kaps/Projects/docnest/DocNest.xcodeproj -scheme DocNest -derivedDataPath /tmp/docnest-run build && open /tmp/docnest-run/Build/Products/Debug/DocNest.app"
+command = "xcodebuild -project DocNest.xcodeproj -scheme DocNest -derivedDataPath /tmp/docnest-run build && open /tmp/docnest-run/Build/Products/Debug/DocNest.app"
 
 [[actions]]
 name = "Tests"

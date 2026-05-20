@@ -11,9 +11,9 @@ DocNest supports these import entry points:
 - Dock/open URL handling
 - watch folders
 
-All manual entry points route into [ImportPDFDocumentsUseCase.swift](/Users/kaps/Projects/docnest/DocNest/Domain/UseCases/ImportPDFDocumentsUseCase.swift) through [LibraryCoordinator.swift](/Users/kaps/Projects/docnest/DocNest/App/LibraryCoordinator.swift).
+All manual entry points route into [ImportPDFDocumentsUseCase.swift](DocNest/Domain/UseCases/ImportPDFDocumentsUseCase.swift) through [LibraryCoordinator.swift](DocNest/App/LibraryCoordinator.swift).
 
-Watch folders detect candidate files in [FolderMonitorService.swift](/Users/kaps/Projects/docnest/DocNest/Infrastructure/Library/FolderMonitorService.swift) and then hand the detected URLs back into the same import use case.
+Watch folders detect candidate files in [FolderMonitorService.swift](DocNest/Infrastructure/Library/FolderMonitorService.swift) and then hand the detected URLs back into the same import use case.
 
 ## Input Types
 

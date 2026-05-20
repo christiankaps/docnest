@@ -1,6 +1,6 @@
 # DocNest Lessons Learned
 
-This document captures practical lessons from building and stabilizing DocNest. For the normative product contract, see [requirements.md](/Users/kaps/Projects/docnest/docs/requirements.md).
+This document captures practical lessons from building and stabilizing DocNest. For the normative product contract, see [requirements.md](docs/requirements.md).
 
 ## Overview
 

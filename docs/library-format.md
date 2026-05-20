@@ -43,7 +43,7 @@ Storage rules:
 - filenames are sanitized for filesystem safety
 - collisions append a short content-hash suffix
 
-These rules are implemented in [DocumentStorageService.swift](/Users/kaps/Projects/docnest/DocNest/Infrastructure/Library/DocumentStorageService.swift).
+These rules are implemented in [DocumentStorageService.swift](DocNest/Infrastructure/Library/DocumentStorageService.swift).
 
 ## Previews
 

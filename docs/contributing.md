@@ -10,7 +10,7 @@ Contributions should preserve three things at the same time:
 
 ## AI Agent Workflow
 
-Repository-wide agent instructions live in [AGENTS.md](/Users/kaps/Projects/docnest/AGENTS.md).
+Repository-wide agent instructions live in [AGENTS.md](AGENTS.md).
 
 For code changes, the required workflow is:
 

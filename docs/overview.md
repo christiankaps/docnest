@@ -60,14 +60,14 @@ Users can open originals, reveal them in Finder, share them, or export them with
 
 ## Documentation Map
 
-- [README.md](/Users/kaps/Projects/docnest/README.md): entry point for the repository
-- [requirements.md](/Users/kaps/Projects/docnest/docs/requirements.md): detailed product behavior and scope
-- [architecture.md](/Users/kaps/Projects/docnest/docs/architecture.md): application structure and runtime responsibilities
-- [ui-concepts.md](/Users/kaps/Projects/docnest/docs/ui-concepts.md): basic UX concepts and interaction principles
-- [project-structure.md](/Users/kaps/Projects/docnest/docs/project-structure.md): directory layout and code ownership
-- [import-pipeline.md](/Users/kaps/Projects/docnest/docs/import-pipeline.md): import behavior across all entry points
-- [library-format.md](/Users/kaps/Projects/docnest/docs/library-format.md): `.docnestlibrary` package layout and invariants
-- [search-and-organization.md](/Users/kaps/Projects/docnest/docs/search-and-organization.md): labels, smart folders, filtering, and search
-- [testing.md](/Users/kaps/Projects/docnest/docs/testing.md): test strategy and commands
-- [release-process.md](/Users/kaps/Projects/docnest/docs/release-process.md): versioning and GitHub release flow
-- [contributing.md](/Users/kaps/Projects/docnest/docs/contributing.md): code, test, and documentation expectations
+- [README.md](README.md): entry point for the repository
+- [requirements.md](docs/requirements.md): detailed product behavior and scope
+- [architecture.md](docs/architecture.md): application structure and runtime responsibilities
+- [ui-concepts.md](docs/ui-concepts.md): basic UX concepts and interaction principles
+- [project-structure.md](docs/project-structure.md): directory layout and code ownership
+- [import-pipeline.md](docs/import-pipeline.md): import behavior across all entry points
+- [library-format.md](docs/library-format.md): `.docnestlibrary` package layout and invariants
+- [search-and-organization.md](docs/search-and-organization.md): labels, smart folders, filtering, and search
+- [testing.md](docs/testing.md): test strategy and commands
+- [release-process.md](docs/release-process.md): versioning and GitHub release flow
+- [contributing.md](docs/contributing.md): code, test, and documentation expectations
