@@ -82,6 +82,9 @@ An optional organizational container for labels in the sidebar. Label groups let
 ### 5.6 Watch Folder
 A user-configured directory on the local filesystem that the app monitors for new PDF files. When new PDFs appear in a watch folder, they are automatically imported into the library. Each watch folder can optionally auto-assign a set of labels to imported documents. Watch folders are a library-level setting managed from the app menu bar, not displayed in the sidebar.
 
+### 5.7 Document Location
+A reusable library-level place that identifies where a physical document original can be found, for example a filing cabinet, binder, shelf, or archive box. Locations are distinct from watch folders: locations describe physical originals, while watch folders import digital PDFs.
+
 ## 6. Functional Requirements
 
 ### 6.1 Library Management
@@ -89,6 +92,7 @@ A user-configured directory on the local filesystem that the app monitors for ne
 #### Must
 - User can create a new library.
 - User can open an existing library.
+- After successful creation, the new library immediately becomes the active open library.
 - App remembers the last successfully opened library and tries to reopen it automatically on next launch.
 - App must not automatically reopen a remembered library when that library has been moved to Trash. In that case the remembered library reference is cleared or ignored and the app starts in its normal no-library state.
 - If no last-opened library is known, or the stored library can no longer be validated, the app must not show a modal popup. Instead, it shows a welcome state directly in normal window content with actions to open or create a library.
@@ -167,6 +171,8 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - The left sidebar is not toggleable in open-library mode.
 - File list uses clear row separation with alternating row colors (even/odd) for readability at scale.
 - Metadata detail view.
+- Every document has an availability state: Unknown, Digital Only, or Physical. Unknown is a normal state and the default for migrated and newly imported documents until the user classifies them.
+- Physical documents can reference one reusable physical location. Digital Only and Unknown documents do not keep a physical location reference.
 - PDF preview for selected document.
 - Finder integration: open original file, show in Finder, export.
 - Export copies original stored PDFs as-is with descriptive filenames.
@@ -189,6 +195,12 @@ A user-configured directory on the local filesystem that the app monitors for ne
 - In the list, each label badge shows an "x" on hover; clicking it removes the label immediately without confirmation dialog.
 - The right inspector is a collapsible details column. It is toggleable from the toolbar and via the keyboard shortcut `Control-D`.
 - Document rename is available inline in both list and thumbnail modes, from the document context menu, and by Finder-like interaction on the currently selected document name.
+- The sidebar includes a Locations section with Unknown and Digital Only buckets plus user-created physical locations. Selecting a location filters the document list and combines with text search and label filters.
+- Users can create, rename, delete, and reorder physical locations from the sidebar.
+- Each physical location can have one optional cover photo selected from an image file. The app copies the selected picture into the library package so the library remains portable.
+- Deleting a physical location does not delete documents. Documents assigned to the deleted location are marked Unknown.
+- The inspector lets users set availability for one selected document or a multi-selection and assign a physical location when applicable.
+- The document list can show availability or location as an optional column.
 
 #### Should
 - Quick Look-like preview behavior.
@@ -578,7 +590,7 @@ Goal: app can create and open libraries cleanly.
 Current state:
 - Library manifest includes a `formatVersion` field. New libraries are created with the current format version.
 - On open, the app validates the library structure and decodes the manifest. If the manifest version is older than the app's current version, sequential migration steps are applied and the manifest is rewritten.
-- SwiftData schema versioning is implemented via `DocNestSchemaV1`, `DocNestSchemaV2`, `DocNestSchemaV3`, and `DocNestMigrationPlan` in `DocNestSchemaVersioning.swift`. The `ModelContainer` is opened with the migration plan. V1→V2 is a lightweight migration (adds `ocrCompleted: Bool` to `DocumentRecord`). V2→V3 is a lightweight migration (adds `WatchFolder` entity).
+- SwiftData schema versioning is implemented via `DocNestSchemaV1` through `DocNestSchemaV6` and `DocNestMigrationPlan` in `DocNestSchemaVersioning.swift`. The `ModelContainer` is opened with the migration plan. The current chain uses lightweight stages for V1→V2 (`ocrCompleted`), V2→V3 (`WatchFolder`), V3→V4 (`documentDate` rename from `sourceCreatedAt`), V4→V5 (label units and document-label values), and V5→V6 (document availability and reusable physical locations).
 
 ### Phase 2: Import Pipeline
 Goal: PDFs are imported robustly into library.

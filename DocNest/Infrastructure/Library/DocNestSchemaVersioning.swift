@@ -487,14 +487,189 @@ enum DocNestSchemaV4: VersionedSchema {
 }
 
 // MARK: - Schema V5
-// Adds optional label units and document-label value metadata. V5 references
-// top-level models so @Query descriptors remain compatible with current app code.
+// Adds optional label units and document-label value metadata.
 
 enum DocNestSchemaV5: VersionedSchema {
     static var versionIdentifier = Schema.Version(5, 0, 0)
 
     static var models: [any PersistentModel.Type] {
-        [DocumentRecord.self, LabelTag.self, SmartFolder.self, LabelGroup.self, WatchFolder.self, DocumentLabelValue.self]
+        [
+            DocumentRecord.self,
+            LabelTag.self,
+            SmartFolder.self,
+            LabelGroup.self,
+            WatchFolder.self,
+            DocumentLabelValue.self
+        ]
+    }
+
+    @Model
+    final class DocumentRecord {
+        var id: UUID
+        var originalFileName: String
+        var title: String
+        @Attribute(originalName: "sourceCreatedAt") var documentDate: Date?
+        var importedAt: Date
+        var pageCount: Int
+        var fileSize: Int64
+        var contentHash: String
+        var storedFilePath: String?
+        var fullText: String?
+        var ocrCompleted: Bool = false
+        var trashedAt: Date?
+
+        @Relationship(deleteRule: .nullify, inverse: \LabelTag.documents)
+        var labels: [LabelTag] = []
+
+        init(
+            id: UUID = UUID(),
+            originalFileName: String,
+            title: String,
+            documentDate: Date? = nil,
+            importedAt: Date,
+            pageCount: Int,
+            fileSize: Int64 = 0,
+            contentHash: String = "",
+            storedFilePath: String? = nil,
+            trashedAt: Date? = nil,
+            labels: [LabelTag] = []
+        ) {
+            self.id = id
+            self.originalFileName = originalFileName
+            self.title = title
+            self.documentDate = documentDate
+            self.importedAt = importedAt
+            self.pageCount = pageCount
+            self.fileSize = fileSize
+            self.contentHash = contentHash
+            self.storedFilePath = storedFilePath
+            self.trashedAt = trashedAt
+            self.labels = labels
+        }
+    }
+
+    @Model
+    final class LabelTag {
+        var id: UUID
+        var name: String
+        var unitSymbol: String?
+        var colorName: String
+        var icon: String?
+        var sortOrder: Int
+        var groupID: UUID?
+        var documents: [DocumentRecord] = []
+
+        init(
+            id: UUID = UUID(),
+            name: String,
+            unitSymbol: String? = nil,
+            colorName: String = "blue",
+            sortOrder: Int = 0,
+            groupID: UUID? = nil
+        ) {
+            self.id = id
+            self.name = name
+            self.unitSymbol = unitSymbol
+            self.colorName = colorName
+            self.sortOrder = sortOrder
+            self.groupID = groupID
+        }
+    }
+
+    @Model
+    final class SmartFolder {
+        var id: UUID
+        var name: String
+        var icon: String?
+        var labelIDs: [UUID]
+        var sortOrder: Int
+
+        init(id: UUID = UUID(), name: String, icon: String? = nil, labelIDs: [UUID] = [], sortOrder: Int = 0) {
+            self.id = id
+            self.name = name
+            self.icon = icon
+            self.labelIDs = labelIDs
+            self.sortOrder = sortOrder
+        }
+    }
+
+    @Model
+    final class LabelGroup {
+        var id: UUID
+        var name: String
+        var sortOrder: Int
+
+        init(id: UUID = UUID(), name: String, sortOrder: Int = 0) {
+            self.id = id
+            self.name = name
+            self.sortOrder = sortOrder
+        }
+    }
+
+    @Model
+    final class WatchFolder {
+        var id: UUID
+        var name: String
+        var icon: String?
+        var folderPath: String
+        var isEnabled: Bool
+        var labelIDs: [UUID]
+        var sortOrder: Int
+
+        init(
+            id: UUID = UUID(),
+            name: String,
+            icon: String? = nil,
+            folderPath: String,
+            isEnabled: Bool = true,
+            labelIDs: [UUID] = [],
+            sortOrder: Int = 0
+        ) {
+            self.id = id
+            self.name = name
+            self.icon = icon
+            self.folderPath = folderPath
+            self.isEnabled = isEnabled
+            self.labelIDs = labelIDs
+            self.sortOrder = sortOrder
+        }
+    }
+
+    @Model
+    final class DocumentLabelValue {
+        var id: UUID
+        var documentID: UUID
+        var labelID: UUID
+        var decimalString: String
+        var updatedAt: Date
+
+        init(
+            id: UUID = UUID(),
+            documentID: UUID,
+            labelID: UUID,
+            decimalString: String,
+            updatedAt: Date = .now
+        ) {
+            self.id = id
+            self.documentID = documentID
+            self.labelID = labelID
+            self.decimalString = decimalString
+            self.updatedAt = updatedAt
+        }
+    }
+}
+
+// MARK: - Schema V6
+// Adds document availability, reusable physical locations, and location photos.
+// V6 intentionally uses the current top-level model types because this is the
+// active schema the app queries. Before introducing V7, snapshot these V6 models
+// as nested types so later top-level edits do not mutate the historical checksum.
+
+enum DocNestSchemaV6: VersionedSchema {
+    static var versionIdentifier = Schema.Version(6, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [DocumentRecord.self, LabelTag.self, SmartFolder.self, LabelGroup.self, WatchFolder.self, DocumentLabelValue.self, DocumentLocation.self]
     }
 }
 
@@ -502,11 +677,11 @@ enum DocNestSchemaV5: VersionedSchema {
 
 enum DocNestMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [DocNestSchemaV1.self, DocNestSchemaV2.self, DocNestSchemaV3.self, DocNestSchemaV4.self, DocNestSchemaV5.self]
+        [DocNestSchemaV1.self, DocNestSchemaV2.self, DocNestSchemaV3.self, DocNestSchemaV4.self, DocNestSchemaV5.self, DocNestSchemaV6.self]
     }
 
     static var stages: [MigrationStage] {
-        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5]
+        [migrateV1toV2, migrateV2toV3, migrateV3toV4, migrateV4toV5, migrateV5toV6]
     }
 
     static let migrateV1toV2 = MigrationStage.lightweight(
@@ -527,5 +702,10 @@ enum DocNestMigrationPlan: SchemaMigrationPlan {
     static let migrateV4toV5 = MigrationStage.lightweight(
         fromVersion: DocNestSchemaV4.self,
         toVersion: DocNestSchemaV5.self
+    )
+
+    static let migrateV5toV6 = MigrationStage.lightweight(
+        fromVersion: DocNestSchemaV5.self,
+        toVersion: DocNestSchemaV6.self
     )
 }

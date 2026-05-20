@@ -28,10 +28,11 @@ struct DocumentListView: View {
         var pages: Bool
         var size: Bool
         var labels: Bool
+        var location: Bool
         var value: Bool
 
         var visibleCount: Int {
-            [imported, created, pages, size, labels, value].filter { $0 }.count
+            [imported, created, pages, size, labels, location, value].filter { $0 }.count
         }
     }
 
@@ -65,12 +66,14 @@ struct DocumentListView: View {
     @AppStorage("docListColumnWidthPages") private var pagesColumnWidth = 72.0
     @AppStorage("docListColumnWidthSize") private var sizeColumnWidth = 96.0
     @AppStorage("docListColumnWidthLabels") private var labelsColumnWidth = 300.0
+    @AppStorage("docListColumnWidthLocation") private var locationColumnWidth = 132.0
     @AppStorage("docListColumnWidthValue") private var valueColumnWidth = 120.0
     @AppStorage("docListShowImported") private var showsImportedColumn = true
     @AppStorage("docListShowCreated") private var showsCreatedColumn = true
     @AppStorage("docListShowPages") private var showsPagesColumn = true
     @AppStorage("docListShowSize") private var showsSizeColumn = true
     @AppStorage("docListShowLabels") private var showsLabelsColumn = true
+    @AppStorage("docListShowLocation") private var showsLocationColumn = true
     @AppStorage("docListShowValue") private var showsValueColumn = true
 
     private func recomputeSortedDocuments() {
@@ -145,6 +148,7 @@ struct DocumentListView: View {
             pages: showsPagesColumn,
             size: showsSizeColumn,
             labels: showsLabelsColumn,
+            location: showsLocationColumn,
             value: showsValueColumn && coordinator.activeLabelValueStatistics != nil
         )
         visibility.labels = true
@@ -162,6 +166,7 @@ struct DocumentListView: View {
             if visibility.pages { width += pagesColumnWidth }
             if visibility.size { width += sizeColumnWidth }
             if visibility.labels { width += effectiveLabelsColumnWidth }
+            if visibility.location { width += locationColumnWidth }
             if visibility.value { width += valueColumnWidth }
 
             width += Double(visibility.visibleCount) * listColumnSpacing
@@ -172,6 +177,7 @@ struct DocumentListView: View {
             \.pages,
             \.size,
             \.value,
+            \.location,
             \.created,
             \.imported,
             \.labels
@@ -338,6 +344,15 @@ struct DocumentListView: View {
                         }
                     }
 
+                    if effectiveOptionalColumns.location {
+                        ResizableColumnHeader(width: $locationColumnWidth, minWidth: 100) {
+                            Text("Location")
+                                .font(AppTypography.columnHeader)
+                                .lineLimit(1)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
                     if effectiveOptionalColumns.value {
                         ResizableColumnHeader(width: $valueColumnWidth, minWidth: 90) {
                             Text("Value")
@@ -471,6 +486,7 @@ struct DocumentListView: View {
         Toggle("Document Date", isOn: $showsCreatedColumn)
         Toggle("Pages", isOn: $showsPagesColumn)
         Toggle("Size", isOn: $showsSizeColumn)
+        Toggle("Location", isOn: $showsLocationColumn)
         Toggle("Value", isOn: $showsValueColumn)
         Divider()
         Text("Group By")
@@ -658,6 +674,18 @@ struct DocumentListView: View {
                     .onTapGesture(perform: onRowTap)
             }
 
+            if effectiveOptionalColumns.location {
+                Label(locationText(for: document), systemImage: locationIcon(for: document))
+                    .labelStyle(.titleAndIcon)
+                    .font(AppTypography.listMeta)
+                    .foregroundStyle(document.availability == .unknown ? .secondary : .primary)
+                    .lineLimit(1)
+                    .frame(width: locationColumnWidth, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onRowTap)
+                    .help(locationText(for: document))
+            }
+
             if effectiveOptionalColumns.value {
                 let documentValueText = valueText(for: document)
                 Text(documentValueText)
@@ -722,6 +750,32 @@ struct DocumentListView: View {
             return "-"
         }
         return ManageLabelValuesUseCase.formattedValue(decimal, unitSymbol: statistics.unitSymbol)
+    }
+
+    private func locationText(for document: DocumentRecord) -> String {
+        switch document.availability {
+        case .unknown:
+            return DocumentAvailability.unknown.displayName
+        case .digitalOnly:
+            return DocumentAvailability.digitalOnly.displayName
+        case .physical:
+            guard let locationID = document.physicalLocationID,
+                  let location = coordinator.allDocumentLocations.first(where: { $0.id == locationID }) else {
+                return DocumentAvailability.unknown.displayName
+            }
+            return location.name
+        }
+    }
+
+    private func locationIcon(for document: DocumentRecord) -> String {
+        switch document.availability {
+        case .unknown:
+            return DocumentAvailability.unknown.systemImage
+        case .digitalOnly:
+            return DocumentAvailability.digitalOnly.systemImage
+        case .physical:
+            return DocumentAvailability.physical.systemImage
+        }
     }
 
     private func resolvedStoredFileURL(for document: DocumentRecord) -> URL? {
@@ -1944,7 +1998,7 @@ private enum PreviewData {
     static let documentListContainer: ModelContainer = {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         do {
-            let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: configuration)
+            let container = try ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, DocumentLocation.self, configurations: configuration)
             let labels = LabelTag.makeSamples()
             container.mainContext.insert(labels.finance)
             container.mainContext.insert(labels.tax)

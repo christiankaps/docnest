@@ -307,6 +307,8 @@ struct DocumentInspectorView: View {
                     }
                 }
 
+                availabilitySection(for: document)
+
                 HStack(spacing: 8) {
                     MetadataPill(systemImage: "doc.plaintext", text: "\(document.pageCount) pages")
                     MetadataPill(systemImage: "externaldrive", text: document.formattedFileSize)
@@ -445,6 +447,52 @@ struct DocumentInspectorView: View {
                     createAndAssignLabel(to: document)
                 }
                 .disabled(newLabelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func availabilitySection(for document: DocumentRecord) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Availability")
+                .font(AppTypography.sectionTitle)
+
+            Picker("Availability", selection: availabilityBinding(for: document)) {
+                ForEach(DocumentAvailability.allCases) { availability in
+                    Label(availability.displayName, systemImage: availability.systemImage)
+                        .tag(availability)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if document.availability == .physical {
+                if coordinator.allDocumentLocations.isEmpty {
+                    Text("Create a location in the sidebar to place this document.")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("Location", selection: locationBinding(for: document)) {
+                        Text("Choose Location").tag(Optional<UUID>.none)
+                        ForEach(coordinator.allDocumentLocations) { location in
+                            Text(location.name).tag(Optional(location.id))
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    if let location = selectedLocation(for: document) {
+                        HStack(spacing: 10) {
+                            InspectorLocationThumbnail(location: location, libraryURL: libraryURL)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(location.name)
+                                    .font(AppTypography.body.weight(.medium))
+                                Text("Physical original")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -593,6 +641,8 @@ struct DocumentInspectorView: View {
                 MetadataPill(systemImage: "doc.text.viewfinder", text: "\(summary.documentsWithExtractedTextCount) searchable")
             }
 
+            multiSelectionAvailabilityControls
+
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
                 Button {
                     coordinator.exportDocuments(documents)
@@ -675,6 +725,37 @@ struct DocumentInspectorView: View {
         DocumentBulkActionSummary.documentsEligibleForDateExtraction(from: documents)
     }
 
+    private var multiSelectionAvailabilityControls: some View {
+        HStack(spacing: 8) {
+            Button {
+                setAvailability(.unknown, for: documents)
+            } label: {
+                Label("Unknown", systemImage: DocumentAvailability.unknown.systemImage)
+            }
+
+            Button {
+                setAvailability(.digitalOnly, for: documents)
+            } label: {
+                Label("Digital Only", systemImage: DocumentAvailability.digitalOnly.systemImage)
+            }
+
+            Menu {
+                if coordinator.allDocumentLocations.isEmpty {
+                    Text("No locations available")
+                } else {
+                    ForEach(coordinator.allDocumentLocations) { location in
+                        Button(location.name) {
+                            assignLocation(location, to: documents)
+                        }
+                    }
+                }
+            } label: {
+                Label("Set Location", systemImage: DocumentAvailability.physical.systemImage)
+            }
+        }
+        .buttonStyle(.bordered)
+    }
+
     @ViewBuilder
     private func documentDeletionSection(for documents: [DocumentRecord]) -> some View {
         Divider()
@@ -714,6 +795,60 @@ struct DocumentInspectorView: View {
                 }
             }
         )
+    }
+
+    private func availabilityBinding(for document: DocumentRecord) -> Binding<DocumentAvailability> {
+        Binding(
+            get: { document.availability },
+            set: { availability in
+                do {
+                    try ManageDocumentLocationsUseCase.setAvailability(availability, for: [document], using: modelContext)
+                } catch {
+                    inspectorErrorMessage = error.localizedDescription
+                }
+            }
+        )
+    }
+
+    private func locationBinding(for document: DocumentRecord) -> Binding<UUID?> {
+        Binding(
+            get: { document.physicalLocationID },
+            set: { locationID in
+                do {
+                    if let locationID,
+                       let location = coordinator.allDocumentLocations.first(where: { $0.id == locationID }) {
+                        try ManageDocumentLocationsUseCase.assign(location, to: [document], using: modelContext)
+                    } else {
+                        document.availabilityRaw = DocumentAvailability.physical.rawValue
+                        document.physicalLocationID = nil
+                        try modelContext.save()
+                    }
+                } catch {
+                    inspectorErrorMessage = error.localizedDescription
+                }
+            }
+        )
+    }
+
+    private func selectedLocation(for document: DocumentRecord) -> DocumentLocation? {
+        guard let locationID = document.physicalLocationID else { return nil }
+        return coordinator.allDocumentLocations.first { $0.id == locationID }
+    }
+
+    private func setAvailability(_ availability: DocumentAvailability, for documents: [DocumentRecord]) {
+        do {
+            try ManageDocumentLocationsUseCase.setAvailability(availability, for: documents, using: modelContext)
+        } catch {
+            inspectorErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func assignLocation(_ location: DocumentLocation, to documents: [DocumentRecord]) {
+        do {
+            try ManageDocumentLocationsUseCase.assign(location, to: documents, using: modelContext)
+        } catch {
+            inspectorErrorMessage = error.localizedDescription
+        }
     }
 
     private func toggleLabel(_ label: LabelTag, for document: DocumentRecord) {
@@ -1213,6 +1348,34 @@ private struct MetadataPill: View {
     }
 }
 
+private struct InspectorLocationThumbnail: View {
+    let location: DocumentLocation
+    let libraryURL: URL?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "archivebox.fill")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.accentColor.opacity(0.10))
+            }
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    private var image: NSImage? {
+        guard let libraryURL, let path = location.coverPhotoPath else { return nil }
+        return NSImage(contentsOf: DocumentLibraryService.locationPhotoURL(for: path, libraryURL: libraryURL))
+    }
+}
+
 struct DocumentBulkActionSummary {
     let selectedCount: Int
     let exportableCount: Int
@@ -1358,7 +1521,7 @@ private enum DocumentInspectorPreviewData {
     @MainActor
     static func make() -> (container: ModelContainer, document: DocumentRecord)? {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        guard let container = try? ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, configurations: config) else {
+        guard let container = try? ModelContainer(for: DocumentRecord.self, LabelTag.self, DocumentLabelValue.self, DocumentLocation.self, configurations: config) else {
             return nil
         }
 

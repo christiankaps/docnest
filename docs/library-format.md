@@ -17,6 +17,7 @@ The package contains these required directories:
 - `Metadata/`
 - `Originals/`
 - `Previews/`
+- `LocationPhotos/`
 - `Diagnostics/`
 
 `DocumentLibraryService` treats these directories as required package structure and can recreate missing ones during repair.
@@ -29,7 +30,7 @@ The package contains these required directories:
 - `library.json`, the package manifest
 - `.lock`, the cooperative single-instance lock file for an open library
 
-The manifest currently records the library format version and creation date.
+The manifest currently records the library format version and creation date. Format version 2 adds managed physical-location photos.
 
 ## Originals
 
@@ -48,6 +49,10 @@ These rules are implemented in [DocumentStorageService.swift](/Users/kaps/Projec
 
 `Previews/` is reserved for derived preview data and related caches. The app currently treats it as part of the required package structure even when little or no derived data is present.
 
+## Location Photos
+
+`LocationPhotos/` stores app-managed cover pictures for reusable physical document locations. When a user chooses a location picture, DocNest copies the image into this directory with a filename based on the stable location ID. Removing or replacing the picture removes the old managed copy when possible.
+
 ## Diagnostics
 
 `Diagnostics/` is used for integrity and repair-related output, including integrity reports written during validation and repair workflows.
@@ -62,6 +67,8 @@ The package format and the SwiftData schema version are related but distinct:
 `DocumentLibraryService` validates the manifest version and can migrate or repair the package structure as needed. `DocNestSchemaVersioning` handles the database schema side.
 
 The SwiftData schema also stores document-label value rows for labels that define a unit. These rows are supplemental metadata keyed by stable document and label UUIDs. The many-to-many label assignment remains the source of truth for whether a label is assigned; value rows can be pruned when their document or label no longer exists.
+
+The SwiftData schema also stores document availability (`Unknown`, `Digital Only`, or `Physical`), reusable physical locations, and each physical document's optional location UUID. A physical location may reference one managed cover picture in `LocationPhotos/`.
 
 ## Validation and Repair
 

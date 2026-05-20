@@ -42,6 +42,18 @@ Smart folders:
 - can be reordered and edited
 - do not own documents
 
+## Physical Locations
+
+Locations describe where a physical original can be found. Each document is classified as Unknown, Digital Only, or Physical. Physical documents can reference one reusable location, such as a filing cabinet or archive box.
+
+Location rules:
+
+- Unknown is a normal state and the default for migrated and newly imported documents
+- Digital Only and Unknown documents do not keep a physical location reference
+- deleting a location marks its assigned documents Unknown rather than deleting them
+- each location can have one optional cover photo copied into the library package
+- the sidebar shows Unknown, Digital Only, and physical-location filters
+
 ## Filter Semantics
 
 Label filters use AND semantics. If multiple labels are active, a document must contain all selected labels to match.
@@ -57,6 +69,7 @@ Search operates across document snapshots built from:
 - title
 - original filename
 - label names
+- physical location names
 - extracted full text
 
 `SearchDocumentsUseCase` evaluates the current text query alongside the current label filter context.
@@ -67,6 +80,7 @@ The sidebar combines:
 
 - static sections such as all documents, recent, unlabeled, and bin
 - smart folders
+- physical location filters
 - label groups and labels
 
 Counts shown in the sidebar are scoped to the active section and filter context rather than being naive global totals.

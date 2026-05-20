@@ -712,11 +712,21 @@ final class LibrarySessionController: ObservableObject {
             return
         }
 
+        createLibrary(at: url)
+    }
+
+    @discardableResult
+    func createLibrary(at url: URL) -> URL? {
         do {
             let libraryURL = try DocumentLibraryService.createLibrary(at: url)
             openValidatedLibrary(DocumentLibraryService.accessLibrary(at: libraryURL))
+            guard isSelectedLibrary(libraryURL), modelContainer != nil else {
+                return nil
+            }
+            return libraryURL
         } catch {
             libraryErrorMessage = error.localizedDescription
+            return nil
         }
     }
 

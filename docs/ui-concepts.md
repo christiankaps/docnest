@@ -67,7 +67,7 @@ A `.docnestlibrary` package is the user's local document collection. Finder pres
 
 ### Document
 
-A document is an imported PDF with a stable identity, title, stored file path, metadata, OCR/search text, document date, and optional labels.
+A document is an imported PDF with a stable identity, title, stored file path, metadata, OCR/search text, document date, optional labels, and an availability state.
 
 ### Label
 
@@ -86,6 +86,10 @@ A label group organizes labels in the sidebar. Groups affect presentation only a
 ### Watch Folder
 
 A watch folder is a library setting that monitors a local filesystem folder for new PDFs. Watch folders are managed from settings, not shown as sidebar navigation.
+
+### Physical Location
+
+A physical location is a reusable place where an original paper document can be found. Locations appear in the sidebar as filters, can be assigned from the inspector, and can have one cover photo copied into the library for visual recognition.
 
 ## Interaction Principles
 

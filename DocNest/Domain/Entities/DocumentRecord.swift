@@ -1,6 +1,36 @@
 import Foundation
 import SwiftData
 
+enum DocumentAvailability: String, CaseIterable, Identifiable, Sendable {
+    case unknown
+    case digitalOnly
+    case physical
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .unknown: "Unknown"
+        case .digitalOnly: "Digital Only"
+        case .physical: "Physical"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .unknown: "questionmark.folder"
+        case .digitalOnly: "desktopcomputer"
+        case .physical: "archivebox"
+        }
+    }
+}
+
+enum DocumentLocationFilter: Hashable, Sendable {
+    case unknown
+    case digitalOnly
+    case location(UUID)
+}
+
 @Model
 final class DocumentRecord {
     var id: UUID
@@ -18,6 +48,8 @@ final class DocumentRecord {
     var fullText: String?
     var ocrCompleted: Bool = false
     var trashedAt: Date?
+    var availabilityRaw: String = DocumentAvailability.unknown.rawValue
+    var physicalLocationID: UUID?
 
     @Relationship(deleteRule: .nullify, inverse: \LabelTag.documents)
     var labels: [LabelTag] = []
@@ -32,6 +64,8 @@ final class DocumentRecord {
         fileSize: Int64 = 0,
         contentHash: String = "",
         storedFilePath: String? = nil,
+        availability: DocumentAvailability = .unknown,
+        physicalLocationID: UUID? = nil,
         trashedAt: Date? = nil,
         labels: [LabelTag] = []
     ) {
@@ -44,14 +78,46 @@ final class DocumentRecord {
         self.fileSize = fileSize
         self.contentHash = contentHash
         self.storedFilePath = storedFilePath
+        self.availabilityRaw = availability.rawValue
+        self.physicalLocationID = availability == .physical ? physicalLocationID : nil
         self.trashedAt = trashedAt
         self.labels = labels
     }
 }
 
 extension DocumentRecord {
+    var availability: DocumentAvailability {
+        get { DocumentAvailability(rawValue: availabilityRaw) ?? .unknown }
+        set {
+            availabilityRaw = newValue.rawValue
+            if newValue != .physical {
+                physicalLocationID = nil
+            }
+        }
+    }
+
     var formattedFileSize: String {
         ByteCountFormatter.documentFileSize.string(fromByteCount: fileSize)
+    }
+}
+
+@Model
+final class DocumentLocation {
+    var id: UUID
+    var name: String
+    var coverPhotoPath: String?
+    var sortOrder: Int
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        coverPhotoPath: String? = nil,
+        sortOrder: Int = 0
+    ) {
+        self.id = id
+        self.name = name
+        self.coverPhotoPath = coverPhotoPath
+        self.sortOrder = sortOrder
     }
 }
 

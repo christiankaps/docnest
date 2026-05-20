@@ -5,6 +5,7 @@ import SwiftData
 enum SidebarSelection: Hashable {
     case section(LibrarySection)
     case smartFolder(PersistentIdentifier)
+    case location(DocumentLocationFilter)
 }
 
 struct ImportProgress {
@@ -46,11 +47,13 @@ final class LibraryCoordinator {
         let smartFolderCounts: [UUID: Int]
         let sectionCounts: [LibrarySection: Int]
         let labelCounts: [UUID: Int]
+        let locationCounts: LocationSidebarCounts
     }
 
     private enum DerivedSidebarSelection: Sendable {
         case section(LibrarySection)
         case smartFolder(UUID)
+        case location(DocumentLocationFilter)
     }
 
     // MARK: - Injected dependencies (set once by RootView)
@@ -85,6 +88,8 @@ final class LibraryCoordinator {
     private(set) var allLabelGroups: [LabelGroup] = []
     private(set) var allSmartFolders: [SmartFolder] = []
     private(set) var smartFolderCounts: [PersistentIdentifier: Int] = [:]
+    private(set) var allDocumentLocations: [DocumentLocation] = []
+    private(set) var locationSidebarCounts = LocationSidebarCounts.empty
     private(set) var allWatchFolders: [WatchFolder] = []
     private(set) var watchFolderStatuses: [UUID: WatchFolderStatus] = [:]
     private(set) var activeDocuments: [DocumentRecord] = []
@@ -104,10 +109,12 @@ final class LibraryCoordinator {
     private(set) var activeLabelValueStringsByDocumentID: [UUID: String] = [:]
     private(set) var labelValueStringsByDocumentIDAndLabelID: [UUID: [UUID: String]] = [:]
     private var labelsByUUID: [UUID: LabelTag] = [:]
+    private var locationsByUUID: [UUID: DocumentLocation] = [:]
     private var labelUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
     private var smartFoldersByPersistentID: [PersistentIdentifier: SmartFolder] = [:]
     private var documentUUIDByPersistentID: [PersistentIdentifier: UUID] = [:]
     private var documentByUUID: [UUID: DocumentRecord] = [:]
+    private var allDocumentsCache: [DocumentRecord] = []
     private var filteredDocumentByPersistentID: [PersistentIdentifier: DocumentRecord] = [:]
     private var filteredDocumentOrderByPersistentID: [PersistentIdentifier: Int] = [:]
     private var activeDocumentSnapshots: [SearchDocumentsUseCase.Snapshot] = []
@@ -200,16 +207,19 @@ final class LibraryCoordinator {
         allLabels: [LabelTag],
         allSmartFolders: [SmartFolder] = [],
         allLabelGroups: [LabelGroup] = [],
+        allDocumentLocations: [DocumentLocation] = [],
         allWatchFolders: [WatchFolder] = [],
         allLabelValues: [DocumentLabelValue] = []
     ) {
         syncMetadata(labels: allLabels, smartFolders: allSmartFolders, labelGroups: allLabelGroups, recompute: false)
+        syncDocumentLocations(allDocumentLocations, recompute: false)
         syncWatchFolders(allWatchFolders, refreshMonitors: false)
         syncLabelValues(allLabelValues, recompute: false)
         syncDocuments(allDocuments, recompute: true)
     }
 
     func syncDocuments(_ allDocuments: [DocumentRecord], recompute: Bool = true) {
+        allDocumentsCache = allDocuments
         documentUUIDByPersistentID = Dictionary(uniqueKeysWithValues: allDocuments.map { ($0.persistentModelID, $0.id) })
         documentByUUID = Dictionary(uniqueKeysWithValues: allDocuments.map { ($0.id, $0) })
 
@@ -223,12 +233,17 @@ final class LibraryCoordinator {
         trashedSnapshots.reserveCapacity(min(allDocuments.count / 8, allDocuments.count))
 
         for document in allDocuments {
+            let resolvedLocationID = document.physicalLocationID.flatMap { locationsByUUID[$0] == nil ? nil : $0 }
+            let locationName = resolvedLocationID.flatMap { locationsByUUID[$0]?.name }
             let snapshot = SearchDocumentsUseCase.Snapshot(
                 documentID: document.id,
                 labelIDs: Set(document.labels.map(\.id)),
+                availability: document.availability,
+                physicalLocationID: resolvedLocationID,
                 title: document.title,
                 originalFileName: document.originalFileName,
                 labelNames: document.labels.map(\.name),
+                locationName: locationName,
                 fullText: document.fullText
             )
             if document.trashedAt == nil {
@@ -249,6 +264,14 @@ final class LibraryCoordinator {
 
         if recompute {
             recomputeFilteredDocuments()
+        }
+    }
+
+    func syncDocumentLocations(_ locations: [DocumentLocation], recompute: Bool = true) {
+        allDocumentLocations = locations
+        locationsByUUID = Dictionary(uniqueKeysWithValues: locations.map { ($0.id, $0) })
+        if recompute {
+            syncDocuments(allDocumentsCache, recompute: true)
         }
     }
 
@@ -341,6 +364,7 @@ final class LibraryCoordinator {
             uniqueKeysWithValues: allSmartFolders.map { ($0.id, Set($0.labelIDs)) }
         )
         let allLabelIDs = allLabels.map(\.id)
+        let allLocationIDs = allDocumentLocations.map(\.id)
         let recentLimit = recentDocumentLimit
         let query = searchText
         let activeSnapshots = activeDocumentSnapshots
@@ -357,6 +381,7 @@ final class LibraryCoordinator {
                     trashedDocuments: trashedSnapshots,
                     smartFolderLabelUUIDs: smartFolderLabelUUIDs,
                     allLabelIDs: allLabelIDs,
+                    allLocationIDs: allLocationIDs,
                     recentLimit: recentLimit
                 )
             } catch is CancellationError {
@@ -383,6 +408,7 @@ final class LibraryCoordinator {
                         (label.persistentModelID, result.labelCounts[label.id, default: 0])
                     })
                 )
+                self.locationSidebarCounts = result.locationCounts
                 self.rebuildFilteredDocumentLookups()
                 self.pruneSelectedDocumentIDs()
                 self.scheduleLabelValueStatisticsRecompute()
@@ -431,6 +457,8 @@ final class LibraryCoordinator {
             } else {
                 .section(.allDocuments)
             }
+        case .location(let locationFilter):
+            .location(locationFilter)
         }
     }
 
@@ -442,6 +470,7 @@ final class LibraryCoordinator {
         trashedDocuments: [SearchDocumentsUseCase.Snapshot],
         smartFolderLabelUUIDs: [UUID: Set<UUID>],
         allLabelIDs: [UUID],
+        allLocationIDs: [UUID],
         recentLimit: Int
     ) throws -> DerivedStateResult {
         let sectionDocuments: [SearchDocumentsUseCase.Snapshot]
@@ -462,13 +491,20 @@ final class LibraryCoordinator {
                 query: "",
                 selectedLabelIDs: folderLabels
             )
+        case .location(let locationFilter):
+            sectionDocuments = try SearchDocumentsUseCase.filter(
+                activeDocuments,
+                query: "",
+                selectedLabelIDs: [],
+                selectedLocation: locationFilter
+            )
         }
 
         let filteredDocuments: [SearchDocumentsUseCase.Snapshot]
         switch sidebarSelection {
         case .smartFolder:
             filteredDocuments = sectionDocuments
-        case .section:
+        case .section, .location:
             filteredDocuments = try SearchDocumentsUseCase.filter(
                 sectionDocuments,
                 query: query,
@@ -499,6 +535,26 @@ final class LibraryCoordinator {
             }
         }
 
+        let locationCountSource: [SearchDocumentsUseCase.Snapshot]
+        switch sidebarSelection {
+        case .location:
+            locationCountSource = activeDocuments
+        default:
+            locationCountSource = sectionDocuments
+        }
+        let isSmartFolderSelection: Bool
+        if case .smartFolder = sidebarSelection {
+            isSmartFolderSelection = true
+        } else {
+            isSmartFolderSelection = false
+        }
+        let locationCountDocuments = try SearchDocumentsUseCase.filter(
+            locationCountSource,
+            query: isSmartFolderSelection ? "" : query,
+            selectedLabelIDs: isSmartFolderSelection ? [] : selectedLabelUUIDs
+        )
+        let locationCounts = computeLocationCounts(activeDocuments: locationCountDocuments, allLocationIDs: allLocationIDs)
+
         return DerivedStateResult(
             filteredDocumentIDs: filteredDocuments.map(\.documentID),
             smartFolderCounts: smartFolderCounts,
@@ -508,7 +564,8 @@ final class LibraryCoordinator {
                 .needsLabels: needsLabelsCount,
                 .bin: trashedDocuments.count
             ],
-            labelCounts: labelCounts
+            labelCounts: labelCounts,
+            locationCounts: locationCounts
         )
     }
 
@@ -536,7 +593,44 @@ final class LibraryCoordinator {
                 query: "",
                 selectedLabelIDs: labelIDs
             ))?.count ?? 0
+        case .location(let locationFilter):
+            return (try? SearchDocumentsUseCase.filter(
+                activeDocuments,
+                query: "",
+                selectedLabelIDs: [],
+                selectedLocation: locationFilter
+            ))?.count ?? 0
         }
+    }
+
+    nonisolated private static func computeLocationCounts(
+        activeDocuments: [SearchDocumentsUseCase.Snapshot],
+        allLocationIDs: [UUID]
+    ) -> LocationSidebarCounts {
+        var unknownCount = 0
+        var digitalOnlyCount = 0
+        var countsByLocationID = Dictionary(uniqueKeysWithValues: allLocationIDs.map { ($0, 0) })
+
+        for document in activeDocuments {
+            switch document.availability {
+            case .unknown:
+                unknownCount += 1
+            case .digitalOnly:
+                digitalOnlyCount += 1
+            case .physical:
+                if let locationID = document.physicalLocationID {
+                    countsByLocationID[locationID, default: 0] += 1
+                } else {
+                    unknownCount += 1
+                }
+            }
+        }
+
+        return LocationSidebarCounts(
+            unknownCount: unknownCount,
+            digitalOnlyCount: digitalOnlyCount,
+            countsByLocationID: countsByLocationID
+        )
     }
 
     nonisolated private static func computeSmartFolderCounts(
@@ -662,7 +756,7 @@ final class LibraryCoordinator {
         switch derivedSidebarSelection {
         case .smartFolder(let folderID):
             labelIDs = Set(allSmartFolders.first { $0.id == folderID }?.labelIDs ?? [])
-        case .section:
+        case .section, .location:
             labelIDs = resolvedLabelUUIDs(from: labelFilterSelection.appliedSelection)
         }
 
@@ -1048,6 +1142,28 @@ final class LibraryCoordinator {
             alreadyAssignedCount: alreadyAssignedCount
         )
         return true
+    }
+
+    func assignDroppedDocumentsToLocation(_ payloadItems: [String], location: DocumentLocation) -> Bool {
+        guard let modelContext else { return false }
+        let documentIDs = parseDroppedDocumentIDs(payloadItems)
+        guard !documentIDs.isEmpty else {
+            return false
+        }
+
+        let candidateDocuments = activeDocuments.filter { documentIDs.contains($0.id) }
+        guard !candidateDocuments.isEmpty else {
+            return false
+        }
+
+        do {
+            try ManageDocumentLocationsUseCase.assign(location, to: candidateDocuments, using: modelContext)
+            recomputeFilteredDocuments()
+            return true
+        } catch {
+            importSummaryMessage = error.localizedDescription
+            return false
+        }
     }
 
     func confirmDroppedLabelAssignment(allDocuments: [DocumentRecord]) {

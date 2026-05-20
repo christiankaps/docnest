@@ -58,6 +58,7 @@ private enum TestImportFixtures {
         return try ModelContainer(
             for: DocumentRecord.self,
             LabelTag.self,
+            DocumentLocation.self,
             configurations: config
         )
     }
@@ -176,7 +177,128 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(createdLibraryURL.pathExtension, DocumentLibraryService.packageExtension)
         XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("Metadata", isDirectory: true).path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("Originals", isDirectory: true).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("LocationPhotos", isDirectory: true).path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: createdLibraryURL.appendingPathComponent("Metadata/library.json").path))
+    }
+
+    @MainActor
+    func testDocumentLocationUseCaseAssignsAndClearsAvailability() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, DocumentLocation.self, configurations: config)
+        let context = container.mainContext
+        let document = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1)
+        context.insert(document)
+
+        let location = try ManageDocumentLocationsUseCase.create(named: " Filing Cabinet A ", using: context)
+        try ManageDocumentLocationsUseCase.assign(location, to: [document], using: context)
+
+        XCTAssertEqual(document.availability, .physical)
+        XCTAssertEqual(document.physicalLocationID, location.id)
+        XCTAssertEqual(location.name, "Filing Cabinet A")
+
+        try ManageDocumentLocationsUseCase.setAvailability(.digitalOnly, for: [document], using: context)
+
+        XCTAssertEqual(document.availability, .digitalOnly)
+        XCTAssertNil(document.physicalLocationID)
+    }
+
+    @MainActor
+    func testDeletingDocumentLocationMarksAssignedDocumentsUnknown() throws {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentRecord.self, DocumentLocation.self, configurations: config)
+        let context = container.mainContext
+        let document = DocumentRecord(originalFileName: "invoice.pdf", title: "Invoice", importedAt: .now, pageCount: 1)
+        context.insert(document)
+
+        let location = try ManageDocumentLocationsUseCase.create(named: "Archive Box", using: context)
+        try ManageDocumentLocationsUseCase.assign(location, to: [document], using: context)
+
+        try ManageDocumentLocationsUseCase.delete(location, libraryURL: nil, using: context)
+
+        XCTAssertEqual(document.availability, .unknown)
+        XCTAssertNil(document.physicalLocationID)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<DocumentLocation>()).isEmpty)
+    }
+
+    @MainActor
+    func testDocumentLocationPhotoCopyReplaceAndRemove() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(at: tempRoot.appendingPathComponent("Photo Library"))
+        let firstPhotoURL = tempRoot.appendingPathComponent("first.png")
+        let secondPhotoURL = tempRoot.appendingPathComponent("second.jpg")
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try Data("first".utf8).write(to: firstPhotoURL)
+        try Data("second".utf8).write(to: secondPhotoURL)
+
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: DocumentLocation.self, configurations: config)
+        let context = container.mainContext
+        let location = try ManageDocumentLocationsUseCase.create(named: "Cabinet", using: context)
+
+        try ManageDocumentLocationsUseCase.setCoverPhoto(from: firstPhotoURL, for: location, libraryURL: libraryURL, using: context)
+        let firstPath = try XCTUnwrap(location.coverPhotoPath)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: DocumentLibraryService.locationPhotoURL(for: firstPath, libraryURL: libraryURL).path))
+
+        try ManageDocumentLocationsUseCase.setCoverPhoto(from: secondPhotoURL, for: location, libraryURL: libraryURL, using: context)
+        let secondPath = try XCTUnwrap(location.coverPhotoPath)
+        XCTAssertNotEqual(firstPath, secondPath)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: DocumentLibraryService.locationPhotoURL(for: firstPath, libraryURL: libraryURL).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: DocumentLibraryService.locationPhotoURL(for: secondPath, libraryURL: libraryURL).path))
+
+        try ManageDocumentLocationsUseCase.removeCoverPhoto(for: location, libraryURL: libraryURL, using: context)
+        XCTAssertNil(location.coverPhotoPath)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: DocumentLibraryService.locationPhotoURL(for: secondPath, libraryURL: libraryURL).path))
+    }
+
+    @MainActor
+    func testCreatingLibraryThroughSessionOpensCreatedLibrary() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Session Created Library")
+        let controller = LibrarySessionController()
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+        defer {
+            controller.closeLibrary()
+        }
+
+        let createdLibraryURL = try XCTUnwrap(controller.createLibrary(at: libraryURL))
+
+        XCTAssertEqual(controller.selectedLibraryURL?.standardizedFileURL.path, createdLibraryURL.standardizedFileURL.path)
+        XCTAssertNotNil(controller.modelContainer)
+        XCTAssertNil(controller.libraryErrorMessage)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: "selectedLibraryPath"), createdLibraryURL.path)
+    }
+
+    @MainActor
+    func testCreatingLibraryThroughSessionReplacesCurrentOpenLibrary() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let firstLibraryURL = tempRoot.appendingPathComponent("First Library")
+        let secondLibraryURL = tempRoot.appendingPathComponent("Second Library")
+        let controller = LibrarySessionController()
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+        defer {
+            controller.closeLibrary()
+        }
+
+        let firstCreatedLibraryURL = try XCTUnwrap(controller.createLibrary(at: firstLibraryURL))
+        let secondCreatedLibraryURL = try XCTUnwrap(controller.createLibrary(at: secondLibraryURL))
+
+        XCTAssertEqual(controller.selectedLibraryURL?.standardizedFileURL.path, secondCreatedLibraryURL.standardizedFileURL.path)
+        XCTAssertNotEqual(controller.selectedLibraryURL?.standardizedFileURL.path, firstCreatedLibraryURL.standardizedFileURL.path)
+        XCTAssertNil(DocumentLibraryService.readLockFile(for: firstCreatedLibraryURL))
+        XCTAssertNotNil(DocumentLibraryService.readLockFile(for: secondCreatedLibraryURL))
     }
 
     func testValidateLibraryRejectsMissingManifest() throws {
@@ -1113,6 +1235,92 @@ final class DocNestTests: XCTestCase {
     }
 
     @MainActor
+    func testOpeningV5LibraryMigratesDocumentsToUnknownAvailability() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = try DocumentLibraryService.createLibrary(
+            at: tempRoot.appendingPathComponent("V5 Library")
+        )
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let configuration = ModelConfiguration(
+            "DocNestLibrary",
+            url: DocumentLibraryService.metadataStoreURL(for: libraryURL),
+            cloudKitDatabase: .none
+        )
+        let v5Schema = Schema(versionedSchema: DocNestSchemaV5.self)
+        do {
+            let v5Container = try ModelContainer(for: v5Schema, configurations: configuration)
+            let context = v5Container.mainContext
+            let document = DocNestSchemaV5.DocumentRecord(
+                originalFileName: "invoice.pdf",
+                title: "Invoice",
+                importedAt: .now,
+                pageCount: 1
+            )
+            context.insert(document)
+            try context.save()
+        }
+
+        let migratedContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
+        let context = migratedContainer.mainContext
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        let locations = try context.fetch(FetchDescriptor<DocumentLocation>())
+
+        XCTAssertEqual(documents.count, 1)
+        XCTAssertEqual(documents.first?.availability, .unknown)
+        XCTAssertNil(documents.first?.physicalLocationID)
+        XCTAssertTrue(locations.isEmpty)
+    }
+
+    @MainActor
+    func testOpeningReleasedV5LibraryFixtureMigratesDocumentsToUnknownAvailability() throws {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let fixtureURL = testFileURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/ReleasedV5Library.docnestlibrary", isDirectory: true)
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("ReleasedV5Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: fixtureURL, to: libraryURL)
+
+        let repair = try DocumentLibraryService.repairLibraryPackageIfNeeded(at: libraryURL)
+        let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: libraryURL)
+        let migration = try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
+
+        XCTAssertTrue(repair.performedRepair)
+        XCTAssertEqual(migration.toFormatVersion, DocumentLibraryService.currentFormatVersion)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: libraryURL.appendingPathComponent("LocationPhotos", isDirectory: true).path))
+
+        let migratedContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
+        let context = migratedContainer.mainContext
+        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
+        let labels = try context.fetch(FetchDescriptor<LabelTag>())
+        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
+        let locations = try context.fetch(FetchDescriptor<DocumentLocation>())
+
+        XCTAssertEqual(documents.count, 1)
+        XCTAssertEqual(labels.count, 1)
+        XCTAssertEqual(values.count, 1)
+        XCTAssertTrue(locations.isEmpty)
+        XCTAssertEqual(documents.first?.title, "Released V5 Document")
+        XCTAssertEqual(documents.first?.labels.first?.name, "Fixture Label")
+        XCTAssertEqual(documents.first?.availability, .unknown)
+        XCTAssertNil(documents.first?.physicalLocationID)
+        XCTAssertEqual(labels.first?.unitSymbol, "EUR")
+        XCTAssertEqual(values.first?.decimalString, "42.50")
+    }
+
+    @MainActor
     func testOpeningV4LibraryMigratesLabelsAndSupportsLabelValues() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1154,6 +1362,7 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(documents.count, 1)
         XCTAssertEqual(labels.count, 1)
         XCTAssertEqual(documents.first?.labels.first?.name, "Invoice")
+        XCTAssertEqual(documents.first?.availability, .unknown)
         XCTAssertNil(labels.first?.unitSymbol)
 
         guard let document = documents.first, let label = labels.first else {
@@ -1194,6 +1403,7 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(documents.count, 1)
         XCTAssertEqual(labels.count, 1)
         XCTAssertEqual(documents.first?.labels.first?.name, "Invoice")
+        XCTAssertEqual(documents.first?.availability, .unknown)
         XCTAssertNil(labels.first?.unitSymbol)
 
         guard let document = documents.first, let label = labels.first else {
@@ -2474,6 +2684,184 @@ final class DocNestTests: XCTestCase {
 
         XCTAssertEqual(filteredDocuments.count, 1)
         XCTAssertEqual(filteredDocuments.first?.title, "March Invoice")
+    }
+
+    func testSearchSnapshotsMatchAndFilterDocumentLocations() throws {
+        let cabinetID = UUID()
+        let shelfID = UUID()
+        let physicalMatch = SearchDocumentsUseCase.Snapshot(
+            documentID: UUID(),
+            labelIDs: [],
+            availability: .physical,
+            physicalLocationID: cabinetID,
+            title: "Insurance Policy",
+            originalFileName: "insurance.pdf",
+            labelNames: [],
+            locationName: "Filing Cabinet A",
+            fullText: nil
+        )
+        let otherPhysical = SearchDocumentsUseCase.Snapshot(
+            documentID: UUID(),
+            labelIDs: [],
+            availability: .physical,
+            physicalLocationID: shelfID,
+            title: "Warranty",
+            originalFileName: "warranty.pdf",
+            labelNames: [],
+            locationName: "Shelf B",
+            fullText: nil
+        )
+        let digitalOnly = SearchDocumentsUseCase.Snapshot(
+            documentID: UUID(),
+            labelIDs: [],
+            availability: .digitalOnly,
+            physicalLocationID: nil,
+            title: "Download",
+            originalFileName: "download.pdf",
+            labelNames: [],
+            locationName: nil,
+            fullText: nil
+        )
+        let physicalWithoutLocation = SearchDocumentsUseCase.Snapshot(
+            documentID: UUID(),
+            labelIDs: [],
+            availability: .physical,
+            physicalLocationID: nil,
+            title: "Loose Paper",
+            originalFileName: "loose-paper.pdf",
+            labelNames: [],
+            locationName: nil,
+            fullText: nil
+        )
+
+        let documents = [physicalMatch, otherPhysical, digitalOnly, physicalWithoutLocation]
+
+        XCTAssertEqual(
+            try SearchDocumentsUseCase.filter(documents, query: "cabinet", selectedLabelIDs: []).map(\.documentID),
+            [physicalMatch.documentID]
+        )
+        XCTAssertEqual(
+            try SearchDocumentsUseCase.filter(documents, query: "", selectedLabelIDs: [], selectedLocation: .location(cabinetID)).map(\.documentID),
+            [physicalMatch.documentID]
+        )
+        XCTAssertEqual(
+            try SearchDocumentsUseCase.filter(documents, query: "", selectedLabelIDs: [], selectedLocation: .digitalOnly).map(\.documentID),
+            [digitalOnly.documentID]
+        )
+        XCTAssertEqual(
+            try SearchDocumentsUseCase.filter(documents, query: "", selectedLabelIDs: [], selectedLocation: .unknown).map(\.documentID),
+            [physicalWithoutLocation.documentID]
+        )
+    }
+
+    @MainActor
+    func testLocationSidebarCountsRespectSearchAndLabelFilters() async {
+        let contracts = LabelTag(name: "Contracts")
+        let cabinet = DocumentLocation(name: "Cabinet A", sortOrder: 0)
+        let shelf = DocumentLocation(name: "Shelf B", sortOrder: 1)
+        let cabinetDocument = DocumentRecord(
+            originalFileName: "lease-a.pdf",
+            title: "Office Lease",
+            importedAt: .now,
+            pageCount: 1,
+            availability: .physical,
+            physicalLocationID: cabinet.id,
+            labels: [contracts]
+        )
+        let shelfDocumentWithoutLabel = DocumentRecord(
+            originalFileName: "lease-b.pdf",
+            title: "Office Lease",
+            importedAt: .now,
+            pageCount: 1,
+            availability: .physical,
+            physicalLocationID: shelf.id
+        )
+        let digitalDocument = DocumentRecord(
+            originalFileName: "lease-digital.pdf",
+            title: "Office Lease",
+            importedAt: .now,
+            pageCount: 1,
+            availability: .digitalOnly,
+            labels: [contracts]
+        )
+        let unknownDifferentSearchDocument = DocumentRecord(
+            originalFileName: "receipt.pdf",
+            title: "Receipt",
+            importedAt: .now,
+            pageCount: 1,
+            labels: [contracts]
+        )
+        let physicalWithoutLocation = DocumentRecord(
+            originalFileName: "lease-loose.pdf",
+            title: "Office Lease",
+            importedAt: .now,
+            pageCount: 1,
+            availability: .physical,
+            labels: [contracts]
+        )
+        let physicalWithOrphanedLocation = DocumentRecord(
+            originalFileName: "lease-missing-location.pdf",
+            title: "Office Lease",
+            importedAt: .now,
+            pageCount: 1,
+            availability: .physical,
+            physicalLocationID: UUID(),
+            labels: [contracts]
+        )
+        let coordinator = LibraryCoordinator()
+        coordinator.ingest(
+            allDocuments: [cabinetDocument, shelfDocumentWithoutLabel, digitalDocument, unknownDifferentSearchDocument, physicalWithoutLocation, physicalWithOrphanedLocation],
+            allLabels: [contracts],
+            allDocumentLocations: [cabinet, shelf]
+        )
+        coordinator.searchText = "lease"
+        coordinator.labelFilterSelection.replaceVisualSelection(with: [contracts.persistentModelID])
+        coordinator.labelFilterSelection.commitVisualSelection()
+        coordinator.recomputeFilteredDocuments()
+
+        for _ in 0..<50 {
+            if coordinator.locationSidebarCounts.count(for: cabinet) == 1,
+               coordinator.locationSidebarCounts.digitalOnlyCount == 1 {
+                break
+            }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(coordinator.locationSidebarCounts.count(for: cabinet), 1)
+        XCTAssertEqual(coordinator.locationSidebarCounts.count(for: shelf), 0)
+        XCTAssertEqual(coordinator.locationSidebarCounts.digitalOnlyCount, 1)
+        XCTAssertEqual(coordinator.locationSidebarCounts.unknownCount, 2)
+        let filteredIDs = Set(coordinator.filteredDocuments.map(\.id))
+        let expectedFilteredIDs: Set<UUID> = [cabinetDocument.id, digitalDocument.id, physicalWithoutLocation.id, physicalWithOrphanedLocation.id]
+        XCTAssertEqual(filteredIDs, expectedFilteredIDs)
+
+        coordinator.sidebarSelection = .location(.location(cabinet.id))
+        coordinator.recomputeFilteredDocuments()
+
+        for _ in 0..<50 {
+            if coordinator.filteredDocuments.map(\.id) == [cabinetDocument.id] {
+                break
+            }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(coordinator.filteredDocuments.map(\.id), [cabinetDocument.id])
+        XCTAssertEqual(coordinator.locationSidebarCounts.count(for: cabinet), 1)
+        XCTAssertEqual(coordinator.locationSidebarCounts.count(for: shelf), 0)
+        XCTAssertEqual(coordinator.locationSidebarCounts.digitalOnlyCount, 1)
+        XCTAssertEqual(coordinator.locationSidebarCounts.unknownCount, 2)
+
+        coordinator.sidebarSelection = .location(.unknown)
+        coordinator.recomputeFilteredDocuments()
+
+        for _ in 0..<50 {
+            if Set(coordinator.filteredDocuments.map(\.id)) == [physicalWithoutLocation.id, physicalWithOrphanedLocation.id] {
+                break
+            }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(Set(coordinator.filteredDocuments.map(\.id)), [physicalWithoutLocation.id, physicalWithOrphanedLocation.id])
     }
 
     @MainActor

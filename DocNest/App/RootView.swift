@@ -33,6 +33,9 @@ struct RootView: View {
     @Query(sort: \WatchFolder.sortOrder, order: .forward)
     private var allWatchFolders: [WatchFolder]
 
+    @Query(sort: \DocumentLocation.sortOrder, order: .forward)
+    private var allDocumentLocations: [DocumentLocation]
+
     @Query(sort: \DocumentLabelValue.updatedAt, order: .reverse)
     private var allLabelValues: [DocumentLabelValue]
 
@@ -69,7 +72,7 @@ struct RootView: View {
         .toolbar { toolbarContent }
         .modifier(RootViewImportModifier(coordinator: coordinator))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
-        .modifier(RootViewChangeHandlers(coordinator: coordinator, thumbnailCache: thumbnailCache, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders, allLabelValues: allLabelValues))
+        .modifier(RootViewChangeHandlers(coordinator: coordinator, thumbnailCache: thumbnailCache, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allDocumentLocations: allDocumentLocations, allWatchFolders: allWatchFolders, allLabelValues: allLabelValues))
         .focusedSceneValue(\.exportDocumentsAction) {
             coordinator.exportDocuments(coordinator.displayedSelectedDocuments)
         }
@@ -91,7 +94,7 @@ struct RootView: View {
                 coordinator: coordinator,
                 modelContainer: librarySession.modelContainer
             )
-            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allWatchFolders: allWatchFolders, allLabelValues: allLabelValues)
+            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allDocumentLocations: allDocumentLocations, allWatchFolders: allWatchFolders, allLabelValues: allLabelValues)
             coordinator.runOCRBackfill(documents: allDocuments, libraryURL: libraryURL, modelContext: modelContext)
             coordinator.setupWatchFolderMonitoring()
             // Import any URLs that arrived before the library was ready
@@ -391,6 +394,7 @@ private struct RootViewChangeHandlers: ViewModifier {
     let allLabels: [LabelTag]
     let allSmartFolders: [SmartFolder]
     let allLabelGroups: [LabelGroup]
+    let allDocumentLocations: [DocumentLocation]
     let allWatchFolders: [WatchFolder]
     let allLabelValues: [DocumentLabelValue]
 
@@ -450,6 +454,18 @@ private struct RootViewChangeHandlers: ViewModifier {
         return hasher.finalize()
     }
 
+    private var documentLocationFingerprint: Int {
+        var hasher = Hasher()
+        hasher.combine(allDocumentLocations.count)
+        for location in allDocumentLocations {
+            hasher.combine(location.persistentModelID)
+            hasher.combine(location.name)
+            hasher.combine(location.coverPhotoPath)
+            hasher.combine(location.sortOrder)
+        }
+        return hasher.finalize()
+    }
+
     private var labelValueChangeToken: LabelValueChangeToken {
         LabelValueChangeToken(
             count: allLabelValues.count,
@@ -467,11 +483,13 @@ private struct RootViewChangeHandlers: ViewModifier {
                 allLabels: allLabels,
                 allSmartFolders: allSmartFolders,
                 allLabelGroups: allLabelGroups,
+                allDocumentLocations: allDocumentLocations,
                 allWatchFolders: allWatchFolders,
                 allLabelValues: allLabelValues,
                 labelFingerprint: labelFingerprint,
                 smartFolderFingerprint: smartFolderFingerprint,
                 labelGroupFingerprint: labelGroupFingerprint,
+                documentLocationFingerprint: documentLocationFingerprint,
                 watchFolderFingerprint: watchFolderFingerprint,
                 labelValueChangeToken: labelValueChangeToken
             ))
@@ -539,15 +557,18 @@ private struct ChangeHandlersData: ViewModifier {
     let allLabels: [LabelTag]
     let allSmartFolders: [SmartFolder]
     let allLabelGroups: [LabelGroup]
+    let allDocumentLocations: [DocumentLocation]
     let allWatchFolders: [WatchFolder]
     let allLabelValues: [DocumentLabelValue]
     let labelFingerprint: Int
     let smartFolderFingerprint: Int
     let labelGroupFingerprint: Int
+    let documentLocationFingerprint: Int
     let watchFolderFingerprint: Int
     let labelValueChangeToken: LabelValueChangeToken
     @State private var pendingDocumentRefreshTask: Task<Void, Never>?
     @State private var pendingMetadataRefreshTask: Task<Void, Never>?
+    @State private var pendingDocumentLocationRefreshTask: Task<Void, Never>?
     @State private var pendingWatchFolderRefreshTask: Task<Void, Never>?
     @State private var pendingLabelValueRefreshTask: Task<Void, Never>?
 
@@ -583,6 +604,16 @@ private struct ChangeHandlersData: ViewModifier {
                 smartFolders: allSmartFolders,
                 labelGroups: allLabelGroups
             )
+        }
+    }
+
+    private func scheduleDocumentLocationRefresh() {
+        pendingDocumentLocationRefreshTask?.cancel()
+        pendingDocumentLocationRefreshTask = Task { @MainActor in
+            defer { pendingDocumentLocationRefreshTask = nil }
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
+            coordinator.syncDocumentLocations(allDocumentLocations)
         }
     }
 
@@ -623,6 +654,9 @@ private struct ChangeHandlersData: ViewModifier {
             .onChange(of: labelGroupFingerprint) {
                 scheduleMetadataRefresh()
             }
+            .onChange(of: documentLocationFingerprint) {
+                scheduleDocumentLocationRefresh()
+            }
             .onChange(of: watchFolderFingerprint) {
                 scheduleWatchFolderRefresh()
             }
@@ -632,6 +666,7 @@ private struct ChangeHandlersData: ViewModifier {
             .onDisappear {
                 pendingDocumentRefreshTask?.cancel()
                 pendingMetadataRefreshTask?.cancel()
+                pendingDocumentLocationRefreshTask?.cancel()
                 pendingWatchFolderRefreshTask?.cancel()
                 pendingLabelValueRefreshTask?.cancel()
             }

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import SwiftData
 import OSLog
+import UniformTypeIdentifiers
 
 enum LibrarySection: String, CaseIterable, Identifiable {
     case allDocuments = "All Documents"
@@ -37,6 +38,10 @@ struct LibrarySidebarView: View {
     @State private var isShowingNewGroupAlert = false
     @State private var renamingGroupID: UUID?
     @State private var renamingGroupName = ""
+    @State private var locationEditorConfig: DocumentLocationEditorConfig?
+    @State private var pendingLocationDeletion: PendingDocumentLocationDeletion?
+    @State private var draggingLocationID: UUID?
+    @State private var locationReorderInsertionEdge: ReorderInsertionEdge?
 
     private var sortedLabels: [LabelTag] {
         coordinator.allLabels.sorted {
@@ -58,6 +63,8 @@ struct LibrarySidebarView: View {
                     librarySectionContent
 
                     smartFolderSection
+
+                    locationSectionContent
 
                     labelSectionContent
                 }
@@ -97,6 +104,21 @@ struct LibrarySidebarView: View {
         } message: {
             Text(pendingLabelDeletion?.message ?? "")
         }
+        .confirmationDialog(
+            pendingLocationDeletion?.title ?? "Delete Location",
+            isPresented: pendingLocationDeletionBinding,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Location", role: .destructive) {
+                confirmDeleteLocation()
+            }
+
+            Button("Cancel", role: .cancel) {
+                pendingLocationDeletion = nil
+            }
+        } message: {
+            Text(pendingLocationDeletion?.message ?? "")
+        }
         .alert("Label Error", isPresented: errorBinding) {
             Button("OK", role: .cancel) {
                 errorMessage = nil
@@ -115,6 +137,9 @@ struct LibrarySidebarView: View {
                 config: config,
                 allGroups: coordinator.allLabelGroups
             )
+        }
+        .sheet(item: $locationEditorConfig) { config in
+            DocumentLocationEditorSheet(config: config)
         }
         .alert("New Group", isPresented: $isShowingNewGroupAlert) {
             TextField("Group name", text: $newGroupName)
@@ -285,6 +310,138 @@ struct LibrarySidebarView: View {
 
     private func labelsInGroup(_ group: LabelGroup) -> [LabelTag] {
         sortedLabels.filter { $0.groupID == group.id }
+    }
+
+    @ViewBuilder
+    private var locationSectionContent: some View {
+        let locations = coordinator.allDocumentLocations.sorted {
+            if $0.sortOrder == $1.sortOrder {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.sortOrder < $1.sortOrder
+        }
+
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: "archivebox")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Locations")
+                    .font(AppTypography.sidebarSection)
+
+                Spacer()
+
+                Button {
+                    locationEditorConfig = DocumentLocationEditorConfig(mode: .create)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Add Location")
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.top, 10)
+            .padding(.bottom, 2)
+
+            locationBucketRow(
+                title: DocumentAvailability.unknown.displayName,
+                systemImage: DocumentAvailability.unknown.systemImage,
+                count: coordinator.locationSidebarCounts.unknownCount,
+                filter: .unknown
+            )
+
+            locationBucketRow(
+                title: DocumentAvailability.digitalOnly.displayName,
+                systemImage: DocumentAvailability.digitalOnly.systemImage,
+                count: coordinator.locationSidebarCounts.digitalOnlyCount,
+                filter: .digitalOnly
+            )
+
+            if locations.isEmpty {
+                Text("No physical locations yet")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(.secondary)
+                    .sidebarRow()
+            } else {
+                ForEach(locations) { location in
+                    locationDisplayRow(for: location, locations: locations)
+                }
+            }
+        }
+    }
+
+    private func locationBucketRow(title: String, systemImage: String, count: Int, filter: DocumentLocationFilter) -> some View {
+        Button {
+            toggleLocationSelection(filter)
+        } label: {
+            LibrarySectionRowView(
+                title: title,
+                systemImage: systemImage,
+                count: count,
+                isSelected: coordinator.sidebarSelection == .location(filter)
+            )
+        }
+        .buttonStyle(.plain)
+        .sidebarRow()
+    }
+
+    @ViewBuilder
+    private func locationDisplayRow(for location: DocumentLocation, locations: [DocumentLocation]) -> some View {
+        let showAboveLine = locationReorderInsertionEdge.flatMap { edge in
+            if case .above(let id) = edge, id == location.persistentModelID { return true }
+            return nil
+        } ?? false
+        let showBelowLine = locationReorderInsertionEdge.flatMap { edge in
+            if case .below(let id) = edge, id == location.persistentModelID { return true }
+            return nil
+        } ?? false
+
+        LibraryLocationRowView(
+            location: location,
+            libraryURL: coordinator.libraryURL,
+            count: coordinator.locationSidebarCounts.count(for: location),
+            isSelected: coordinator.sidebarSelection == .location(.location(location.id)),
+            dragPayload: DocumentLocationDragPayload.payload(for: location.id),
+            dragPreview: AnyView(LocationDragPreview(name: location.name).onAppear { draggingLocationID = location.id })
+        )
+        .sidebarRow()
+        .overlay(alignment: .top) {
+            if showAboveLine {
+                ReorderInsertionLine()
+                    .offset(y: -1.5)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if showBelowLine {
+                ReorderInsertionLine()
+                    .offset(y: 1.5)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            toggleLocationSelection(.location(location.id))
+        }
+        .dropDestination(for: String.self) { items, _ in
+            draggingLocationID = nil
+            locationReorderInsertionEdge = nil
+            return handleLocationDrop(items, onto: location, locations: locations)
+        } isTargeted: { isTargeted in
+            if isTargeted {
+                updateLocationReorderInsertionEdge(for: location, locations: locations)
+            } else if locationReorderInsertionEdge != nil {
+                locationReorderInsertionEdge = nil
+            }
+        }
+        .contextMenu {
+            Button("Edit") {
+                locationEditorConfig = DocumentLocationEditorConfig(mode: .edit(location))
+            }
+            Button("Delete", role: .destructive) {
+                deleteLocation(location)
+            }
+        }
     }
 
     @ViewBuilder
@@ -622,6 +779,105 @@ struct LibrarySidebarView: View {
         }
     }
 
+    private func toggleLocationSelection(_ filter: DocumentLocationFilter) {
+        if coordinator.sidebarSelection == .location(filter) {
+            coordinator.sidebarSelection = .section(.allDocuments)
+            coordinator.searchText = ""
+        } else {
+            coordinator.sidebarSelection = .location(filter)
+        }
+    }
+
+    private func updateLocationReorderInsertionEdge(for target: DocumentLocation, locations: [DocumentLocation]) {
+        guard let draggingLocationID else {
+            locationReorderInsertionEdge = nil
+            return
+        }
+
+        guard let sourceIndex = locations.firstIndex(where: { $0.id == draggingLocationID }),
+              let targetIndex = locations.firstIndex(where: { $0.persistentModelID == target.persistentModelID }),
+              sourceIndex != targetIndex else {
+            locationReorderInsertionEdge = nil
+            return
+        }
+
+        let targetID = target.persistentModelID
+        if sourceIndex < targetIndex {
+            locationReorderInsertionEdge = .below(targetID)
+        } else {
+            locationReorderInsertionEdge = .above(targetID)
+        }
+    }
+
+    private func handleLocationDrop(_ items: [String], onto target: DocumentLocation, locations: [DocumentLocation]) -> Bool {
+        guard let payload = items.first else { return false }
+
+        if let sourceID = DocumentLocationDragPayload.locationID(from: payload) {
+            guard let sourceIndex = locations.firstIndex(where: { $0.id == sourceID }),
+                  let targetIndex = locations.firstIndex(where: { $0.persistentModelID == target.persistentModelID }),
+                  sourceIndex != targetIndex else {
+                return false
+            }
+
+            let source = IndexSet(integer: sourceIndex)
+            let destination = sourceIndex < targetIndex ? targetIndex + 1 : targetIndex
+
+            do {
+                try ManageDocumentLocationsUseCase.reorder(from: source, to: destination, locations: locations, using: modelContext)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            return true
+        }
+
+        return coordinator.assignDroppedDocumentsToLocation(items, location: target)
+    }
+
+    private func deleteLocation(_ location: DocumentLocation) {
+        let affectedDocumentCount: Int
+        do {
+            affectedDocumentCount = try ManageDocumentLocationsUseCase.documentCount(for: location, using: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+
+        let pendingDeletion = PendingDocumentLocationDeletion(
+            location: location,
+            affectedDocumentCount: affectedDocumentCount
+        )
+
+        if pendingDeletion.requiresConfirmation {
+            pendingLocationDeletion = pendingDeletion
+            return
+        }
+
+        do {
+            try performDeleteLocation(location)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func confirmDeleteLocation() {
+        guard let pendingLocationDeletion else { return }
+        do {
+            try performDeleteLocation(pendingLocationDeletion.location)
+            self.pendingLocationDeletion = nil
+        } catch {
+            self.pendingLocationDeletion = nil
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func performDeleteLocation(_ location: DocumentLocation) throws {
+        let wasSelected = coordinator.sidebarSelection == .location(.location(location.id))
+        try ManageDocumentLocationsUseCase.delete(location, libraryURL: coordinator.libraryURL, using: modelContext)
+        if wasSelected {
+            coordinator.sidebarSelection = .location(.unknown)
+        }
+    }
+
     private func debugLogSidebarRenderTiming(startTime: TimeInterval, coordinator: LibraryCoordinator) {
         #if DEBUG
         let elapsedMs = (Date().timeIntervalSinceReferenceDate - startTime) * 1000
@@ -648,6 +904,17 @@ struct LibrarySidebarView: View {
             set: { newValue in
                 if !newValue {
                     pendingLabelDeletion = nil
+                }
+            }
+        )
+    }
+
+    private var pendingLocationDeletionBinding: Binding<Bool> {
+        Binding(
+            get: { pendingLocationDeletion != nil },
+            set: { newValue in
+                if !newValue {
+                    pendingLocationDeletion = nil
                 }
             }
         )
@@ -959,6 +1226,272 @@ private struct LibraryLabelRowView: View {
     }
 }
 
+private enum DocumentLocationDragPayload {
+    private static let prefix = "com.kaps.docnest.location:"
+
+    static func payload(for id: UUID) -> String {
+        prefix + id.uuidString
+    }
+
+    static func locationID(from payload: String) -> UUID? {
+        guard payload.hasPrefix(prefix) else { return nil }
+        return UUID(uuidString: String(payload.dropFirst(prefix.count)))
+    }
+}
+
+private struct LibraryLocationRowView: View {
+    let location: DocumentLocation
+    let libraryURL: URL?
+    let count: Int
+    let isSelected: Bool
+    let dragPayload: String
+    let dragPreview: AnyView
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            LocationCoverThumbnail(location: location, libraryURL: libraryURL, size: 18)
+
+            Text(location.name)
+                .font(AppTypography.body.weight(isSelected ? .medium : .regular))
+                .lineLimit(1)
+
+            Spacer()
+
+            Text("\(count)")
+                .font(AppTypography.caption.monospacedDigit())
+                .foregroundStyle(isSelected ? Color.primary.opacity(0.7) : Color.secondary.opacity(0.58))
+
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(isHovered ? .secondary : .tertiary)
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+                .draggable(dragPayload) { dragPreview }
+                .help("Drag location")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.14) : (isHovered ? AppTheme.quietHoverFill : Color.clear))
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+private struct LocationCoverThumbnail: View {
+    let location: DocumentLocation
+    let libraryURL: URL?
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "archivebox.fill")
+                    .font(.system(size: max(10, size * 0.56), weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.accentColor.opacity(0.10))
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+
+    private var image: NSImage? {
+        guard let libraryURL, let path = location.coverPhotoPath else { return nil }
+        return NSImage(contentsOf: DocumentLibraryService.locationPhotoURL(for: path, libraryURL: libraryURL))
+    }
+}
+
+private struct LocationDragPreview: View {
+    let name: String
+
+    var body: some View {
+        Label(name, systemImage: "archivebox")
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.regularMaterial, in: Capsule())
+    }
+}
+
+struct PendingDocumentLocationDeletion {
+    let location: DocumentLocation
+    let affectedDocumentCount: Int
+
+    var title: String {
+        "Delete Location"
+    }
+
+    var requiresConfirmation: Bool {
+        affectedDocumentCount > 0
+    }
+
+    var message: String {
+        if affectedDocumentCount == 1 {
+            return "One document uses this location. Deleting it will mark that document as Unknown."
+        }
+        return "\(affectedDocumentCount) documents use this location. Deleting it will mark those documents as Unknown."
+    }
+}
+
+struct DocumentLocationEditorConfig: Identifiable {
+    let id = UUID()
+    let mode: Mode
+
+    enum Mode {
+        case create
+        case edit(DocumentLocation)
+    }
+}
+
+struct DocumentLocationEditorSheet: View {
+    let config: DocumentLocationEditorConfig
+
+    @Environment(LibraryCoordinator.self) private var coordinator
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var name = ""
+    @State private var errorMessage: String?
+
+    private var existingLocation: DocumentLocation? {
+        if case .edit(let location) = config.mode { return location }
+        return nil
+    }
+
+    private var isEditing: Bool {
+        existingLocation != nil
+    }
+
+    private var isSaveDisabled: Bool {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(isEditing ? "Edit Location" : "New Location")
+                .font(.headline)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
+
+            Form {
+                TextField("Name", text: $name)
+                    .textFieldStyle(.roundedBorder)
+
+                if let location = existingLocation {
+                    Section("Cover Photo") {
+                        HStack(spacing: 12) {
+                            LocationCoverThumbnail(location: location, libraryURL: coordinator.libraryURL, size: 56)
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Button("Choose Image...") {
+                                    chooseCoverPhoto(for: location)
+                                }
+
+                                Button("Remove Image", role: .destructive) {
+                                    removeCoverPhoto(for: location)
+                                }
+                                .disabled(location.coverPhotoPath == nil)
+                            }
+                        }
+                    }
+                } else {
+                    Text("Save the location before adding a cover photo.")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+
+            HStack {
+                Button("Cancel", role: .cancel) {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button(isEditing ? "Save" : "Create") {
+                    save()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(isSaveDisabled)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
+            .padding(.top, 8)
+        }
+        .frame(width: 380, height: 360)
+        .onAppear {
+            if let location = existingLocation {
+                name = location.name
+            }
+        }
+    }
+
+    private func save() {
+        do {
+            if let location = existingLocation {
+                try ManageDocumentLocationsUseCase.rename(location, to: name, using: modelContext)
+            } else {
+                _ = try ManageDocumentLocationsUseCase.create(named: name, using: modelContext)
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func chooseCoverPhoto(for location: DocumentLocation) {
+        guard let libraryURL = coordinator.libraryURL else { return }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .gif]
+        panel.prompt = "Choose"
+        panel.message = "Choose a picture for this physical location."
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try ManageDocumentLocationsUseCase.setCoverPhoto(from: url, for: location, libraryURL: libraryURL, using: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func removeCoverPhoto(for location: DocumentLocation) {
+        guard let libraryURL = coordinator.libraryURL else { return }
+        do {
+            try ManageDocumentLocationsUseCase.removeCoverPhoto(for: location, libraryURL: libraryURL, using: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
 struct PendingLabelDeletion {
     let label: LabelTag
     let affectedDocumentCount: Int
@@ -1041,6 +1574,24 @@ struct LibrarySidebarCounts {
 
     func count(for label: LabelTag) -> Int {
         labelCounts[label.persistentModelID, default: 0]
+    }
+}
+
+struct LocationSidebarCounts: Sendable, Equatable {
+    let unknownCount: Int
+    let digitalOnlyCount: Int
+    private let countsByLocationID: [UUID: Int]
+
+    static let empty = LocationSidebarCounts(unknownCount: 0, digitalOnlyCount: 0, countsByLocationID: [:])
+
+    init(unknownCount: Int, digitalOnlyCount: Int, countsByLocationID: [UUID: Int]) {
+        self.unknownCount = unknownCount
+        self.digitalOnlyCount = digitalOnlyCount
+        self.countsByLocationID = countsByLocationID
+    }
+
+    func count(for location: DocumentLocation) -> Int {
+        countsByLocationID[location.id, default: 0]
     }
 }
 

@@ -115,7 +115,7 @@ struct LibraryLockFile: Codable {
 /// library reference, lock-file handling, and integrity-report generation.
 enum DocumentLibraryService {
     static let packageExtension = "docnestlibrary"
-    static let currentFormatVersion = 1
+    static let currentFormatVersion = 2
 
     struct LibraryAccessSession {
         let url: URL
@@ -133,6 +133,7 @@ enum DocumentLibraryService {
         "Metadata",
         "Originals",
         "Previews",
+        "LocationPhotos",
         "Diagnostics"
     ]
 
@@ -351,6 +352,20 @@ enum DocumentLibraryService {
         libraryURL.appendingPathComponent("Originals", isDirectory: true)
     }
 
+    static func locationPhotosDirectory(for libraryURL: URL) -> URL {
+        libraryURL.appendingPathComponent("LocationPhotos", isDirectory: true)
+    }
+
+    static func locationPhotoURL(for path: String, libraryURL: URL) -> URL {
+        libraryURL.appendingPathComponent(path)
+    }
+
+    static func relativeLocationPhotoPath(for locationID: UUID, fileExtension: String) -> String {
+        let normalizedExtension = fileExtension.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
+        let fallbackExtension = normalizedExtension.isEmpty ? "png" : normalizedExtension
+        return "LocationPhotos/\(locationID.uuidString).\(fallbackExtension)"
+    }
+
     static func contains(_ candidateURL: URL, inLibrary libraryURL: URL) -> Bool {
         let libraryPath = libraryURL.standardizedFileURL.resolvingSymlinksInPath().path
         let candidatePath = candidateURL.standardizedFileURL.resolvingSymlinksInPath().path
@@ -375,7 +390,7 @@ enum DocumentLibraryService {
             cloudKitDatabase: .none
         )
 
-        let schema = Schema(versionedSchema: DocNestSchemaV5.self)
+        let schema = Schema(versionedSchema: DocNestSchemaV6.self)
 
         return try ModelContainer(
             for: schema,
@@ -428,7 +443,7 @@ enum DocumentLibraryService {
             generatedAt: .now,
             libraryPath: libraryURL.path,
             manifestFormatVersion: manifest.formatVersion,
-            schemaVersion: "5.0.0",
+            schemaVersion: "6.0.0",
             migration: migration,
             repair: repair,
             documentCount: documentCount,

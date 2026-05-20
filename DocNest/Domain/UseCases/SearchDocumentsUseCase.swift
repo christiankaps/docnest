@@ -5,9 +5,12 @@ enum SearchDocumentsUseCase {
     struct Snapshot: Sendable {
         let documentID: UUID
         let labelIDs: Set<UUID>
+        let availability: DocumentAvailability
+        let physicalLocationID: UUID?
         let title: String
         let originalFileName: String
         let labelNames: [String]
+        let locationName: String?
         let fullText: String?
     }
 
@@ -27,7 +30,8 @@ enum SearchDocumentsUseCase {
     static func filter(
         _ documents: [Snapshot],
         query: String,
-        selectedLabelIDs: Set<UUID>
+        selectedLabelIDs: Set<UUID>,
+        selectedLocation: DocumentLocationFilter? = nil
     ) throws -> [Snapshot] {
         let searchTerms = normalizedSearchTerms(from: query)
         var matches: [Snapshot] = []
@@ -38,7 +42,8 @@ enum SearchDocumentsUseCase {
                 try Task.checkCancellation()
             }
 
-            if matchesAllSelectedLabels(document, selectedLabelIDs: selectedLabelIDs)
+            if matchesLocation(document, selectedLocation: selectedLocation)
+                && matchesAllSelectedLabels(document, selectedLabelIDs: selectedLabelIDs)
                 && matchesAllSearchTerms(document, searchTerms: searchTerms) {
                 matches.append(document)
             }
@@ -80,6 +85,21 @@ enum SearchDocumentsUseCase {
         }
 
         return true
+    }
+
+    private static func matchesLocation(_ document: Snapshot, selectedLocation: DocumentLocationFilter?) -> Bool {
+        guard let selectedLocation else {
+            return true
+        }
+
+        switch selectedLocation {
+        case .unknown:
+            return document.availability == .unknown || (document.availability == .physical && document.physicalLocationID == nil)
+        case .digitalOnly:
+            return document.availability == .digitalOnly
+        case .location(let locationID):
+            return document.availability == .physical && document.physicalLocationID == locationID
+        }
     }
 
     private static func matchesAllSearchTerms(_ document: DocumentRecord, searchTerms: [String]) -> Bool {
@@ -133,6 +153,11 @@ enum SearchDocumentsUseCase {
             if document.labelNames.contains(where: {
                 $0.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
             }) {
+                continue
+            }
+
+            if let locationName = document.locationName,
+               locationName.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil {
                 continue
             }
 
