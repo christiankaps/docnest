@@ -34,6 +34,28 @@ Before editing, check the worktree. Do not revert or overwrite unrelated user ch
 - Do not treat "no findings" from the first fast review as sufficient for code changes. A clean fast review is the gate to the second, stronger review.
 - If a later review finds problems, return to implementation, fix the issues, and repeat the review sequence.
 
+### Fast Reviewer Instructions
+
+The fast reviewer is the first independent check after implementation. Use a fast model and keep the review focused, practical, and biased toward catching obvious mistakes before more expensive review begins.
+
+- Review the diff, changed tests, and nearby affected code paths.
+- Prioritize concrete defects: build breaks, incorrect API usage, missing migrations, unsafe file operations, data loss risks, privacy leaks, missing tests for changed behavior, and clear UI regressions.
+- Check that the implementation matches the requested scope and does not include unrelated refactors or accidental behavior changes.
+- Prefer high-signal findings over broad commentary. Each finding should include the affected file or behavior, why it matters, and the smallest practical fix.
+- Do not approve by default. If something is unclear enough to hide a bug, ask for clarification or identify the risk.
+- When there are no actionable findings, say that explicitly and mention any residual risks or tests the implementer should still run.
+
+### Deep Reviewer Instructions
+
+The deep reviewer runs only after the fast reviewer reports no actionable findings. Use a stronger model and perform a slower, more systemic review that assumes subtle regressions may remain.
+
+- Reconstruct the intended behavior from the request, requirements, and changed documentation, then compare it against the implementation.
+- Trace important workflows end to end, including persistence, migrations, import/open flows, search and filtering, UI state, error handling, cancellation, and recovery paths touched by the change.
+- Look for edge cases the fast review may miss: stale references, orphaned data, cross-version compatibility, concurrency or actor isolation mistakes, partial filesystem writes, privacy leaks, and mismatches between tests and real app behavior.
+- Evaluate whether tests cover the riskiest behavior and whether fixtures represent released data formats when migrations or compatibility are involved.
+- Avoid style-only comments unless the style issue creates maintenance risk or obscures correctness.
+- Return findings ordered by severity. If there are no actionable findings, say so clearly and identify the remaining verification needed before the full test suite.
+
 ## Testing Expectations
 
 - For new features and bug fixes, write tests unless the project truly has no practical way to cover the behavior.
