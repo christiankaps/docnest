@@ -57,13 +57,19 @@ The repository uses GitHub releases as the public release record. In normal oper
 Local packaging can be done via:
 
 ```sh
-scripts/build-dmg.sh
+make dmg
 ```
 
 Optional environment variables can inject version and build metadata for local packaging:
 
 ```sh
-RELEASE_VERSION=2026.7 BUILD_NUMBER=42 scripts/build-dmg.sh
+RELEASE_VERSION=2026.7 BUILD_NUMBER=42 make dmg
+```
+
+A local highly optimized Release build without packaging can be produced with:
+
+```sh
+make release-build
 ```
 
 ## Documentation Requirement

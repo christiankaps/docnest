@@ -44,13 +44,25 @@ The product is intentionally macOS-native. It uses native windows, native file d
 Build the app:
 
 ```sh
-xcodebuild -project DocNest.xcodeproj -scheme DocNest -derivedDataPath /tmp/docnest-derived build
+make build
 ```
 
 Run the debug app after a successful build:
 
 ```sh
-open /tmp/docnest-derived/Build/Products/Debug/DocNest.app
+make run
+```
+
+Run the full test suite:
+
+```sh
+make test
+```
+
+Run Xcode static analysis:
+
+```sh
+make analyze
 ```
 
 ## Release Builds
@@ -68,13 +80,19 @@ GitHub release builds compile the app from the release tag and bake the version 
 There is also a local packaging helper:
 
 ```sh
-scripts/build-dmg.sh
+make dmg
 ```
 
 Optional local release version injection:
 
 ```sh
-RELEASE_VERSION=2026.4.1 BUILD_NUMBER=42 scripts/build-dmg.sh
+RELEASE_VERSION=2026.4.1 BUILD_NUMBER=42 make dmg
+```
+
+For a local highly optimized Release build without packaging:
+
+```sh
+make release-build
 ```
 
 ## Documentation

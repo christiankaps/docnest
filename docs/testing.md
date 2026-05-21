@@ -14,19 +14,37 @@ Most behavior-heavy coverage lives in `DocNestTests`.
 Run the main test suite:
 
 ```sh
-xcodebuild test -project DocNest.xcodeproj -scheme DocNest -only-testing:DocNestTests
+make test-unit
 ```
 
 Run all tests:
 
 ```sh
-xcodebuild test -project DocNest.xcodeproj -scheme DocNest
+make test
 ```
 
 Build only:
 
 ```sh
-xcodebuild -project DocNest.xcodeproj -scheme DocNest build
+make build
+```
+
+Build test bundles without running tests:
+
+```sh
+make build-for-testing
+```
+
+Run Xcode static analysis:
+
+```sh
+make analyze
+```
+
+Build a highly optimized local Release app:
+
+```sh
+make release-build
 ```
 
 ## What `DocNestTests` Covers
