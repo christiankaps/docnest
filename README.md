@@ -41,6 +41,8 @@ The product is intentionally macOS-native. It uses native windows, native file d
 
 ## Build Locally
 
+Local Make targets treat compile warnings as errors for builds, build-for-testing, tests, static analysis, archives, release builds, and DMG packaging.
+
 Build the app:
 
 ```sh

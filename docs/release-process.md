@@ -54,6 +54,8 @@ The repository uses GitHub releases as the public release record. In normal oper
 
 ## Local Packaging Helper
 
+Local release build and packaging commands treat compile warnings as errors.
+
 Local packaging can be done via:
 
 ```sh

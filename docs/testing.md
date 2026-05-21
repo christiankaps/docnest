@@ -11,6 +11,8 @@ Most behavior-heavy coverage lives in `DocNestTests`.
 
 ## Running Tests
 
+The Makefile treats compile warnings as errors for build, build-for-testing, test, static-analysis, archive, release-build, and DMG packaging targets.
+
 Run the main test suite:
 
 ```sh

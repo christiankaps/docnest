@@ -64,6 +64,35 @@ private enum TestImportFixtures {
     }
 }
 
+private final class OneShotFlag: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "DocNestTests.OneShotFlag")
+    private var hasClaimed = false
+
+    func claim() -> Bool {
+        queue.sync {
+            guard !hasClaimed else { return false }
+            hasClaimed = true
+            return true
+        }
+    }
+}
+
+private final class ImportTaskCancellationBox: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "DocNestTests.ImportTaskCancellationBox")
+    private var task: Task<ImportPDFDocumentsResult, Never>?
+
+    func set(_ task: Task<ImportPDFDocumentsResult, Never>) {
+        queue.sync {
+            self.task = task
+        }
+    }
+
+    func cancel() {
+        let task = queue.sync { self.task }
+        task?.cancel()
+    }
+}
+
 final class DocNestTests: XCTestCase {
     private var repositoryRootURL: URL {
         URL(fileURLWithPath: #filePath)
@@ -663,15 +692,9 @@ final class DocNestTests: XCTestCase {
         let container = try TestImportFixtures.makeInMemoryContainer()
         let context = container.mainContext
         let stagedImport = expectation(description: "At least one import was staged")
-        let lock = NSLock()
-        var didFulfillStagedImport = false
+        let stagedImportFlag = OneShotFlag()
         ImportPDFDocumentsUseCase.stagedImportForTesting = {
-            lock.lock()
-            let shouldFulfill = !didFulfillStagedImport
-            didFulfillStagedImport = true
-            lock.unlock()
-
-            if shouldFulfill {
+            if stagedImportFlag.claim() {
                 stagedImport.fulfill()
                 Thread.sleep(forTimeInterval: 0.2)
             }
@@ -723,15 +746,11 @@ final class DocNestTests: XCTestCase {
         let container = try TestImportFixtures.makeInMemoryContainer()
         let context = container.mainContext
         let commitStarted = expectation(description: "Commit started")
-        let taskLock = NSLock()
-        var importTask: Task<ImportPDFDocumentsResult, Never>?
+        let importTask = ImportTaskCancellationBox()
         ImportPDFDocumentsUseCase.commitPreparedImportsDidStartForTesting = {
             commitStarted.fulfill()
             DispatchQueue.global().async {
-                taskLock.lock()
-                let task = importTask
-                taskLock.unlock()
-                task?.cancel()
+                importTask.cancel()
             }
             Thread.sleep(forTimeInterval: 0.2)
         }
@@ -746,9 +765,7 @@ final class DocNestTests: XCTestCase {
                 using: context
             )
         }
-        taskLock.lock()
-        importTask = task
-        taskLock.unlock()
+        importTask.set(task)
 
         await fulfillment(of: [commitStarted], timeout: 3)
         let result = await task.value
@@ -789,14 +806,10 @@ final class DocNestTests: XCTestCase {
         let context = container.mainContext
         let savedImport = expectation(description: "Import metadata was saved")
         let rollbackAttempted = expectation(description: "Committed cancellation rollback was attempted")
-        let taskLock = NSLock()
-        var importTask: Task<ImportPDFDocumentsResult, Never>?
+        let importTask = ImportTaskCancellationBox()
         ImportPDFDocumentsUseCase.savedPreparedImportsForTesting = {
             savedImport.fulfill()
-            taskLock.lock()
-            let task = importTask
-            taskLock.unlock()
-            task?.cancel()
+            importTask.cancel()
         }
         ImportPDFDocumentsUseCase.committedCancellationRollbackSaveForTesting = {
             rollbackAttempted.fulfill()
@@ -814,9 +827,7 @@ final class DocNestTests: XCTestCase {
                 using: context
             )
         }
-        taskLock.lock()
-        importTask = task
-        taskLock.unlock()
+        importTask.set(task)
 
         await fulfillment(of: [savedImport, rollbackAttempted], timeout: 3)
         let result = await task.value

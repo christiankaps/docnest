@@ -62,6 +62,7 @@ The deep reviewer runs only after the fast reviewer reports no actionable findin
 - Tests should verify documented behavior and public contracts rather than implementation details, private structure, incidental ordering, or current helper internals.
 - Prefer tests that could still pass after a valid refactor. Only test implementation details when they are themselves the documented contract or the only practical way to protect against data loss, migration failure, or another high-risk regression.
 - Prefer focused tests during implementation, but the final gate after clean reviews is the full test suite.
+- Build, build-for-testing, test, static-analysis, archive, release-build, and DMG packaging commands must treat compile warnings as errors. Do not remove or bypass that policy unless the user explicitly asks for a temporary diagnostic run.
 - Use the repository testing guide in [docs/testing.md](docs/testing.md) for the canonical commands.
 
 ## Documentation Expectations
