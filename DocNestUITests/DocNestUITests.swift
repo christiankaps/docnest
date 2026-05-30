@@ -100,6 +100,64 @@ final class DocNestUITests: XCTestCase {
         XCTAssertEqual(searchField.value as? String, "invoice")
     }
 
+    @MainActor
+    func testLocationsCanBeCreatedRenamedAndDeletedFromSidebar() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Locations Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try createLibraryFixture(at: libraryURL)
+
+        let app = XCUIApplication()
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES",
+                                "-selectedLibraryPath", libraryURL.path]
+        app.launch()
+
+        XCTAssertTrue(
+            app.otherElements[openLibraryRootIdentifier].waitForExistence(timeout: 10),
+            "Expected the open-library root view to appear after restoring a library fixture"
+        )
+
+        let addLocationButton = app.buttons["location-add-button"]
+        XCTAssertTrue(addLocationButton.waitForExistence(timeout: 10))
+        addLocationButton.click()
+
+        let nameField = app.textFields["location-name-field"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 10))
+        nameField.click()
+        nameField.typeText("Archive Box")
+        app.buttons["Create"].click()
+
+        let createdRow = app.otherElements["location-row-Archive Box"]
+        XCTAssertTrue(createdRow.waitForExistence(timeout: 10))
+
+        let createdActionsButton = app.buttons["location-actions-Archive Box"]
+        XCTAssertTrue(createdActionsButton.waitForExistence(timeout: 10))
+        createdActionsButton.click()
+        app.menuItems["Edit Location"].click()
+
+        XCTAssertTrue(nameField.waitForExistence(timeout: 10))
+        nameField.click()
+        nameField.typeKey("a", modifierFlags: .command)
+        nameField.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: [])
+        nameField.typeText("Shelf A")
+        app.buttons["Save"].click()
+
+        let renamedRow = app.otherElements["location-row-Shelf A"]
+        XCTAssertTrue(renamedRow.waitForExistence(timeout: 10))
+
+        let renamedActionsButton = app.buttons["location-actions-Shelf A"]
+        XCTAssertTrue(renamedActionsButton.waitForExistence(timeout: 10))
+        renamedActionsButton.click()
+        app.menuItems["Delete Location"].click()
+
+        XCTAssertTrue(waitForNonExistence(renamedRow, timeout: 10))
+    }
+
     private func createLibraryFixture(at libraryURL: URL) throws {
         try FileManager.default.createDirectory(at: libraryURL, withIntermediateDirectories: true)
 
@@ -152,6 +210,12 @@ final class DocNestUITests: XCTestCase {
         defaults.removeObject(forKey: "selectedLibraryPath")
         defaults.removeObject(forKey: "selectedLibraryBookmark")
         defaults.synchronize()
+    }
+
+    private func waitForNonExistence(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate(format: "exists == false")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
 }

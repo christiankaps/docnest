@@ -339,6 +339,7 @@ struct LibrarySidebarView: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("Add Location")
+                .accessibilityIdentifier("location-add-button")
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
@@ -404,7 +405,13 @@ struct LibrarySidebarView: View {
             count: coordinator.locationSidebarCounts.count(for: location),
             isSelected: coordinator.sidebarSelection == .location(.location(location.id)),
             dragPayload: DocumentLocationDragPayload.payload(for: location.id),
-            dragPreview: AnyView(LocationDragPreview(name: location.name).onAppear { draggingLocationID = location.id })
+            dragPreview: AnyView(LocationDragPreview(name: location.name).onAppear { draggingLocationID = location.id }),
+            onEdit: {
+                locationEditorConfig = DocumentLocationEditorConfig(mode: .edit(location))
+            },
+            onDelete: {
+                deleteLocation(location)
+            }
         )
         .sidebarRow()
         .overlay(alignment: .top) {
@@ -435,12 +442,8 @@ struct LibrarySidebarView: View {
             }
         }
         .contextMenu {
-            Button("Edit") {
-                locationEditorConfig = DocumentLocationEditorConfig(mode: .edit(location))
-            }
-            Button("Delete", role: .destructive) {
-                deleteLocation(location)
-            }
+            Button("Edit Location") { locationEditorConfig = DocumentLocationEditorConfig(mode: .edit(location)) }
+            Button("Delete Location", role: .destructive) { deleteLocation(location) }
         }
     }
 
@@ -1246,6 +1249,8 @@ private struct LibraryLocationRowView: View {
     let isSelected: Bool
     let dragPayload: String
     let dragPreview: AnyView
+    let onEdit: () -> Void
+    let onDelete: () -> Void
 
     @State private var isHovered = false
 
@@ -1263,6 +1268,8 @@ private struct LibraryLocationRowView: View {
                 .font(AppTypography.caption.monospacedDigit())
                 .foregroundStyle(isSelected ? Color.primary.opacity(0.7) : Color.secondary.opacity(0.58))
 
+            actionsMenu
+
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(isHovered ? .secondary : .tertiary)
@@ -1279,11 +1286,32 @@ private struct LibraryLocationRowView: View {
                 .fill(isSelected ? Color.accentColor.opacity(0.14) : (isHovered ? AppTheme.quietHoverFill : Color.clear))
         )
         .contentShape(Rectangle())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Location \(location.name)")
+        .accessibilityIdentifier("location-row-\(location.name)")
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
             }
         }
+    }
+
+    private var actionsMenu: some View {
+        Menu {
+            Button("Edit Location", action: onEdit)
+            Button("Delete Location", role: .destructive, action: onDelete)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isHovered || isSelected ? .secondary : .tertiary)
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Location actions")
+        .accessibilityLabel("Location Actions for \(location.name)")
+        .accessibilityIdentifier("location-actions-\(location.name)")
     }
 }
 
@@ -1390,6 +1418,7 @@ struct DocumentLocationEditorSheet: View {
             Form {
                 TextField("Name", text: $name)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("location-name-field")
 
                 if let location = existingLocation {
                     Section("Cover Photo") {
