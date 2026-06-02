@@ -37,7 +37,7 @@ final class DocNestUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(
-            app.otherElements[openLibraryRootIdentifier].waitForExistence(timeout: 10),
+            waitForOpenLibraryRoot(in: app),
             "Expected the open-library root view to appear after restoring a library fixture"
         )
     }
@@ -60,7 +60,7 @@ final class DocNestUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(
-            app.otherElements[openLibraryRootIdentifier].waitForExistence(timeout: 10),
+            waitForOpenLibraryRoot(in: app),
             "Expected the open-library root view to appear after restoring a library fixture"
         )
         XCTAssertFalse(
@@ -87,7 +87,7 @@ final class DocNestUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(
-            app.otherElements[openLibraryRootIdentifier].waitForExistence(timeout: 10),
+            waitForOpenLibraryRoot(in: app),
             "Expected the open-library root view to appear after restoring a library fixture"
         )
 
@@ -118,7 +118,7 @@ final class DocNestUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(
-            app.otherElements[openLibraryRootIdentifier].waitForExistence(timeout: 10),
+            waitForOpenLibraryRoot(in: app),
             "Expected the open-library root view to appear after restoring a library fixture"
         )
 
@@ -126,36 +126,95 @@ final class DocNestUITests: XCTestCase {
         XCTAssertTrue(addLocationButton.waitForExistence(timeout: 10))
         addLocationButton.click()
 
-        let nameField = app.textFields["location-name-field"]
+        let createSheet = app.sheets.firstMatch
+        XCTAssertTrue(createSheet.waitForExistence(timeout: 10))
+
+        let nameField = createSheet.textFields["location-name-field"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 10))
         nameField.click()
-        nameField.typeText("Archive Box")
-        app.buttons["Create"].click()
+        let originalLocationName = "Archive Box"
+        nameField.typeText(originalLocationName)
+        createSheet.buttons["Create"].click()
+        XCTAssertTrue(waitForNonExistence(createSheet, timeout: 10))
 
-        let createdRow = app.otherElements["location-row-Archive Box"]
-        XCTAssertTrue(createdRow.waitForExistence(timeout: 10))
+        let createdLocationLabel = app.staticTexts["Archive Box"]
+        XCTAssertTrue(createdLocationLabel.waitForExistence(timeout: 10))
+        let editButton = app.buttons["location-edit-Archive Box"]
+        XCTAssertTrue(editButton.waitForExistence(timeout: 10))
+        editButton.click()
 
-        let createdActionsButton = app.buttons["location-actions-Archive Box"]
-        XCTAssertTrue(createdActionsButton.waitForExistence(timeout: 10))
-        createdActionsButton.click()
-        app.menuItems["Edit Location"].click()
+        let editSheet = app.sheets.firstMatch
+        XCTAssertTrue(editSheet.waitForExistence(timeout: 10))
 
-        XCTAssertTrue(nameField.waitForExistence(timeout: 10))
-        nameField.click()
-        nameField.typeKey("a", modifierFlags: .command)
-        nameField.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: [])
-        nameField.typeText("Shelf A")
-        app.buttons["Save"].click()
+        let renamedNameField = editSheet.textFields["location-name-field"]
+        XCTAssertTrue(renamedNameField.waitForExistence(timeout: 10))
+        renamedNameField.click()
+        app.typeKey(XCUIKeyboardKey.rightArrow.rawValue, modifierFlags: .command)
+        for _ in originalLocationName {
+            app.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: [])
+        }
+        renamedNameField.typeText("Shelf A")
+        XCTAssertEqual(renamedNameField.value as? String, "Shelf A")
+        editSheet.buttons["Save"].click()
+        XCTAssertTrue(waitForNonExistence(editSheet, timeout: 10))
 
-        let renamedRow = app.otherElements["location-row-Shelf A"]
-        XCTAssertTrue(renamedRow.waitForExistence(timeout: 10))
+        let renamedLocationLabel = app.staticTexts["Shelf A"]
+        XCTAssertTrue(renamedLocationLabel.waitForExistence(timeout: 10))
+        let deleteButton = app.buttons["location-delete-Shelf A"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 10))
+        deleteButton.click()
 
-        let renamedActionsButton = app.buttons["location-actions-Shelf A"]
-        XCTAssertTrue(renamedActionsButton.waitForExistence(timeout: 10))
-        renamedActionsButton.click()
-        app.menuItems["Delete Location"].click()
+        XCTAssertTrue(waitForNonExistence(app.staticTexts["Shelf A"], timeout: 10))
+    }
 
-        XCTAssertTrue(waitForNonExistence(renamedRow, timeout: 10))
+    @MainActor
+    func testDeletingLocationWithAssignedDocumentRequiresConfirmation() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Assigned Location Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try createLibraryFixture(at: libraryURL)
+
+        let app = XCUIApplication()
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES",
+                                "-selectedLibraryPath", libraryURL.path,
+                                "-uiTestSeedAssignedLocationName", "Archive Shelf"]
+        app.launch()
+
+        XCTAssertTrue(
+            waitForOpenLibraryRoot(in: app),
+            "Expected the open-library root view to appear after restoring a library fixture"
+        )
+
+        let locationLabel = app.staticTexts["Archive Shelf"]
+        XCTAssertTrue(locationLabel.waitForExistence(timeout: 10))
+
+        let deleteButton = app.buttons["location-delete-Archive Shelf"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 10))
+        deleteButton.click()
+
+        let confirmationSheet = app.sheets.firstMatch
+        XCTAssertTrue(confirmationSheet.waitForExistence(timeout: 10))
+
+        let cancelButton = confirmationSheet.buttons["Cancel"]
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 10))
+        cancelButton.click()
+        XCTAssertTrue(waitForNonExistence(confirmationSheet, timeout: 10))
+
+        XCTAssertTrue(locationLabel.waitForExistence(timeout: 10))
+
+        deleteButton.click()
+
+        XCTAssertTrue(confirmationSheet.waitForExistence(timeout: 10))
+        let confirmDeleteButton = confirmationSheet.buttons["Delete Location"]
+        XCTAssertTrue(confirmDeleteButton.waitForExistence(timeout: 10))
+        confirmDeleteButton.click()
+
+        XCTAssertTrue(waitForNonExistence(app.staticTexts["Archive Shelf"], timeout: 10))
     }
 
     private func createLibraryFixture(at libraryURL: URL) throws {
@@ -216,6 +275,10 @@ final class DocNestUITests: XCTestCase {
         let predicate = NSPredicate(format: "exists == false")
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
         return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func waitForOpenLibraryRoot(in app: XCUIApplication, timeout: TimeInterval = 10) -> Bool {
+        app.descendants(matching: .any)[openLibraryRootIdentifier].waitForExistence(timeout: timeout)
     }
 
 }

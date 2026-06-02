@@ -94,7 +94,20 @@ struct RootView: View {
                 coordinator: coordinator,
                 modelContainer: librarySession.modelContainer
             )
-            coordinator.ingest(allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allDocumentLocations: allDocumentLocations, allWatchFolders: allWatchFolders, allLabelValues: allLabelValues)
+            #if DEBUG
+            let seededAssignedLocationSnapshot = seedUITestAssignedLocationIfNeeded()
+            #else
+            let seededAssignedLocationSnapshot: UITestAssignedLocationSnapshot? = nil
+            #endif
+            coordinator.ingest(
+                allDocuments: seededAssignedLocationSnapshot?.documents ?? allDocuments,
+                allLabels: allLabels,
+                allSmartFolders: allSmartFolders,
+                allLabelGroups: allLabelGroups,
+                allDocumentLocations: seededAssignedLocationSnapshot?.documentLocations ?? allDocumentLocations,
+                allWatchFolders: allWatchFolders,
+                allLabelValues: allLabelValues
+            )
             coordinator.runOCRBackfill(documents: allDocuments, libraryURL: libraryURL, modelContext: modelContext)
             coordinator.setupWatchFolderMonitoring()
             // Import any URLs that arrived before the library was ready
@@ -117,6 +130,80 @@ struct RootView: View {
     private var inspectorWidth: Double {
         AppSplitViewLayout.inspectorWidth * inspectorVisibilityProgress
     }
+
+    private struct UITestAssignedLocationSnapshot {
+        let documents: [DocumentRecord]
+        let documentLocations: [DocumentLocation]
+    }
+
+    #if DEBUG
+    private func seedUITestAssignedLocationIfNeeded() -> UITestAssignedLocationSnapshot? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let nameFlagIndex = arguments.firstIndex(of: "-uiTestSeedAssignedLocationName") else {
+            return nil
+        }
+
+        let nameIndex = arguments.index(after: nameFlagIndex)
+        guard arguments.indices.contains(nameIndex) else {
+            return nil
+        }
+
+        let locationName = arguments[nameIndex]
+        let markerTitle = "UI Test Assigned Document: \(locationName)"
+
+        do {
+            let locations = try modelContext.fetch(FetchDescriptor<DocumentLocation>(
+                sortBy: [SortDescriptor(\.sortOrder)]
+            ))
+            let location: DocumentLocation
+            if let existingLocation = locations.first(where: { $0.name == locationName }) {
+                location = existingLocation
+            } else {
+                location = DocumentLocation(
+                    name: locationName,
+                    sortOrder: (locations.map(\.sortOrder).max() ?? -1) + 1
+                )
+                modelContext.insert(location)
+            }
+
+            var documentDescriptor = FetchDescriptor<DocumentRecord>(
+                predicate: #Predicate { document in
+                    document.title == markerTitle
+                }
+            )
+            documentDescriptor.fetchLimit = 1
+
+            if let document = try modelContext.fetch(documentDescriptor).first {
+                document.availability = .physical
+                document.physicalLocationID = location.id
+            } else {
+                modelContext.insert(DocumentRecord(
+                    originalFileName: "ui-test-assigned.pdf",
+                    title: markerTitle,
+                    importedAt: .now,
+                    pageCount: 1,
+                    availability: .physical,
+                    physicalLocationID: location.id
+                ))
+            }
+
+            try modelContext.save()
+            let seededDocuments = try modelContext.fetch(FetchDescriptor<DocumentRecord>(
+                sortBy: [SortDescriptor(\.importedAt, order: .reverse)]
+            ))
+            let seededLocations = try modelContext.fetch(FetchDescriptor<DocumentLocation>(
+                sortBy: [SortDescriptor(\.sortOrder)]
+            ))
+            return UITestAssignedLocationSnapshot(
+                documents: seededDocuments,
+                documentLocations: seededLocations
+            )
+        } catch {
+            assertionFailure("Failed to seed UI test assigned location: \(error)")
+            return nil
+        }
+    }
+    #endif
 
     private var inspectorContentOpacity: Double {
         max(0, min(1, inspectorVisibilityProgress * 1.2))

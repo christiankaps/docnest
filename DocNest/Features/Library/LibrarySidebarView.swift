@@ -1297,21 +1297,32 @@ private struct LibraryLocationRowView: View {
     }
 
     private var actionsMenu: some View {
-        Menu {
-            Button("Edit Location", action: onEdit)
-            Button("Delete Location", role: .destructive, action: onDelete)
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isHovered || isSelected ? .secondary : .tertiary)
-                .frame(width: 16, height: 16)
-                .contentShape(Rectangle())
+        HStack(spacing: 4) {
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+                    .font(.system(size: 11, weight: .medium))
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(isHovered || isSelected ? .secondary : .tertiary)
+            .help("Edit Location")
+            .accessibilityLabel("Edit Location \(location.name)")
+            .accessibilityIdentifier("location-edit-\(location.name)")
+
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: 11, weight: .medium))
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(Color.red.opacity(isHovered || isSelected ? 0.82 : 0.58))
+            .help("Delete Location")
+            .accessibilityLabel("Delete Location \(location.name)")
+            .accessibilityIdentifier("location-delete-\(location.name)")
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .help("Location actions")
-        .accessibilityLabel("Location Actions for \(location.name)")
-        .accessibilityIdentifier("location-actions-\(location.name)")
+        .opacity(isHovered || isSelected ? 1 : 0.78)
     }
 }
 
