@@ -10,6 +10,10 @@ Documentation-only edits may use a lighter workflow, but code changes must follo
 Documentation-only edits do not require AI review or full tests unless they change executable examples, scripts, release behavior, or documented app behavior.
 For investigation, review, planning, or suggestions without code edits, do not run the full change workflow. Inspect the relevant files and provide findings or recommendations.
 
+## Branching
+
+Work directly on `main`. Do not create feature branches or pull requests.
+
 ## Required Change Workflow
 
 1. Understand the affected code before editing.
