@@ -21,13 +21,10 @@ Work directly on `main`. Do not create feature branches or pull requests.
 3. In the plan, identify likely corner cases, regression risks, affected workflows, data-loss risks, concurrency risks, and test coverage needed before editing.
 4. Implement the change.
 5. Add or update tests for every new feature or bug fix as part of the same change.
-6. Run an AI review using a different model than the implementing agent.
-7. Start the first review pass with a fast model.
-8. Reuse existing review agents when practical instead of spawning new ones for every pass.
-9. If the fast review finds issues, fix them and rerun review until that review agent reports no further findings.
-10. If the fast review reports no findings, run a second review with a stronger but slower model.
-11. Only after all review agents report no further issues, run the full test suite.
-12. Create a commit only after the reviews are clean and the full test run passes.
+6. Run a fast review with a different model than the implementing agent.
+7. If the review finds issues, fix them and rerun the review until the review agent reports no further findings.
+8. Run the full test suite only after the review is clean.
+9. Create a commit only after the review is clean and the full test run passes.
 
 Before editing, check the worktree. Do not revert or overwrite unrelated user changes. If unrelated changes exist, leave them alone. If they affect the task, work with them or ask before proceeding.
 
@@ -35,8 +32,8 @@ Before editing, check the worktree. Do not revert or overwrite unrelated user ch
 
 - The reviewer must be independent from the implementer and must use a different model.
 - Review findings should prioritize correctness, regressions, missing tests, concurrency risks, data loss risks, and UI behavior mismatches.
-- Do not treat "no findings" from the first fast review as sufficient for code changes. A clean fast review is the gate to the second, stronger review.
-- If a later review finds problems, return to implementation, fix the issues, and repeat the review sequence.
+- Reuse existing review agents when practical instead of spawning new ones for every pass.
+- When there are no actionable findings, say that explicitly and mention any residual risks or tests the implementer should still run.
 
 ### Fast Reviewer Instructions
 
@@ -48,17 +45,6 @@ The fast reviewer is the first independent check after implementation. Use a fas
 - Prefer high-signal findings over broad commentary. Each finding should include the affected file or behavior, why it matters, and the smallest practical fix.
 - Do not approve by default. If something is unclear enough to hide a bug, ask for clarification or identify the risk.
 - When there are no actionable findings, say that explicitly and mention any residual risks or tests the implementer should still run.
-
-### Deep Reviewer Instructions
-
-The deep reviewer runs only after the fast reviewer reports no actionable findings. Use a stronger model and perform a slower, more systemic review that assumes subtle regressions may remain.
-
-- Reconstruct the intended behavior from the request, requirements, and changed documentation, then compare it against the implementation.
-- Trace important workflows end to end, including persistence, migrations, import/open flows, search and filtering, UI state, error handling, cancellation, and recovery paths touched by the change.
-- Look for edge cases the fast review may miss: stale references, orphaned data, cross-version compatibility, concurrency or actor isolation mistakes, partial filesystem writes, privacy leaks, and mismatches between tests and real app behavior.
-- Evaluate whether tests cover the riskiest behavior and whether fixtures represent released data formats when migrations or compatibility are involved.
-- Avoid style-only comments unless the style issue creates maintenance risk or obscures correctness.
-- Return findings ordered by severity. If there are no actionable findings, say so clearly and identify the remaining verification needed before the full test suite.
 
 ## Testing Expectations
 
