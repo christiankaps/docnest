@@ -399,6 +399,9 @@ struct LibrarySidebarView: View {
             return nil
         } ?? false
 
+        let onEdit = { locationEditorConfig = DocumentLocationEditorConfig(mode: .edit(location)) }
+        let onDelete = { deleteLocation(location) }
+
         LibraryLocationRowView(
             location: location,
             libraryURL: coordinator.libraryURL,
@@ -406,12 +409,8 @@ struct LibrarySidebarView: View {
             isSelected: coordinator.sidebarSelection == .location(.location(location.id)),
             dragPayload: DocumentLocationDragPayload.payload(for: location.id),
             dragPreview: AnyView(LocationDragPreview(name: location.name).onAppear { draggingLocationID = location.id }),
-            onEdit: {
-                locationEditorConfig = DocumentLocationEditorConfig(mode: .edit(location))
-            },
-            onDelete: {
-                deleteLocation(location)
-            }
+            onEdit: onEdit,
+            onDelete: onDelete
         )
         .sidebarRow()
         .overlay(alignment: .top) {
@@ -442,8 +441,8 @@ struct LibrarySidebarView: View {
             }
         }
         .contextMenu {
-            Button("Edit Location") { locationEditorConfig = DocumentLocationEditorConfig(mode: .edit(location)) }
-            Button("Delete Location", role: .destructive) { deleteLocation(location) }
+            Button("Edit Location", action: onEdit)
+            Button("Delete Location", role: .destructive, action: onDelete)
         }
     }
 
@@ -1253,6 +1252,7 @@ private struct LibraryLocationRowView: View {
     let onDelete: () -> Void
 
     @State private var isHovered = false
+    @State private var isDeletePending = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -1305,24 +1305,32 @@ private struct LibraryLocationRowView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(isHovered || isSelected ? .secondary : .tertiary)
+            .foregroundStyle(isHovered || isSelected ? Color.secondary : Color.secondary.opacity(0.4))
             .help("Edit Location")
             .accessibilityLabel("Edit Location \(location.name)")
             .accessibilityIdentifier("location-edit-\(location.name)")
 
-            Button(role: .destructive, action: onDelete) {
+            Button(role: .destructive, action: {
+                guard !isDeletePending else { return }
+                isDeletePending = true
+                onDelete()
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(500))
+                    isDeletePending = false
+                }
+            }) {
                 Image(systemName: "trash")
                     .font(.system(size: 11, weight: .medium))
                     .frame(width: 16, height: 16)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(Color.red.opacity(isHovered || isSelected ? 0.82 : 0.58))
+            .foregroundStyle(Color.red.opacity(isHovered || isSelected ? 0.82 : 0.45))
+            .disabled(isDeletePending)
             .help("Delete Location")
             .accessibilityLabel("Delete Location \(location.name)")
             .accessibilityIdentifier("location-delete-\(location.name)")
         }
-        .opacity(isHovered || isSelected ? 1 : 0.78)
     }
 }
 

@@ -149,10 +149,7 @@ final class DocNestUITests: XCTestCase {
         let renamedNameField = editSheet.textFields["location-name-field"]
         XCTAssertTrue(renamedNameField.waitForExistence(timeout: 10))
         renamedNameField.click()
-        app.typeKey(XCUIKeyboardKey.rightArrow.rawValue, modifierFlags: .command)
-        for _ in originalLocationName {
-            app.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: [])
-        }
+        app.typeKey("a", modifierFlags: .command)
         renamedNameField.typeText("Shelf A")
         XCTAssertEqual(renamedNameField.value as? String, "Shelf A")
         editSheet.buttons["Save"].click()
@@ -220,7 +217,7 @@ final class DocNestUITests: XCTestCase {
     private func createLibraryFixture(at libraryURL: URL) throws {
         try FileManager.default.createDirectory(at: libraryURL, withIntermediateDirectories: true)
 
-        let requiredDirectories = ["Metadata", "Originals", "Previews", "Diagnostics"]
+        let requiredDirectories = ["Metadata", "Originals", "Previews", "LocationPhotos", "Diagnostics"]
         for directory in requiredDirectories {
             try FileManager.default.createDirectory(
                 at: libraryURL.appendingPathComponent(directory, isDirectory: true),
@@ -231,7 +228,7 @@ final class DocNestUITests: XCTestCase {
         let manifest = """
         {
           "createdAt" : "2026-03-10T12:00:00Z",
-          "formatVersion" : 1
+          "formatVersion" : 2
         }
         """
 
@@ -274,7 +271,7 @@ final class DocNestUITests: XCTestCase {
     private func waitForNonExistence(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let predicate = NSPredicate(format: "exists == false")
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
-        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+        return XCTWaiter(delegate: self).wait(for: [expectation], timeout: timeout) == .completed
     }
 
     private func waitForOpenLibraryRoot(in app: XCUIApplication, timeout: TimeInterval = 10) -> Bool {

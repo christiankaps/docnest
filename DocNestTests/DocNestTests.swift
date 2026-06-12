@@ -64,31 +64,35 @@ private enum TestImportFixtures {
     }
 }
 
+private final class Locked<T>: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "DocNestTests.Locked")
+    private var value: T
+    init(_ value: T) { self.value = value }
+    @discardableResult
+    func withLock<R>(_ body: (inout T) -> R) -> R { queue.sync { body(&value) } }
+}
+
 private final class OneShotFlag: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "DocNestTests.OneShotFlag")
-    private var hasClaimed = false
+    private let locked = Locked(false)
 
     func claim() -> Bool {
-        queue.sync {
-            guard !hasClaimed else { return false }
-            hasClaimed = true
+        locked.withLock { flag in
+            guard !flag else { return false }
+            flag = true
             return true
         }
     }
 }
 
 private final class ImportTaskCancellationBox: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "DocNestTests.ImportTaskCancellationBox")
-    private var task: Task<ImportPDFDocumentsResult, Never>?
+    private let locked = Locked<Task<ImportPDFDocumentsResult, Never>?>(nil)
 
     func set(_ task: Task<ImportPDFDocumentsResult, Never>) {
-        queue.sync {
-            self.task = task
-        }
+        locked.withLock { t in t = task }
     }
 
     func cancel() {
-        let task = queue.sync { self.task }
+        let task = locked.withLock { t in t }
         task?.cancel()
     }
 }

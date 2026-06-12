@@ -2,6 +2,81 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
+private struct UITestAssignedLocationSnapshot {
+    let documents: [DocumentRecord]
+    let documentLocations: [DocumentLocation]
+}
+
+#if DEBUG
+private func seedUITestAssignedLocationIfNeeded(
+    modelContext: ModelContext,
+    existingDocuments: [DocumentRecord]
+) -> UITestAssignedLocationSnapshot? {
+    let arguments = ProcessInfo.processInfo.arguments
+    guard let nameFlagIndex = arguments.firstIndex(of: "-uiTestSeedAssignedLocationName"),
+          let locationName = arguments.dropFirst(nameFlagIndex + 1).first else {
+        return nil
+    }
+
+    let markerTitle = "UI Test Assigned Document: \(locationName)"
+
+    do {
+        let locations = try modelContext.fetch(FetchDescriptor<DocumentLocation>(
+            sortBy: [SortDescriptor(\.sortOrder)]
+        ))
+
+        let location: DocumentLocation
+        let locationWasCreated: Bool
+        if let existingLocation = locations.first(where: { $0.name == locationName }) {
+            location = existingLocation
+            locationWasCreated = false
+        } else {
+            location = DocumentLocation(
+                name: locationName,
+                sortOrder: (locations.map(\.sortOrder).max() ?? -1) + 1
+            )
+            modelContext.insert(location)
+            locationWasCreated = true
+        }
+
+        var documentDescriptor = FetchDescriptor<DocumentRecord>(
+            predicate: #Predicate { document in document.title == markerTitle }
+        )
+        documentDescriptor.fetchLimit = 1
+
+        let isNewDocument: Bool
+        let documentRecord: DocumentRecord
+        if let existing = try modelContext.fetch(documentDescriptor).first {
+            existing.availability = .physical
+            existing.physicalLocationID = location.id
+            isNewDocument = false
+            documentRecord = existing
+        } else {
+            let newDoc = DocumentRecord(
+                originalFileName: "ui-test-assigned.pdf",
+                title: markerTitle,
+                importedAt: .now,
+                pageCount: 1,
+                availability: .physical,
+                physicalLocationID: location.id
+            )
+            modelContext.insert(newDoc)
+            isNewDocument = true
+            documentRecord = newDoc
+        }
+
+        try modelContext.save()
+
+        let seededDocuments = isNewDocument ? [documentRecord] + existingDocuments : existingDocuments
+        let seededLocations = locationWasCreated ? locations + [location] : locations
+        return UITestAssignedLocationSnapshot(documents: seededDocuments, documentLocations: seededLocations)
+    } catch {
+        assertionFailure("Failed to seed UI test assigned location: \(error)")
+        return nil
+    }
+}
+#endif
+
 /// The root window content for an open DocNest library.
 ///
 /// `RootView` owns the live `LibraryCoordinator` and wires SwiftData query
@@ -95,7 +170,10 @@ struct RootView: View {
                 modelContainer: librarySession.modelContainer
             )
             #if DEBUG
-            let seededAssignedLocationSnapshot = seedUITestAssignedLocationIfNeeded()
+            let seededAssignedLocationSnapshot = seedUITestAssignedLocationIfNeeded(
+                modelContext: modelContext,
+                existingDocuments: allDocuments
+            )
             #else
             let seededAssignedLocationSnapshot: UITestAssignedLocationSnapshot? = nil
             #endif
@@ -130,80 +208,6 @@ struct RootView: View {
     private var inspectorWidth: Double {
         AppSplitViewLayout.inspectorWidth * inspectorVisibilityProgress
     }
-
-    private struct UITestAssignedLocationSnapshot {
-        let documents: [DocumentRecord]
-        let documentLocations: [DocumentLocation]
-    }
-
-    #if DEBUG
-    private func seedUITestAssignedLocationIfNeeded() -> UITestAssignedLocationSnapshot? {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let nameFlagIndex = arguments.firstIndex(of: "-uiTestSeedAssignedLocationName") else {
-            return nil
-        }
-
-        let nameIndex = arguments.index(after: nameFlagIndex)
-        guard arguments.indices.contains(nameIndex) else {
-            return nil
-        }
-
-        let locationName = arguments[nameIndex]
-        let markerTitle = "UI Test Assigned Document: \(locationName)"
-
-        do {
-            let locations = try modelContext.fetch(FetchDescriptor<DocumentLocation>(
-                sortBy: [SortDescriptor(\.sortOrder)]
-            ))
-            let location: DocumentLocation
-            if let existingLocation = locations.first(where: { $0.name == locationName }) {
-                location = existingLocation
-            } else {
-                location = DocumentLocation(
-                    name: locationName,
-                    sortOrder: (locations.map(\.sortOrder).max() ?? -1) + 1
-                )
-                modelContext.insert(location)
-            }
-
-            var documentDescriptor = FetchDescriptor<DocumentRecord>(
-                predicate: #Predicate { document in
-                    document.title == markerTitle
-                }
-            )
-            documentDescriptor.fetchLimit = 1
-
-            if let document = try modelContext.fetch(documentDescriptor).first {
-                document.availability = .physical
-                document.physicalLocationID = location.id
-            } else {
-                modelContext.insert(DocumentRecord(
-                    originalFileName: "ui-test-assigned.pdf",
-                    title: markerTitle,
-                    importedAt: .now,
-                    pageCount: 1,
-                    availability: .physical,
-                    physicalLocationID: location.id
-                ))
-            }
-
-            try modelContext.save()
-            let seededDocuments = try modelContext.fetch(FetchDescriptor<DocumentRecord>(
-                sortBy: [SortDescriptor(\.importedAt, order: .reverse)]
-            ))
-            let seededLocations = try modelContext.fetch(FetchDescriptor<DocumentLocation>(
-                sortBy: [SortDescriptor(\.sortOrder)]
-            ))
-            return UITestAssignedLocationSnapshot(
-                documents: seededDocuments,
-                documentLocations: seededLocations
-            )
-        } catch {
-            assertionFailure("Failed to seed UI test assigned location: \(error)")
-            return nil
-        }
-    }
-    #endif
 
     private var inspectorContentOpacity: Double {
         max(0, min(1, inspectorVisibilityProgress * 1.2))
