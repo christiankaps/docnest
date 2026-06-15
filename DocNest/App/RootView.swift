@@ -14,7 +14,6 @@ struct RootView: View {
     @State private var coordinator = LibraryCoordinator()
     @State private var thumbnailCache = ThumbnailCache()
     @State private var quickLook = QuickLookCoordinator()
-    @State private var inspectorVisibilityProgress = 1.0
 
     @Environment(\.modelContext) private var modelContext
 
@@ -40,31 +39,29 @@ struct RootView: View {
     private var allLabelValues: [DocumentLabelValue]
 
     var body: some View {
-        HStack(spacing: 0) {
+        NavigationSplitView {
             LibrarySidebarView()
-                .frame(width: AppSplitViewLayout.sidebarWidth)
-
-            Divider()
-
+                .navigationSplitViewColumnWidth(
+                    min: 240,
+                    ideal: AppSplitViewLayout.sidebarWidth,
+                    max: 360
+                )
+        } detail: {
             documentListPanel
                 .frame(minWidth: AppSplitViewLayout.documentListMinWidth)
-
-            Divider()
-                .opacity(inspectorDividerOpacity)
-
-            DocumentInspectorView(
-                documents: coordinator.displayedSelectedDocuments,
-                libraryURL: libraryURL,
-                isTransitioningSelection: coordinator.isInspectorSelectionPending
-            )
-            .frame(width: inspectorWidth)
-            .opacity(inspectorContentOpacity)
-            .clipped()
-            .allowsHitTesting(!coordinator.isInspectorCollapsed)
-            .accessibilityHidden(coordinator.isInspectorCollapsed)
-            .compositingGroup()
+                .inspector(isPresented: inspectorPresentedBinding) {
+                    DocumentInspectorView(
+                        documents: coordinator.displayedSelectedDocuments,
+                        libraryURL: libraryURL,
+                        isTransitioningSelection: coordinator.isInspectorSelectionPending
+                    )
+                    .inspectorColumnWidth(
+                        min: 320,
+                        ideal: AppSplitViewLayout.inspectorWidth,
+                        max: 560
+                    )
+                }
         }
-        .animation(.easeInOut(duration: 0.16), value: inspectorVisibilityProgress)
         .background(AppTheme.windowBackground)
         .environment(coordinator)
         .environment(thumbnailCache)
@@ -89,7 +86,6 @@ struct RootView: View {
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
-            inspectorVisibilityProgress = coordinator.isInspectorCollapsed ? 0 : 1
             AppSettingsController.shared.setActiveLibraryContext(
                 coordinator: coordinator,
                 modelContainer: librarySession.modelContainer
@@ -122,13 +118,13 @@ struct RootView: View {
                 coordinator.importDocuments(from: pending)
             }
         }
-        .onChange(of: coordinator.isInspectorCollapsed) { _, isCollapsed in
-            inspectorVisibilityProgress = isCollapsed ? 0 : 1
-        }
     }
 
-    private var inspectorWidth: Double {
-        AppSplitViewLayout.inspectorWidth * inspectorVisibilityProgress
+    private var inspectorPresentedBinding: Binding<Bool> {
+        Binding(
+            get: { !coordinator.isInspectorCollapsed },
+            set: { coordinator.isInspectorCollapsed = !$0 }
+        )
     }
 
     private struct UITestAssignedLocationSnapshot {
@@ -204,14 +200,6 @@ struct RootView: View {
         }
     }
     #endif
-
-    private var inspectorContentOpacity: Double {
-        max(0, min(1, inspectorVisibilityProgress * 1.2))
-    }
-
-    private var inspectorDividerOpacity: Double {
-        max(0, min(1, inspectorVisibilityProgress))
-    }
 
     private var documentListPanel: some View {
         ZStack {
