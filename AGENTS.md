@@ -10,6 +10,13 @@ Documentation-only edits may use a lighter workflow, but code changes must follo
 Documentation-only edits do not require AI review or full tests unless they change executable examples, scripts, release behavior, or documented app behavior.
 For investigation, review, planning, or suggestions without code edits, do not run the full change workflow. Inspect the relevant files and provide findings or recommendations.
 
+## Branching Policy
+
+- Work directly on the repository's default branch (`main` or `master`, whichever the repository uses).
+- Do not create feature branches, topic branches, or working branches for changes.
+- Do not open pull requests. Commit and push completed changes straight to the default branch.
+- Determine the default branch from git remote metadata rather than assuming `main` or `master`.
+
 ## Required Change Workflow
 
 1. Understand the affected code before editing.
