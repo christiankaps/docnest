@@ -10,9 +10,12 @@ Documentation-only edits may use a lighter workflow, but code changes must follo
 Documentation-only edits do not require AI review or full tests unless they change executable examples, scripts, release behavior, or documented app behavior.
 For investigation, review, planning, or suggestions without code edits, do not run the full change workflow. Inspect the relevant files and provide findings or recommendations.
 
-## Branching
+## Branching Policy
 
-Work directly on `main`. Do not create feature branches or pull requests.
+- Work directly on the repository's default branch (`main` or `master`, whichever the repository uses).
+- Do not create feature branches, topic branches, or working branches for changes.
+- Do not open pull requests. Commit and push completed changes straight to the default branch.
+- Determine the default branch from git remote metadata rather than assuming `main` or `master`.
 
 ## Required Change Workflow
 
@@ -105,6 +108,12 @@ Before creating a release:
 - For SwiftUI/AppKit UI changes, preserve macOS-native behavior and existing app workflows unless the user explicitly asks for a behavior change.
 - Perform visual verification where practical and note the key windows or states checked.
 - Add automated tests for behavior that can be tested reliably.
+
+## Native SDK Preference
+
+- For every new implementation, first check whether the Swift SDK or Apple frameworks provide a native solution covering the requested functionality or similar functionality.
+- Prefer native solutions over custom implementations when they exist.
+- If a native solution exists but does not fit the requested design 100%, stop and ask the user whether to use the native solution before proceeding with a custom implementation.
 
 ## Swift Code Style
 
