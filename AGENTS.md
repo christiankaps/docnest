@@ -123,6 +123,12 @@ Before creating a release:
 - Perform visual verification where practical and note the key windows or states checked.
 - Add automated tests for behavior that can be tested reliably.
 
+## Native SDK Preference
+
+- For every new implementation, first check whether the Swift SDK or Apple frameworks provide a native solution covering the requested functionality or similar functionality.
+- Prefer native solutions over custom implementations when they exist.
+- If a native solution exists but does not fit the requested design 100%, stop and ask the user whether to use the native solution before proceeding with a custom implementation.
+
 ## Swift Code Style
 
 - Keep Swift code clear, small, and easy to follow.
