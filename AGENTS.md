@@ -8,7 +8,19 @@ Follow this workflow for every code change, including refactors, regressions, bu
 
 Documentation-only edits may use a lighter workflow, but code changes must follow the full process below.
 Documentation-only edits do not require AI review or full tests unless they change executable examples, scripts, release behavior, or documented app behavior.
-For investigation, review, planning, or suggestions without code edits, do not run the full change workflow. Inspect the relevant files and provide findings or recommendations.
+For investigation, review, planning, or suggestions without code edits, do not run the full change workflow. Inspect the relevant files and provide findings or recommendations, then record them as described in [Analysis Documentation](#analysis-documentation).
+
+## Analysis Documentation
+
+Every analysis (investigation, review, audit, or any read-only assessment that produces findings) must be recorded in `ANALYSIS.md` at the repository root.
+
+- Append a new entry to `ANALYSIS.md` for each analysis. Never overwrite or delete previous entries; the file is an append-only log with the newest entry on top.
+- Each entry must include:
+  - the date the analysis was performed (`YYYY-MM-DD`),
+  - the AI model that performed it (name and exact model ID),
+  - the exact analysis prompt that was requested, quoted verbatim,
+  - the analysis result (findings and recommendations).
+- Commit `ANALYSIS.md` immediately after the analysis result is written. Use a clear commit message such as `docs(analysis): record <topic> analysis`. Recording an analysis is a documentation-only change, so the full code-change workflow does not apply.
 
 ## Branching Policy
 
