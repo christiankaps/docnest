@@ -4,6 +4,30 @@ This file is an append-only log of analyses (investigations, reviews, audits) pe
 
 ---
 
+## Normal Diff Review
+
+- **Date:** 2026-06-30
+- **AI model:** GPT-5 (`gpt-5`)
+- **Prompt:** "Normal review of the current uncommitted DocNest app diff under the updated AGENTS.md instructions. Review the diff, changed tests, and nearby affected code paths only. Do not edit files, compile, build, run the app, run tests, package artifacts, or execute verification commands. Prioritize correctness, regressions, missing tests, concurrency risks, data loss risks, UI behavior mismatches, native Settings behavior, `.searchable` toolbar focus behavior, `DocumentDateExtractor` behavior/thread safety, tests, and documentation. Report actionable findings only; if none, say no actionable findings and note residual verification."
+
+### Result
+
+No actionable findings were identified in the current app diff.
+
+Reviewed changes:
+
+- Native Settings migration: `DocNestApp` declares the SwiftUI `Settings` scene, and `AppSettingsController.show(_:)` preselects the pane before invoking AppKit's standard `showSettingsWindow:` action. The custom About window remains documented as intentionally custom because it hosts update workflow and live library statistics.
+- Native toolbar search migration: `RootView` uses SwiftUI `.searchable` in the toolbar, removes the custom search field state token, and uses `SearchToolbarFocus` to bridge the existing search command to the native `NSSearchToolbarItem` on visible windows.
+- Date extraction: `DocumentDateExtractor` uses `NSDataDetector` as the primary detector, requires an explicit four-digit year, preserves fixed-format fallbacks for detector gaps, creates `DateFormatter` instances per parse to avoid shared formatter thread-safety issues, and keeps earliest-in-reading-order behavior.
+- Tests and requirements: focused date extraction tests cover ISO, English/German month names, numeric fallback recovery, earliest-date selection, no-date cases, and plausibility bounds. Requirements documentation reflects the native detector plus explicit fallback behavior.
+
+Residual verification:
+
+- `make test-unit` is still the main documented suite for unit/integration coverage and should remain green.
+- `make test` should be rerun when the macOS UI test runner can initialize; the latest attempt failed before any UI test executed because LocalAuthentication reported "System authentication is running."
+
+---
+
 ## Local Changes Commit Readiness
 
 - **Date:** 2026-06-30
