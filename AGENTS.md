@@ -36,23 +36,24 @@ Every analysis (investigation, review, audit, or any read-only assessment that p
 3. In the plan, identify likely corner cases, regression risks, affected workflows, data-loss risks, concurrency risks, and test coverage needed before editing.
 4. Implement the change.
 5. Add or update tests for every new feature or bug fix as part of the same change.
-6. Run a fast review with a different model than the implementing agent.
-7. If the review finds issues, fix them and rerun the review until the review agent reports no further findings.
-8. Run the full test suite only after the review is clean.
-9. Create a commit only after the review is clean and the full test run passes.
+6. Run a normal review of the completed diff.
+7. If the review finds issues, fix them and rerun the review until the reviewer reports no further findings.
+8. If findings remain after two fix-and-rereview cycles, stop making local patches, perform a deeper analysis of the problem, and rethink the implementation before continuing.
+9. Run the full test suite only after the review is clean.
+10. Create a commit only after the review is clean and the full test run passes.
 
 Before editing, check the worktree. Do not revert or overwrite unrelated user changes. If unrelated changes exist, leave them alone. If they affect the task, work with them or ask before proceeding.
 
 ## Review Expectations
 
-- The reviewer must be independent from the implementer and must use a different model.
+- A normal review is required after implementation. It does not need to be performed by a subagent; the main agent may perform it in a dedicated review pass.
+- The review pass is read-only. The reviewer must never edit files, compile, build, run the app, run tests, package artifacts, or execute verification commands.
 - Review findings should prioritize correctness, regressions, missing tests, concurrency risks, data loss risks, and UI behavior mismatches.
-- Reuse existing review agents when practical instead of spawning new ones for every pass.
 - When there are no actionable findings, say that explicitly and mention any residual risks or tests the implementer should still run.
 
-### Fast Reviewer Instructions
+### Normal Reviewer Instructions
 
-The fast reviewer is the first independent check after implementation. Use a fast model and keep the review focused, practical, and biased toward catching obvious mistakes before more expensive review begins.
+Keep the review focused, practical, and biased toward catching concrete mistakes before tests and commit.
 
 - Review the diff, changed tests, and nearby affected code paths.
 - Prioritize concrete defects: build breaks, incorrect API usage, missing migrations, unsafe file operations, data loss risks, privacy leaks, missing tests for changed behavior, and clear UI regressions.
@@ -121,10 +122,11 @@ Before creating a release:
 - Perform visual verification where practical and note the key windows or states checked.
 - Add automated tests for behavior that can be tested reliably.
 
-## Native SDK Preference
+## Platform-Native Preference
 
-- For every new implementation, first check whether the Swift SDK or Apple frameworks provide a native solution covering the requested functionality or similar functionality.
-- Prefer native solutions over custom implementations when they exist.
+- For every new implementation, first check whether the Swift SDK, Apple frameworks, or standard platform behavior provide a native solution covering the requested functionality or similar functionality.
+- Prefer platform-native solutions over custom implementations when they exist.
+- If the requested feature is close to functionality provided by the SDK or platform, stop and ask the user whether the native solution should be used before proceeding with a custom implementation.
 - If a native solution exists but does not fit the requested design 100%, stop and ask the user whether to use the native solution before proceeding with a custom implementation.
 
 ## Swift Code Style
@@ -145,8 +147,7 @@ A code change is ready to commit only when all of the following are true:
 - tests were added or updated when required
 - requirements documentation was updated when features or behavior changed
 - code documentation was added or updated where needed
-- the fast review agent reported no further issues
-- the stronger review agent reported no further issues
+- the normal review reported no further issues
 - the full test run passed
 
 If any gate fails, do not commit yet.
