@@ -64,7 +64,7 @@ The package format and the SwiftData schema version are related but distinct:
 - the manifest contains a package `formatVersion`
 - SwiftData persistence uses versioned schemas and a migration plan
 
-`DocumentLibraryService` validates the manifest version and can migrate or repair the package structure as needed. `DocNestSchemaVersioning` handles the database schema side.
+`DocumentLibraryService` validates the manifest version and can migrate or repair the package structure as needed. Older supported package formats are migrated forward. Newer unsupported package formats are rejected before repair, lock acquisition, integrity-report generation, or SwiftData metadata access so an older app does not write into an unknown library layout. `DocNestSchemaVersioning` handles the database schema side.
 
 The SwiftData schema also stores document-label value rows for labels that define a unit. These rows are supplemental metadata keyed by stable document and label UUIDs. The many-to-many label assignment remains the source of truth for whether a label is assigned; value rows can be pruned when their document or label no longer exists.
 
@@ -77,7 +77,7 @@ When a library is opened, the app verifies:
 - the package exists and is a directory
 - all required directories are present
 - the manifest can be decoded
-- the manifest version is acceptable
+- the manifest version is not newer than the app supports
 - integrity and metadata backfill rules can run when needed
 
 Repair can recreate missing directories and fill in missing metadata for stored documents.

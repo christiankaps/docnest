@@ -275,6 +275,8 @@ enum DocumentLibraryService {
             throw CocoaError(.fileNoSuchFile)
         }
 
+        try rejectUnsupportedFutureFormatFromExistingManifest(for: libraryURL)
+
         for directory in requiredDirectories {
             let directoryURL = libraryURL.appendingPathComponent(directory, isDirectory: true)
             if !FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory) || !isDirectory.boolValue {
@@ -306,6 +308,8 @@ enum DocumentLibraryService {
     }
 
     static func migrateLibraryIfNeeded(at libraryURL: URL, manifest: DocumentLibraryManifest) throws -> LibraryMigrationResult {
+        try rejectUnsupportedFutureFormat(manifest)
+
         guard manifest.formatVersion < currentFormatVersion else {
             return .none(currentVersion: manifest.formatVersion)
         }
@@ -335,6 +339,8 @@ enum DocumentLibraryService {
             throw CocoaError(.fileNoSuchFile)
         }
 
+        try rejectUnsupportedFutureFormatFromExistingManifest(for: libraryURL)
+
         for directory in requiredDirectories {
             let directoryURL = libraryURL.appendingPathComponent(directory, isDirectory: true)
             guard FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDirectory), isDirectory.boolValue else {
@@ -344,6 +350,7 @@ enum DocumentLibraryService {
 
         let manifestData = try Data(contentsOf: manifestURL(for: libraryURL))
         let manifest = try JSONDecoder.libraryManifest.decode(DocumentLibraryManifest.self, from: manifestData)
+        try rejectUnsupportedFutureFormat(manifest)
 
         return (libraryURL, manifest)
     }
@@ -675,6 +682,26 @@ enum DocumentLibraryService {
         try manifestData.write(to: manifestURL(for: libraryURL), options: .atomic)
     }
 
+    private static func rejectUnsupportedFutureFormatFromExistingManifest(for libraryURL: URL) throws {
+        let url = manifestURL(for: libraryURL)
+        guard FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              let manifest = try? JSONDecoder.libraryManifest.decode(DocumentLibraryManifest.self, from: data) else {
+            return
+        }
+
+        try rejectUnsupportedFutureFormat(manifest)
+    }
+
+    private static func rejectUnsupportedFutureFormat(_ manifest: DocumentLibraryManifest) throws {
+        guard manifest.formatVersion <= currentFormatVersion else {
+            throw ValidationError.unsupportedFutureFormat(
+                found: manifest.formatVersion,
+                supported: currentFormatVersion
+            )
+        }
+    }
+
     private static func hashFile(at url: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: url)
         defer {
@@ -760,11 +787,14 @@ enum DocumentLibraryService {
 
     enum ValidationError: LocalizedError {
         case missingDirectory(String)
+        case unsupportedFutureFormat(found: Int, supported: Int)
 
         var errorDescription: String? {
             switch self {
             case .missingDirectory(let directory):
                 return "The selected library is missing the required \(directory) directory."
+            case .unsupportedFutureFormat(let found, let supported):
+                return "This library was created by a newer version of DocNest (library format \(found)). This version supports library formats up to \(supported)."
             }
         }
     }

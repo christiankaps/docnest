@@ -26,6 +26,15 @@ private enum TestSampleDataSeeder {
     }
 }
 
+private enum TestLibraryManifestWriter {
+    static func write(_ manifest: DocumentLibraryManifest, to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(manifest).write(to: url, options: .atomic)
+    }
+}
+
 private enum TestImportFixtures {
     static func createPDF(at url: URL, text: String = "Test PDF") throws {
         let document = PDFDocument()
@@ -349,6 +358,95 @@ final class DocNestTests: XCTestCase {
         try FileManager.default.createDirectory(at: libraryURL.appendingPathComponent("Diagnostics", isDirectory: true), withIntermediateDirectories: true)
 
         XCTAssertThrowsError(try DocumentLibraryService.validateLibrary(at: libraryURL))
+    }
+
+    func testValidateLibraryRejectsFutureManifestVersionWithoutWritingArtifacts() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Future Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryURL = try DocumentLibraryService.createLibrary(at: libraryURL)
+        let manifestURL = createdLibraryURL
+            .appendingPathComponent("Metadata", isDirectory: true)
+            .appendingPathComponent("library.json")
+        let futureVersion = DocumentLibraryService.currentFormatVersion + 1
+        let futureManifest = DocumentLibraryManifest(formatVersion: futureVersion, createdAt: .now)
+        try TestLibraryManifestWriter.write(futureManifest, to: manifestURL)
+
+        XCTAssertThrowsError(try DocumentLibraryService.validateLibrary(at: createdLibraryURL)) { error in
+            guard case DocumentLibraryService.ValidationError.unsupportedFutureFormat(let found, let supported) = error else {
+                return XCTFail("Expected unsupported future format error, got \(error)")
+            }
+            XCTAssertEqual(found, futureVersion)
+            XCTAssertEqual(supported, DocumentLibraryService.currentFormatVersion)
+        }
+
+        XCTAssertNil(DocumentLibraryService.readLockFile(for: createdLibraryURL))
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: createdLibraryURL
+                    .appendingPathComponent("Diagnostics", isDirectory: true)
+                    .appendingPathComponent("integrity-report.json")
+                    .path
+            )
+        )
+    }
+
+    func testRepairLibraryRejectsFutureManifestVersionWithoutCreatingMissingDirectories() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Future Repair Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryURL = try DocumentLibraryService.createLibrary(at: libraryURL)
+        let manifestURL = createdLibraryURL
+            .appendingPathComponent("Metadata", isDirectory: true)
+            .appendingPathComponent("library.json")
+        let futureVersion = DocumentLibraryService.currentFormatVersion + 1
+        let futureManifest = DocumentLibraryManifest(formatVersion: futureVersion, createdAt: .now)
+        try TestLibraryManifestWriter.write(futureManifest, to: manifestURL)
+
+        let previewsURL = createdLibraryURL.appendingPathComponent("Previews", isDirectory: true)
+        try FileManager.default.removeItem(at: previewsURL)
+
+        XCTAssertThrowsError(try DocumentLibraryService.repairLibraryPackageIfNeeded(at: createdLibraryURL)) { error in
+            guard case DocumentLibraryService.ValidationError.unsupportedFutureFormat(let found, let supported) = error else {
+                return XCTFail("Expected unsupported future format error, got \(error)")
+            }
+            XCTAssertEqual(found, futureVersion)
+            XCTAssertEqual(supported, DocumentLibraryService.currentFormatVersion)
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: previewsURL.path))
+    }
+
+    func testMigrateLibraryRejectsFutureManifestVersionDefensively() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Future Migration Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryURL = try DocumentLibraryService.createLibrary(at: libraryURL)
+        let futureVersion = DocumentLibraryService.currentFormatVersion + 1
+        let manifest = DocumentLibraryManifest(formatVersion: futureVersion, createdAt: .now)
+
+        XCTAssertThrowsError(try DocumentLibraryService.migrateLibraryIfNeeded(at: createdLibraryURL, manifest: manifest)) { error in
+            guard case DocumentLibraryService.ValidationError.unsupportedFutureFormat(let found, let supported) = error else {
+                return XCTFail("Expected unsupported future format error, got \(error)")
+            }
+            XCTAssertEqual(found, futureVersion)
+            XCTAssertEqual(supported, DocumentLibraryService.currentFormatVersion)
+        }
     }
 
     func testPersistedLibraryURLRoundTripsNormalizedPath() throws {
