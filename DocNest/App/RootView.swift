@@ -138,6 +138,11 @@ struct RootView: View {
                 }
         }
         .background(AppTheme.windowBackground)
+        .searchable(
+            text: Bindable(coordinator).searchText,
+            placement: .toolbar,
+            prompt: "Search title, file name, or labels"
+        )
         .environment(coordinator)
         .environment(thumbnailCache)
         .environment(quickLook)
@@ -245,12 +250,6 @@ struct RootView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .principal) {
             HStack(spacing: 8) {
-                SearchToolbarField(
-                    text: Bindable(coordinator).searchText,
-                    focusRequestToken: coordinator.searchFocusRequestToken
-                )
-                .frame(minWidth: 260, idealWidth: 340, maxWidth: 420)
-
                 if let progress = coordinator.importProgress {
                     ImportProgressIndicator(progress: progress) {
                         coordinator.cancelImport()
@@ -588,7 +587,7 @@ private struct ChangeHandlersNotifications: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onReceive(NotificationCenter.default.publisher(for: .docNestFocusSearch)) { _ in
-                coordinator.searchFocusRequestToken += 1
+                SearchToolbarFocus.focusSearchField()
             }
             .onReceive(NotificationCenter.default.publisher(for: .docNestQuickLabelPicker)) { _ in
                 guard !coordinator.selectedDocuments.isEmpty,

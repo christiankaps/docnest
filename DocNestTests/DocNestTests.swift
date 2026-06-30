@@ -3700,6 +3700,83 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(labels.count, 1)
     }
 
+    // MARK: - DocumentDateExtractor Tests
+
+    private func assertDate(
+        _ text: String,
+        year: Int,
+        month: Int,
+        day: Int,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let date = try XCTUnwrap(DocumentDateExtractor.extractDate(from: text), file: file, line: line)
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        XCTAssertEqual(components.year, year, file: file, line: line)
+        XCTAssertEqual(components.month, month, file: file, line: line)
+        XCTAssertEqual(components.day, day, file: file, line: line)
+    }
+
+    func testDateExtractorFindsISODate() throws {
+        try assertDate("Document dated 2026-03-15 today", year: 2026, month: 3, day: 15)
+    }
+
+    func testDateExtractorFindsWrittenMonthDate() throws {
+        try assertDate("Dated this 15 March 2024 in Berlin", year: 2024, month: 3, day: 15)
+    }
+
+    func testDateExtractorFindsAbbreviatedEnglishDateViaFallback() throws {
+        try assertDate("Receipt date: Mar 15, 2024", year: 2024, month: 3, day: 15)
+        try assertDate("Receipt date: 15 Mar 2024", year: 2024, month: 3, day: 15)
+        try assertDate("Receipt date: mar 15, 2024", year: 2024, month: 3, day: 15)
+    }
+
+    func testDateExtractorFindsGermanMonthDateViaFallback() throws {
+        try assertDate("Rechnungsdatum: 15. März 2024", year: 2024, month: 3, day: 15)
+        try assertDate("Rechnungsdatum: 15. Mär. 2024", year: 2024, month: 3, day: 15)
+        try assertDate("Rechnungsdatum: 15. mär. 2024", year: 2024, month: 3, day: 15)
+    }
+
+    func testDateExtractorFindsInvoiceNumericDateViaFallback() throws {
+        // NSDataDetector reads digits after "Invoice" as an identifier and skips the
+        // date; the numeric fallback recovers it. This is the motivating case for the
+        // hybrid extractor.
+        try assertDate("Invoice Date: 2026-03-15", year: 2026, month: 3, day: 15)
+        try assertDate("Invoice 2026-03-15", year: 2026, month: 3, day: 15)
+    }
+
+    func testDateExtractorPrefersEarliestDateInReadingOrder() throws {
+        // The earlier invoice date (recovered via fallback) must win over a later
+        // detector-found date.
+        try assertDate("Invoice 2026-03-15 — paid on 2026-04-20", year: 2026, month: 3, day: 15)
+    }
+
+    func testDateExtractorReturnsFirstDateInReadingOrder() throws {
+        try assertDate("Issued 2020-01-02, due 2021-06-07", year: 2020, month: 1, day: 2)
+    }
+
+    func testDateExtractorIgnoresTimeWithoutYear() {
+        // A bare time has no four-digit year and must not resolve to today's date.
+        XCTAssertNil(DocumentDateExtractor.extractDate(from: "The meeting starts at 3:15 PM sharp"))
+    }
+
+    func testDateExtractorReturnsNilWhenNoDatePresent() {
+        XCTAssertNil(DocumentDateExtractor.extractDate(from: "No dates anywhere in this sentence."))
+        XCTAssertNil(DocumentDateExtractor.extractDate(from: ""))
+    }
+
+    func testDateExtractorRejectsImplausiblyOldDate() {
+        // Before the 1900 plausibility floor.
+        XCTAssertNil(DocumentDateExtractor.extractDate(from: "Founded 1850-04-01 originally"))
+    }
+
+    func testIsPlausibleDocumentDateBounds() {
+        XCTAssertFalse(DocumentDateExtractor.isPlausibleDocumentDate(Date(timeIntervalSince1970: -2_300_000_000)))
+        XCTAssertTrue(DocumentDateExtractor.isPlausibleDocumentDate(Date()))
+        let farFuture = Calendar.current.date(byAdding: .year, value: 20, to: Date())!
+        XCTAssertFalse(DocumentDateExtractor.isPlausibleDocumentDate(farFuture))
+    }
+
     // MARK: - SearchDocumentsUseCase Additional Tests
 
     func testSearchDocumentsMatchesFullTextContent() {

@@ -4,6 +4,13 @@ import SwiftData
 
 // MARK: - About Window Controller
 
+/// Hosts the custom About window.
+///
+/// This intentionally does not use the native `NSApplication
+/// .orderFrontStandardAboutPanel`: the About window hosts the in-app update
+/// workflow (Check for Updates with download/install progress) and live library
+/// statistics, neither of which the standard About panel can present. The native
+/// panel does not fit this design, so a custom window is used by deliberate choice.
 final class AboutWindowController: NSWindowController {
     static let shared = AboutWindowController()
 
@@ -124,11 +131,17 @@ final class AppSettingsController: ObservableObject {
 
     private init() {}
 
+    /// Selects the requested pane and opens the native SwiftUI `Settings` scene.
+    ///
+    /// The scene is declared in `DocNestApp` and surfaced through AppKit's
+    /// standard `showSettingsWindow:` action, which both creates the window on
+    /// first use and brings it forward on subsequent calls.
     func show(_ pane: AppSettingsPane? = nil) {
         if let pane {
             selectedPane = pane
         }
-        SettingsWindowController.shared.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
     func setActiveLibraryContext(coordinator: LibraryCoordinator, modelContainer: ModelContainer?) {
@@ -139,40 +152,6 @@ final class AppSettingsController: ObservableObject {
     func clearActiveLibraryContext() {
         libraryCoordinator = nil
         modelContainer = nil
-    }
-}
-
-final class SettingsWindowController: NSWindowController {
-    static let shared = SettingsWindowController()
-
-    private init() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Settings"
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 760, height: 560)
-
-        super.init(window: window)
-
-        let hostingView = NSHostingView(rootView: AppSettingsRootView())
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        window.contentView = hostingView
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        nil
-    }
-
-    override func showWindow(_ sender: Any?) {
-        window?.center()
-        super.showWindow(sender)
-        window?.makeKeyAndOrderFront(nil)
     }
 }
 
@@ -1421,7 +1400,7 @@ private struct AboutView: View {
     }
 }
 
-private struct AppSettingsRootView: View {
+struct AppSettingsRootView: View {
     @ObservedObject private var settings = AppSettingsController.shared
 
     var body: some View {

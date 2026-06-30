@@ -64,7 +64,6 @@ final class LibraryCoordinator {
     var sidebarSelection: SidebarSelection = .section(.allDocuments)
     var selectedDocumentIDs: Set<PersistentIdentifier> = []
     var searchText = ""
-    var searchFocusRequestToken = 0
     var isImporting = false
     var isDropTargeted = false
     private(set) var importProgress: ImportProgress?

@@ -31,7 +31,7 @@
 		6A74EFB9944798084461854D /* DocumentInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4672AC06553022ADA6DECE26 /* DocumentInspectorView.swift */; };
 		77424B1901611FDF26B6EBA6 /* AppSplitViewLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC92D622E6EF259A9AF5A669 /* AppSplitViewLayout.swift */; };
 		78C8D82942577262672EDDF2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B0A020E71E4139D5C6236FCD /* Assets.xcassets */; };
-		7A1E697690A2764E2A40E8BB /* SearchToolbarField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384308B1EF0740E0C4F3A350 /* SearchToolbarField.swift */; };
+		7A1E697690A2764E2A40E8BB /* SearchToolbarFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384308B1EF0740E0C4F3A350 /* SearchToolbarFocus.swift */; };
 		7C85EE1FF2A98AFDEAB2FD4E /* StringNormalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D37E272978F8E318670A391 /* StringNormalization.swift */; };
 		8679C9096819F2A594824C91 /* ManageWatchFoldersUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = DECAF94297E66BCA3E58C614 /* ManageWatchFoldersUseCase.swift */; };
 		8D1FC626EFC093CBE2FF7636 /* PDFViewRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54801B6E1BCE4A70FCDB2E29 /* PDFViewRepresentable.swift */; };
@@ -94,7 +94,7 @@
 		2F213725770E18A1A1DF6506 /* LibraryCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCoordinator.swift; sourceTree = "<group>"; };
 		2F8E1C32FE5F4CC50CABAB19 /* ManageSmartFoldersUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageSmartFoldersUseCase.swift; sourceTree = "<group>"; };
 		35950B463BBB2C70F4D21149 /* ServicesProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServicesProvider.swift; sourceTree = "<group>"; };
-		384308B1EF0740E0C4F3A350 /* SearchToolbarField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchToolbarField.swift; sourceTree = "<group>"; };
+		384308B1EF0740E0C4F3A350 /* SearchToolbarFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchToolbarFocus.swift; sourceTree = "<group>"; };
 		3A92312359B8EE4691B36D8E /* DocNestTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DocNestTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B0FFAF2C02193A2F504BDB3 /* DocumentLibraryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentLibraryService.swift; sourceTree = "<group>"; };
 		45B34DF5ACFF5069169049C6 /* DocNestApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestApp.swift; sourceTree = "<group>"; };
@@ -302,7 +302,7 @@
 				919162DFA283C5EFA7070194 /* QuickLabelPickerCommand.swift */,
 				EA07191F675258A004D68388 /* ResizeHandleCursorState.swift */,
 				83474F7BD44082F27FE0A810 /* SearchFocusCommand.swift */,
-				384308B1EF0740E0C4F3A350 /* SearchToolbarField.swift */,
+				384308B1EF0740E0C4F3A350 /* SearchToolbarFocus.swift */,
 				8D37E272978F8E318670A391 /* StringNormalization.swift */,
 				25D0A390E093521F2F1F6163 /* WatchFolderSettingsCommand.swift */,
 				DFFA402AACB7259B8D838914 /* Design */,
@@ -517,7 +517,7 @@
 				4C1368A6F47101D34D33808A /* RootView.swift in Sources */,
 				EFE086EED508E58D74F74FD9 /* SearchDocumentsUseCase.swift in Sources */,
 				D0E526C148C713C44FEE42EB /* SearchFocusCommand.swift in Sources */,
-				7A1E697690A2764E2A40E8BB /* SearchToolbarField.swift in Sources */,
+				7A1E697690A2764E2A40E8BB /* SearchToolbarFocus.swift in Sources */,
 				1B26DCC6269D297E23F52D22 /* ServicesProvider.swift in Sources */,
 				0658A5919A7D340CEA3A6983 /* SmartFolder.swift in Sources */,
 				9C4A326F9726C3027F775879 /* SmartFolderEditorSheet.swift in Sources */,

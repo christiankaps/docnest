@@ -303,14 +303,9 @@ The Document Date represents the semantic content date of a document (e.g. the i
 - During import, the file system creation date is captured as the initial fallback `documentDate` when available.
 - After background OCR text extraction completes for newly imported documents, the app attempts to extract a semantic document date from the extracted text using `DocumentDateExtractor`.
 - The OCR-derived date replaces the initial fallback only if the document date still matches the import-time fallback, so a user-edited date is not overwritten by late OCR completion.
-- `DocumentDateExtractor` recognises common English and German date formats:
-  - ISO 8601: `2024-03-15`
-  - English long form: `March 15, 2024` and `15 March 2024`
-  - English abbreviated: `Mar 15, 2024` and `15 Mar 2024`
-  - German long form: `15. März 2024`
-  - German abbreviated: `15. Mär. 2024`
-  - European numeric: `15.03.2024`
-  - US numeric: `03/15/2024`
+- `DocumentDateExtractor` uses the system date detector to recognise common document dates across the user's supported locales, including ISO 8601 dates, written month names, and numeric day/month/year styles.
+- Date matches must include an explicit four-digit year so bare times or yearless dates do not resolve to the current year.
+- An explicit-date fallback recognises ISO 8601 (`2024-03-15`), common English written forms (`March 15, 2024`, `15 Mar 2024`), common German written forms (`15. März 2024`, `15. Mär. 2024`), European numeric (`15.03.2024`), and US numeric (`03/15/2024`) dates when the system detector skips them, such as immediately after words like "Invoice".
 - The first plausible date found in the document text is used as the `documentDate`. Plausible means between 1 January 1900 and 10 years in the future.
 - If no date is found in the text, the file system creation date (captured at import) is used as the fallback.
 - If neither source yields a date, `documentDate` is left as `nil`.
@@ -341,7 +336,7 @@ The Document Date represents the semantic content date of a document (e.g. the i
 - Grouping applies to both list mode and thumbnail mode.
 
 #### Should
-- Date extraction confidence could be improved over time by extending `DocumentDateExtractor` with additional locale patterns or contextual heuristics (e.g. prefer dates appearing near keywords like "Invoice Date:", "Datum:", "Date:").
+- Date extraction confidence could be improved over time with contextual ranking heuristics (e.g. prefer dates appearing near keywords like "Invoice Date:", "Datum:", "Date:") while continuing to fall back to the system detector for broad locale support.
 - A "Re-extract date" action in the context menu or inspector could re-run `DocumentDateExtractor` on the stored full text for documents whose date was set from the file creation date fallback.
 
 ### 6.7 Data Integrity and Recovery

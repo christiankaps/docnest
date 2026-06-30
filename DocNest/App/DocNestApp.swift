@@ -290,6 +290,12 @@ struct DocNestApp: App {
                 isInspectorCollapsed: isInspectorCollapsed
             )
         }
+
+        // Native Settings scene. Opened programmatically through
+        // `AppSettingsController.show(_:)` so callers can preselect a pane.
+        Settings {
+            AppSettingsRootView()
+        }
     }
 }
 
