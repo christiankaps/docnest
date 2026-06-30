@@ -16,15 +16,16 @@ RELEASE_OPTIMIZATION_FLAGS := SWIFT_OPTIMIZATION_LEVEL=-O SWIFT_COMPILATION_MODE
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build run test test-unit test-ui build-for-testing analyze release-build archive dmg clean
+.PHONY: help build run test test-unit test-ui test-all build-for-testing analyze release-build archive dmg clean
 
 help:
 	@printf "DocNest build targets:\n"
 	@printf "  make build             Build the app (Debug by default)\n"
 	@printf "  make run               Build and open the app (Debug by default)\n"
-	@printf "  make test              Run the full test suite\n"
+	@printf "  make test              Run the required stable test suite\n"
 	@printf "  make test-unit         Run DocNestTests only\n"
-	@printf "  make test-ui           Run DocNestUITests only\n"
+	@printf "  make test-ui           Run optional DocNestUITests only\n"
+	@printf "  make test-all          Run required tests plus optional UI tests\n"
 	@printf "  make build-for-testing Build test bundles without running tests\n"
 	@printf "  make analyze           Run Xcode static analysis\n"
 	@printf "  make release-build     Build a highly optimized Release app\n"
@@ -38,13 +39,15 @@ build:
 run: build
 	open "$(DERIVED_DATA_DIR)/Build/Products/$(CONFIGURATION)/DocNest.app"
 
-test:
-	$(XCODEBUILD) $(XCODE_FLAGS) $(TEST_DESTINATION_FLAGS) test $(WARNING_POLICY_FLAGS)
+test: test-unit
 
 test-unit:
 	$(XCODEBUILD) $(XCODE_FLAGS) $(TEST_DESTINATION_FLAGS) test -only-testing:DocNestTests $(WARNING_POLICY_FLAGS)
 
 test-ui:
+	$(XCODEBUILD) $(XCODE_FLAGS) $(TEST_DESTINATION_FLAGS) test -only-testing:DocNestUITests $(WARNING_POLICY_FLAGS)
+
+test-all: test-unit
 	$(XCODEBUILD) $(XCODE_FLAGS) $(TEST_DESTINATION_FLAGS) test -only-testing:DocNestUITests $(WARNING_POLICY_FLAGS)
 
 build-for-testing:

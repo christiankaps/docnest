@@ -41,8 +41,8 @@ Delta review findings from the required change workflow do not need to be record
 6. Run a normal review of the completed diff.
 7. If the review finds issues, fix them and rerun the review until the reviewer reports no further findings.
 8. If findings remain after two fix-and-rereview cycles, stop making local patches, perform a deeper analysis of the problem, and rethink the implementation before continuing.
-9. Run the full test suite only after the review is clean.
-10. Create a commit only after the review is clean and the full test run passes.
+9. Run the required stable test suite only after the review is clean.
+10. Create a commit only after the review is clean and the required stable test run passes.
 
 Before editing, check the worktree. Do not revert or overwrite unrelated user changes. If unrelated changes exist, leave them alone. If they affect the task, work with them or ask before proceeding.
 
@@ -69,7 +69,8 @@ Keep the review focused, practical, and biased toward catching concrete mistakes
 - For new features and bug fixes, write tests unless the project truly has no practical way to cover the behavior.
 - Tests should verify documented behavior and public contracts rather than implementation details, private structure, incidental ordering, or current helper internals.
 - Prefer tests that could still pass after a valid refactor. Only test implementation details when they are themselves the documented contract or the only practical way to protect against data loss, migration failure, or another high-risk regression.
-- Prefer focused tests during implementation, but the final gate after clean reviews is the full test suite.
+- Prefer focused tests during implementation, but the final gate after clean reviews is the required stable test suite documented in `docs/testing.md`.
+- UI/UX tests are optional because macOS UI automation can fail before app tests execute when local system services are unavailable. Run `make test-ui` or `make test-all` when UI wiring is the relevant risk or when preparing release confidence, but failures in optional UI/UX tests do not block ordinary commits unless the user or task explicitly requires them.
 - Build, build-for-testing, test, static-analysis, archive, release-build, and DMG packaging commands must treat compile warnings as errors. Do not remove or bypass that policy unless the user explicitly asks for a temporary diagnostic run.
 - Use the repository testing guide in [docs/testing.md](docs/testing.md) for the canonical commands.
 
@@ -150,7 +151,7 @@ A code change is ready to commit only when all of the following are true:
 - requirements documentation was updated when features or behavior changed
 - code documentation was added or updated where needed
 - the normal review reported no further issues
-- the full test run passed
+- the required stable test run passed
 
 If any gate fails, do not commit yet.
 After all commit gates pass, create a commit automatically unless the user explicitly asked not to commit.

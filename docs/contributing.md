@@ -17,10 +17,11 @@ For code changes, the required workflow is:
 - implement the change
 - add tests for new features and bug fixes
 - update requirements documentation when features or app behavior change
-- run an independent AI review with a different model, starting with a fast reviewer
-- if the fast reviewer is clean, run a second review with a stronger slower model
-- run the full test suite only after all review passes are clean
-- create a commit only after reviews and the full test run pass
+- run the required normal review
+- run the required stable test suite only after the review is clean
+- create a commit only after the review and required stable test run pass
+
+Optional UI/UX automation lives in `DocNestUITests` and can be run with `make test-ui` or as part of `make test-all`. These tests are useful for UI confidence but are not part of the default commit gate because macOS UI automation can fail before app tests execute when local system services are unavailable.
 
 ## Code Organization Expectations
 

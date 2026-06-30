@@ -5,7 +5,7 @@
 The repository currently includes:
 
 - `DocNestTests` for unit and integration-style tests around domain, infrastructure, layout logic, and import behavior
-- `DocNestUITests` for UI-level verification
+- `DocNestUITests` for optional UI/UX-level verification
 
 Most behavior-heavy coverage lives in `DocNestTests`.
 
@@ -13,16 +13,28 @@ Most behavior-heavy coverage lives in `DocNestTests`.
 
 The Makefile treats compile warnings as errors for build, build-for-testing, test, static-analysis, archive, release-build, and DMG packaging targets.
 
-Run the main test suite:
+Run the required stable test suite:
+
+```sh
+make test
+```
+
+Run the unit and integration suite directly:
 
 ```sh
 make test-unit
 ```
 
-Run all tests:
+Run optional UI/UX tests:
 
 ```sh
-make test
+make test-ui
+```
+
+Run the required suite plus optional UI/UX tests:
+
+```sh
+make test-all
 ```
 
 Build only:
@@ -74,6 +86,10 @@ Use `DocNestTests` when the behavior can be tested without full UI automation, e
 - search semantics
 - import pipeline behavior
 - migration and validation helpers
+
+## Optional UI/UX Tests
+
+`DocNestUITests` are intentionally optional because macOS UI automation can fail before app tests execute when local system services such as authentication, accessibility, or the test runner are unavailable. These tests are valuable for release confidence and UI wiring, but they are not part of the required default `make test` gate.
 
 ## What Belongs in UI Tests
 

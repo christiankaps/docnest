@@ -417,7 +417,7 @@ Update library format/schema documentation:
 7. Add the sidebar statistics footer that shows filtered statistics and adds selected statistics for multi-selection.
 8. Add tests for domain behavior, statistics, filter scoping, lifecycle cleanup, invalidation, UI wiring, and migration.
 9. Update requirements and supporting docs.
-10. Run the required independent AI reviews and full test suite before committing.
+10. Run the required normal review and stable test suite before committing.
 
 ## Implementation Phase Instructions
 
@@ -426,9 +426,9 @@ When implementing this feature, follow `AGENTS.md` as the controlling workflow:
 - add or update automated tests with the implementation, including domain, migration, coordinator/statistics, and UI or UI-adjacent coverage described above
 - update `docs/requirements.md` in the same change because this feature changes app behavior
 - update supporting documentation such as `docs/search-and-organization.md` and `docs/library-format.md` where the new label unit/value model affects behavior or schema description
-- run the independent AI review sequence required by `AGENTS.md`: start with the fast reviewer, fix findings, rerun until clean, then run the stronger reviewer and fix any findings
-- run the full test suite only after both review passes are clean
-- commit only after implementation, documentation, reviews, and full tests are complete
+- run the normal review required by `AGENTS.md`, fix findings, and rerun until clean
+- run the required stable test suite only after the review is clean; run optional UI/UX tests when UI automation is relevant and available
+- commit only after implementation, documentation, review, and required stable tests are complete
 - push the completed commit to the remote branch
 - create a major release after the pushed implementation is verified
 

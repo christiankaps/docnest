@@ -55,10 +55,16 @@ Run the debug app after a successful build:
 make run
 ```
 
-Run the full test suite:
+Run the required stable test suite:
 
 ```sh
 make test
+```
+
+Run optional UI/UX automation:
+
+```sh
+make test-ui
 ```
 
 Run Xcode static analysis:

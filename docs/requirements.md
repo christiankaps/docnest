@@ -411,14 +411,12 @@ The Document Date represents the semantic content date of a document (e.g. the i
 - User must be able to understand where files are stored and what happens during import.
 
 ### 7.7 Engineering Workflow and Code Quality
-- Every code change must be reviewed by an AI reviewer using a different model than the implementing agent.
-- The first review pass should use a fast model.
-- If the fast reviewer reports no findings, a second review pass must be run with a stronger but slower model.
-- Existing review agents should be reused when practical instead of spawning fresh reviewers for every pass.
-- If any review finds issues, those issues must be fixed and the review sequence repeated until all review passes report no further issues.
+- Every code change must receive the required normal review after implementation.
+- If any review finds issues, those issues must be fixed and the review repeated until it reports no further issues.
 - New features and bug fixes must include tests unless there is no practical way to cover the behavior.
-- After all review passes are clean, the full test suite must pass before the change is considered complete.
-- A commit may be created only after the required reviews are clean and the full test run passes.
+- After the review is clean, the required stable test suite must pass before the change is considered complete.
+- Optional UI/UX automation may be run with `make test-ui` or `make test-all`; it is useful for UI confidence but is not part of the default commit gate because macOS UI automation can fail before app tests execute when local system services are unavailable.
+- A commit may be created only after the required review is clean and the required stable test run passes.
 - If a new feature is implemented or app behavior changes, the requirements documentation must be updated in the same change.
 - Swift code should remain clear, easy to follow, and aligned with existing project structure and patterns.
 - Important types, methods, properties, invariants, concurrency assumptions, filesystem assumptions, and non-obvious workflows must be documented in code.
