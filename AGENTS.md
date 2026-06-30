@@ -8,13 +8,15 @@ Follow this workflow for every code change, including refactors, regressions, bu
 
 Documentation-only edits may use a lighter workflow, but code changes must follow the full process below.
 Documentation-only edits do not require AI review or full tests unless they change executable examples, scripts, release behavior, or documented app behavior.
-For investigation, review, planning, or suggestions without code edits, do not run the full change workflow. Inspect the relevant files and provide findings or recommendations, then record them as described in [Analysis Documentation](#analysis-documentation).
+For investigation, review, planning, or suggestions without code edits, do not run the full change workflow. Inspect the relevant files and provide findings or recommendations. Record the result in `ANALYSIS.md` only when the user requested a review, investigation, audit, or other standalone analysis task, as described in [Analysis Documentation](#analysis-documentation).
 
 ## Analysis Documentation
 
-Every analysis (investigation, review, audit, or any read-only assessment that produces findings) must be recorded in `ANALYSIS.md` at the repository root.
+Only standalone analysis tasks must be recorded in `ANALYSIS.md` at the repository root. This includes user-requested investigations, reviews, audits, or other read-only assessment tasks that produce findings or recommendations.
 
-- Append a new entry to `ANALYSIS.md` for each analysis. Never overwrite or delete previous entries; the file is an append-only log with the newest entry on top.
+Delta review findings from the required change workflow do not need to be recorded in `ANALYSIS.md`. A normal review of a completed implementation diff is part of the code-change gate, not a standalone review task.
+
+- Append a new entry to `ANALYSIS.md` for each standalone analysis task. Never overwrite or delete previous entries; the file is an append-only log with the newest entry on top.
 - Each entry must include:
   - the date the analysis was performed (`YYYY-MM-DD`),
   - the AI model that performed it (name and exact model ID),
