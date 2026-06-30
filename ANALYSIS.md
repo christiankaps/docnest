@@ -4,6 +4,30 @@ This file is an append-only log of analyses (investigations, reviews, audits) pe
 
 ---
 
+## Local Changes Commit Readiness
+
+- **Date:** 2026-06-30
+- **AI model:** GPT-5 (`gpt-5`)
+- **Prompt:** "What is changed locally and should These changes be Committee"
+
+### Result
+
+The local worktree contains an in-progress native SDK cleanup and OCR date extraction refactor:
+
+- Staged: `DocNest/Shared/SearchToolbarField.swift` is deleted and `DocNest/Shared/SearchToolbarFocus.swift` is added.
+- Unstaged: the Xcode project file is updated to reference `SearchToolbarFocus.swift`; `RootView` switches from the custom search field to SwiftUI `.searchable`; `LibraryCoordinator` removes the search focus token; `AboutWindowController` removes the custom Settings window controller and opens the native SwiftUI Settings scene; `DocNestApp` declares the `Settings` scene; `DocumentDateExtractor` switches from hand-maintained regex/date formatters to `NSDataDetector` with numeric fallback; `DocNestTests` adds date extractor coverage.
+
+Assessment:
+
+- Do not commit the currently staged subset by itself. The staged delete/add is split from the unstaged project and call-site changes, so committing only staged files would leave the project in an inconsistent state.
+- Do not treat the whole working tree as release-ready yet. Unit/integration tests passed in the prior review run, but UI tests could not initialize because macOS LocalAuthentication was already running.
+- The changes are directionally coherent, but they should be committed only after staging the full related set together, running `git diff --check`, completing UI verification or documenting why it could not be run, and updating requirements documentation for changed date extraction behavior and native search/settings behavior if those are considered user-visible behavior changes.
+- The previous complete app review also identified outstanding release-readiness defects unrelated to this local change set: future library manifest versions are accepted, nil-fallback OCR date updates are skipped, and watch-folder events can surface PDFs inside library packages.
+
+Recommendation: not commit as-is. First fix the staging split, address or explicitly defer the outstanding defects, rerun canonical verification, and then commit the complete coherent change set.
+
+---
+
 ## Complete App Review
 
 - **Date:** 2026-06-30
