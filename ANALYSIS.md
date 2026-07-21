@@ -4,6 +4,64 @@ This file is an append-only log of analyses (investigations, reviews, audits) pe
 
 ---
 
+## UI/UX and macOS-Native Design Review
+
+- **Date:** 2026-07-21
+- **AI model:** GPT-5 (`gpt-5`)
+- **Prompt:** "Check the UI/UX. Is it intuitive? Can it be Sinologie by using macOS native Funktionalität and APIs?"
+
+### Result
+
+Static UI/UX review of the current SwiftUI/AppKit implementation. No product code, build, live usability session, or assistive-technology test was performed.
+
+**Overall assessment:** The primary workflow is intuitive: choose or create a library, import documents, find them through search/sidebar filters, inspect details, and use Quick Look. The app already uses the right macOS foundations in many high-value places: `NavigationSplitView`, `ContentUnavailableView`, native file importing, drag and drop, toolbar search, confirmation dialogs, a SwiftUI `Settings` scene, and Quick Look. The main opportunity is simplification by allowing macOS to provide more of the command, selection, and presentation behavior.
+
+#### Findings and recommendations
+
+1. **High — The app removes useful, expected macOS menu functionality.**
+   - **Locations:** `DocNest/App/DocNestApp.swift:63-207`, `:274-287`
+   - **Issue:** The app repeatedly edits the live `NSMenu` tree by English/German menu titles for five seconds after activation, while `SuppressUnusedMenuCommands` replaces Services, sidebar, toolbar, window arrangement/size, text formatting, undo/redo, and related command groups. This is brittle across macOS versions and localizations, and removes familiar features such as spelling, Dictation, Emoji & Symbols, Services, and standard toolbar/sidebar controls.
+   - **Why it matters:** A document-management app benefits from system writing and accessibility tools. Removing them makes the app feel less native and makes basic actions harder to discover or automate.
+   - **Recommendation:** Remove the timer-based `NSMenu` surgery and title matching. Use SwiftUI `Commands` only to replace actions that DocNest genuinely implements differently; retain standard macOS menus and controls where the app supports their behavior. Keep only a narrowly scoped, documented suppression when a command is genuinely unsafe or unsupported.
+
+2. **Medium — The quick-label picker is a custom modal-like overlay where a native anchored control would be clearer.**
+   - **Locations:** `DocNest/App/RootView.swift:225-239`; `DocNest/Features/Documents/QuickLabelPickerView.swift`
+   - **Issue:** A nearly transparent full-window tap target and a manually positioned panel simulate dismissal and placement. The picker is not visibly anchored to the command that opens it.
+   - **Why it matters:** A macOS `Popover`, `Menu`, or AppKit `NSMenu` communicates context, manages focus and dismissal consistently, and has better default accessibility/keyboard behavior.
+   - **Recommendation:** Present the picker from an explicit toolbar or selection action using an anchored `.popover`; use a `Menu`/`NSMenu` if type-ahead search is not required. Preserve the current searchable multi-label workflow inside the popover when search is needed.
+
+3. **Medium — The custom sidebar and list duplicate native collection behavior.**
+   - **Locations:** `DocNest/Features/Library/LibrarySidebarView.swift`; `DocNest/Features/Documents/DocumentListView.swift`
+   - **Issue:** The sidebar is a custom `ScrollView` of plain buttons, and list mode hand-builds selection, columns, sorting, and resizing. This gives the app visual control, but duplicates standard sidebar/table behavior and increases the keyboard, focus, selection, accessibility, and maintenance surface.
+   - **Recommendation:** Evaluate `List(selection:)` with native sidebar sections/disclosure groups for the library navigation. For the conventional list view, evaluate SwiftUI `Table` for native column sorting, resizing, selection, and context menus; retain the custom grid/grouped view where its richer layout is genuinely needed. This should be an incremental migration, not a wholesale visual rewrite, because label grouping and drag/reorder workflows are product-specific.
+
+4. **Low — One confirmation action is incorrectly styled as destructive.**
+   - **Location:** `DocNest/App/RootView.swift:453-455`
+   - **Issue:** “Assign Label” uses `role: .destructive`.
+   - **Why it matters:** macOS uses destructive styling to signal irreversible or harmful actions, so this weakens the meaning of red confirmation actions.
+   - **Recommendation:** Remove the destructive role; retain it only for actual deletion or permanent removal.
+
+5. **Low — Import language understates supported input types.**
+   - **Locations:** `DocNest/App/RootView.swift:269-275`; `DocNest/Features/Documents/DocumentListView.swift:278-290`
+   - **Issue:** The primary action says “Import PDFs”, while the native file importer accepts PDFs, ZIP archives, and folders, and the app also supports drop-based folder imports.
+   - **Recommendation:** Rename the visible action to “Import…” or “Import Files…” and keep the explanatory help text. This makes the supported workflow discoverable without adding UI.
+
+6. **Low — The File menu omits familiar default shortcuts after replacing the standard group.**
+   - **Location:** `DocNest/App/DocNestApp.swift:318-339`
+   - **Issue:** “Open Library” and “Create Library” replace the standard new-item group but do not declare the conventional shortcuts users expect, especially Command-O for opening.
+   - **Recommendation:** Restore suitable standard shortcuts after confirming they do not conflict with document-level operations (at minimum Command-O for Open Library); expose unavailable commands as disabled instead of silently removing familiar affordances where practical.
+
+#### Recommended order
+
+1. Stop removing standard macOS menus and restore native command groups that have no product-specific replacement.
+2. Correct the destructive label-assignment role and clarify the import action label.
+3. Convert the quick-label overlay to an anchored popover.
+4. Prototype native `List`/`Table` adoption behind the existing sidebar/list behavior and verify keyboard navigation, multi-selection, drag/drop, labels, smart folders, and VoiceOver before replacing the custom views.
+
+Residual verification: conduct a short moderated usability pass with both a first-time user and an experienced macOS user, then perform VoiceOver and keyboard-only checks for the sidebar, document selection, Quick Label, import, and destructive actions. Static source inspection cannot validate visual density, focus behavior, or accessibility-tree quality at runtime.
+
+---
+
 ## Complete Post-Implementation App Review
 
 - **Date:** 2026-07-21
