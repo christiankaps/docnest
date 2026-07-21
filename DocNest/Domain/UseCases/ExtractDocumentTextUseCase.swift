@@ -30,9 +30,9 @@ enum ExtractDocumentTextUseCase {
         modelContext: ModelContext,
         dateUpdatePolicy: OCRDateUpdatePolicy = .preserveExistingDates,
         onProgress: (@MainActor (_ completed: Int, _ total: Int, _ currentTitle: String) -> Void)? = nil
-    ) async {
+    ) async -> Bool {
         let pending = documents.filter { $0.fullText == nil && !$0.ocrCompleted && $0.storedFilePath != nil }
-        guard !pending.isEmpty else { return }
+        guard !pending.isEmpty else { return true }
 
         for (index, document) in pending.enumerated() {
             if Task.isCancelled { break }
@@ -64,6 +64,13 @@ enum ExtractDocumentTextUseCase {
         }
 
         onProgress?(pending.count, pending.count, "")
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            modelContext.rollback()
+            logger.error("Could not save OCR results: \(error.localizedDescription, privacy: .private)")
+            return false
+        }
     }
 }

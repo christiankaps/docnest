@@ -709,6 +709,7 @@ final class AppUpdateService: ObservableObject {
         case signatureValidationFailed(String)
         case installerLaunchFailed
         case installerScriptWriteFailed
+        case missingTrustedSigner
 
         var errorDescription: String? {
             switch self {
@@ -742,6 +743,8 @@ final class AppUpdateService: ObservableObject {
                 return "The update installer could not be launched."
             case .installerScriptWriteFailed:
                 return "The update installer script could not be written."
+            case .missingTrustedSigner:
+                return "Automatic updates are unavailable because no trusted signing identity is configured."
             }
         }
     }
@@ -758,8 +761,11 @@ final class AppUpdateService: ObservableObject {
             .appendingPathComponent("DocNestUpdate-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempRootURL, withIntermediateDirectories: true)
 
-        let installerFileName = info.assetName ?? "DocNest.dmg"
-        let downloadedDMGURL = tempRootURL.appendingPathComponent(installerFileName)
+        guard let expectedTeamIdentifier = configuredUpdateTeamIdentifier() else {
+            throw UpdateError.missingTrustedSigner
+        }
+        // A release asset name is remote input; never use it as a filesystem path.
+        let downloadedDMGURL = tempRootURL.appendingPathComponent("DocNest-update.dmg")
         await progressHandler(.startingDownload)
         try await downloadInstaller(from: info.downloadURL, to: downloadedDMGURL, progressHandler: progressHandler)
 
@@ -767,7 +773,6 @@ final class AppUpdateService: ObservableObject {
         let mountedVolumeURL = try mountDiskImage(at: downloadedDMGURL)
         let stagedAppURL = tempRootURL.appendingPathComponent(currentAppURL.lastPathComponent, isDirectory: true)
         let expectedBundleIdentifier = Bundle.main.bundleIdentifier ?? "com.kaps.docnest"
-        let expectedTeamIdentifier = currentTeamIdentifier(for: currentAppURL)
 
         do {
             let mountedAppURL = try locateAppBundle(
@@ -960,8 +965,12 @@ final class AppUpdateService: ObservableObject {
         )
     }
 
-    nonisolated private static func currentTeamIdentifier(for appURL: URL) -> String? {
-        try? codesignMetadata(for: appURL).teamIdentifier
+    nonisolated private static func configuredUpdateTeamIdentifier() -> String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "DocNestUpdateTeamIdentifier") as? String else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     nonisolated private static func verifyCodeSignature(
@@ -996,19 +1005,21 @@ final class AppUpdateService: ObservableObject {
             )
         }
 
+        guard let expectedTeamIdentifier else {
+            throw UpdateError.signatureValidationFailed("No trusted signing team is configured.")
+        }
         let metadata = try metadataProvider(appURL)
-        if let signingIdentifier = metadata.identifier,
-           signingIdentifier != expectedBundleIdentifier {
+        guard let signingIdentifier = metadata.identifier,
+              signingIdentifier == expectedBundleIdentifier else {
             throw UpdateError.signatureValidationFailed(
-                "Expected signing identifier \(expectedBundleIdentifier), got \(signingIdentifier)."
+                "The downloaded app does not have the expected signing identifier."
             )
         }
 
-        if let expectedTeamIdentifier,
-           let actualTeamIdentifier = metadata.teamIdentifier,
-           actualTeamIdentifier != expectedTeamIdentifier {
+        guard let actualTeamIdentifier = metadata.teamIdentifier,
+              actualTeamIdentifier == expectedTeamIdentifier else {
             throw UpdateError.signatureValidationFailed(
-                "Expected team identifier \(expectedTeamIdentifier), got \(actualTeamIdentifier)."
+                "The downloaded app is not signed by the trusted team."
             )
         }
     }

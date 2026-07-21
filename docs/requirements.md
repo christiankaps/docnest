@@ -123,6 +123,8 @@ A reusable library-level place that identifies where a physical document origina
 - Duplicate detection is required, at least hash-based.
 - User sees summary counts for imported, skipped, and failed files.
 - User receives clear feedback when files fail in batch import.
+- Import input is bounded to 512 MB per source file; ZIP extraction is stopped and cleaned up when expanded contents exceed 1 GB. Timed-out or oversized sources are rejected and temporary files are removed.
+- Import, Services, and watch-folder requests are serialized for an open library so hash-based duplicate detection remains reliable.
 - Labels currently active as filters are automatically assigned to newly imported documents so they appear immediately in the filtered view.
 - Import runs in the background with a progress indicator (spinner and file counter) shown next to the search bar.
 - User can cancel an in-progress import; already-imported files are kept.
@@ -270,7 +272,7 @@ A reusable library-level place that identifies where a physical document origina
 
 #### v1 Assumption
 - For PDFs with extractable text, embedded text is indexed.
-- For scanned or image-based PDFs, Vision framework OCR extracts text using VNRecognizeTextRequest with accurate recognition level. Pages with embedded text use the fast PDFKit path; pages without embedded text are rendered at 300 DPI and processed through OCR. Pages are processed sequentially to manage memory.
+- For scanned or image-based PDFs, Vision framework OCR extracts text using VNRecognizeTextRequest with accurate recognition level. Pages with embedded text use the fast PDFKit path; pages without embedded text are rendered at 300 DPI and processed through OCR. Pages are processed sequentially to manage memory, and rendering is skipped when it would exceed the 40-million-pixel safety limit.
 - Import stores new documents immediately after copy and cheap metadata extraction. OCR/text extraction is marked pending for new documents and runs in the background after import completes.
 - Background OCR also runs on app launch for documents not yet processed.
 - A toolbar progress indicator shows OCR backfill progress (document count and cancel button) next to the search bar.

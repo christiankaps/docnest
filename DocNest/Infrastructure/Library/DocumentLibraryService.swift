@@ -1,5 +1,6 @@
 import AppKit
 import CryptoKit
+import Darwin
 import Foundation
 import PDFKit
 import SwiftData
@@ -129,6 +130,7 @@ enum DocumentLibraryService {
     private static let manifestFileName = "library.json"
     private static let lockFileName = ".lock"
     private static let integrityReportFileName = "integrity-report.json"
+    private static var lockFileDescriptors: [String: Int32] = [:]
     private static let requiredDirectories = [
         "Metadata",
         "Originals",
@@ -364,7 +366,15 @@ enum DocumentLibraryService {
     }
 
     static func locationPhotoURL(for path: String, libraryURL: URL) -> URL {
-        libraryURL.appendingPathComponent(path)
+        guard DocumentStorageService.isSafeRelativePath(path, requiredRoot: "LocationPhotos") else {
+            return libraryURL.appendingPathComponent(".docnest-invalid-location-photo", isDirectory: false)
+        }
+        let root = locationPhotosDirectory(for: libraryURL)
+        let url = libraryURL.appendingPathComponent(path, isDirectory: false)
+        guard contains(url, inLibrary: root) else {
+            return libraryURL.appendingPathComponent(".docnest-invalid-location-photo", isDirectory: false)
+        }
+        return url
     }
 
     static func relativeLocationPhotoPath(for locationID: UUID, fileExtension: String) -> String {
@@ -527,42 +537,76 @@ enum DocumentLibraryService {
     }
 
     static func acquireLock(for libraryURL: URL) throws {
-        if let existing = readLockFile(for: libraryURL), !existing.isStale {
-            let currentPID = ProcessInfo.processInfo.processIdentifier
-            let currentHost = ProcessInfo.processInfo.hostName
-            let isSameProcess = existing.pid == currentPID && existing.hostname == currentHost
-
-            if !isSameProcess {
-                let isSameHost = existing.hostname == currentHost
-                let ownerStillRunning = isSameHost && kill(existing.pid, 0) == 0
-
-                if ownerStillRunning {
-                    throw LockError.lockedByAnotherInstance(existing)
-                }
-                // Owner process no longer exists — treat lock as stale.
-            }
+        let key = libraryURL.standardizedFileURL.resolvingSymlinksInPath().path
+        if lockFileDescriptors[key] != nil {
+            try refreshLock(for: libraryURL)
+            return
         }
 
-        try writeLockFile(for: libraryURL)
+        let url = lockFileURL(for: libraryURL)
+        let descriptor = open(url.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            close(descriptor)
+            throw LockError.lockedByAnotherInstance(
+                readLockFile(for: libraryURL) ?? LibraryLockFile(
+                    hostname: "another process",
+                    pid: 0,
+                    updatedAt: .now
+                )
+            )
+        }
+
+        lockFileDescriptors[key] = descriptor
+        do {
+            try writeLockFile(for: libraryURL, descriptor: descriptor)
+        } catch {
+            lockFileDescriptors.removeValue(forKey: key)
+            close(descriptor)
+            throw error
+        }
     }
 
     static func refreshLock(for libraryURL: URL) throws {
-        try writeLockFile(for: libraryURL)
+        let key = libraryURL.standardizedFileURL.resolvingSymlinksInPath().path
+        guard let descriptor = lockFileDescriptors[key] else {
+            throw LockError.lockedByAnotherInstance(
+                readLockFile(for: libraryURL) ?? LibraryLockFile(
+                    hostname: "unknown process",
+                    pid: 0,
+                    updatedAt: .now
+                )
+            )
+        }
+        try writeLockFile(for: libraryURL, descriptor: descriptor)
     }
 
     static func releaseLock(for libraryURL: URL) {
-        let url = lockFileURL(for: libraryURL)
-        try? FileManager.default.removeItem(at: url)
+        let key = libraryURL.standardizedFileURL.resolvingSymlinksInPath().path
+        guard let descriptor = lockFileDescriptors.removeValue(forKey: key) else { return }
+        _ = flock(descriptor, LOCK_UN)
+        close(descriptor)
     }
 
-    private static func writeLockFile(for libraryURL: URL) throws {
+    private static func writeLockFile(for libraryURL: URL, descriptor: Int32) throws {
         let lock = LibraryLockFile(
             hostname: ProcessInfo.processInfo.hostName,
             pid: ProcessInfo.processInfo.processIdentifier,
             updatedAt: .now
         )
         let data = try JSONEncoder.prettyPrinted.encode(lock)
-        try data.write(to: lockFileURL(for: libraryURL), options: .atomic)
+        guard ftruncate(descriptor, 0) == 0, lseek(descriptor, 0, SEEK_SET) >= 0 else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        let wroteAllBytes = data.withUnsafeBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else { return data.isEmpty }
+            return write(descriptor, baseAddress, data.count) == data.count
+        }
+        guard wroteAllBytes, fsync(descriptor) == 0 else {
+            throw CocoaError(.fileWriteUnknown)
+        }
     }
 
     private static func lockFileURL(for libraryURL: URL) -> URL {

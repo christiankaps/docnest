@@ -70,7 +70,7 @@ final class FolderMonitorService {
 
         let path = watchFolder.folderPath
         guard folderExists(at: path) else {
-            Self.logger.warning("Watch folder path does not exist: \(path, privacy: .public)")
+            Self.logger.warning("Watch folder path does not exist: \(path, privacy: .private)")
             return
         }
 
@@ -101,7 +101,7 @@ final class FolderMonitorService {
             flags
         ) else {
             Unmanaged<EventStreamContext>.fromOpaque(callbackContext).release()
-            Self.logger.error("Failed to create event stream for: \(path, privacy: .public)")
+            Self.logger.error("Failed to create event stream for: \(path, privacy: .private)")
             return
         }
         FSEventStreamSetDispatchQueue(stream, monitorQueue)
@@ -109,7 +109,7 @@ final class FolderMonitorService {
             FSEventStreamInvalidate(stream)
             FSEventStreamRelease(stream)
             Unmanaged<EventStreamContext>.fromOpaque(callbackContext).release()
-            Self.logger.error("Failed to start event stream for: \(path, privacy: .public)")
+            Self.logger.error("Failed to start event stream for: \(path, privacy: .private)")
             return
         }
 
@@ -129,7 +129,7 @@ final class FolderMonitorService {
         pendingFullScanIDs.insert(watchFolder.id)
         scheduleScan(for: entry)
 
-        Self.logger.info("Started monitoring: \(path, privacy: .public)")
+        Self.logger.info("Started monitoring: \(path, privacy: .private)")
     }
 
     func stopMonitoring(id: UUID) {
@@ -149,7 +149,7 @@ final class FolderMonitorService {
         FSEventStreamInvalidate(existing.eventStream)
         FSEventStreamRelease(existing.eventStream)
         Unmanaged<EventStreamContext>.fromOpaque(existing.callbackContext).release()
-        Self.logger.info("Stopped monitoring: \(existing.folderPath, privacy: .public)")
+        Self.logger.info("Stopped monitoring: \(existing.folderPath, privacy: .private)")
     }
 
     func stopAll() {
@@ -315,7 +315,7 @@ final class FolderMonitorService {
                     }
 
                     if !result.urls.isEmpty {
-                        Self.logger.info("Found \(result.urls.count) new or updated PDF(s) in \(folderPath, privacy: .public)")
+                        Self.logger.info("Found \(result.urls.count) new or updated PDF(s) in \(folderPath, privacy: .private)")
                         self.onNewPDFsDetected?(result.urls, monitor.labelIDs)
                     }
 

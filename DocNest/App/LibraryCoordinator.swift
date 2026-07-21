@@ -121,6 +121,7 @@ final class LibraryCoordinator {
 
     // MARK: - Internal
     private var activeImportTask: Task<Void, Never>?
+    private var importGeneration = 0
     private let watchFolderController = WatchFolderController()
     private var pendingLabelFilterApplyTask: Task<Void, Never>?
     private var pendingDisplayedSelectionTask: Task<Void, Never>?
@@ -372,17 +373,19 @@ final class LibraryCoordinator {
         pendingDerivedStateTask = Task(priority: .userInitiated) { [weak self] in
             let result: DerivedStateResult
             do {
-                result = try Self.buildDerivedState(
-                    sidebarSelection: sidebarSelection,
-                    query: query,
-                    selectedLabelUUIDs: selectedLabelUUIDs,
-                    activeDocuments: activeSnapshots,
-                    trashedDocuments: trashedSnapshots,
-                    smartFolderLabelUUIDs: smartFolderLabelUUIDs,
-                    allLabelIDs: allLabelIDs,
-                    allLocationIDs: allLocationIDs,
-                    recentLimit: recentLimit
-                )
+                result = try await Task.detached(priority: .userInitiated) {
+                    try Self.buildDerivedState(
+                        sidebarSelection: sidebarSelection,
+                        query: query,
+                        selectedLabelUUIDs: selectedLabelUUIDs,
+                        activeDocuments: activeSnapshots,
+                        trashedDocuments: trashedSnapshots,
+                        smartFolderLabelUUIDs: smartFolderLabelUUIDs,
+                        allLabelIDs: allLabelIDs,
+                        allLocationIDs: allLocationIDs,
+                        recentLimit: recentLimit
+                    )
+                }.value
             } catch is CancellationError {
                 return
             } catch {
@@ -1245,7 +1248,14 @@ final class LibraryCoordinator {
         // Manual imports and drop/paste/service imports all converge here so
         // they share progress reporting, active-filter label assignment, and
         // summary-message behavior.
+        let previousImportTask = activeImportTask
+        previousImportTask?.cancel()
+        importGeneration += 1
+        let generation = importGeneration
         activeImportTask = Task { @MainActor [weak self] in
+            if let previousImportTask {
+                await previousImportTask.value
+            }
             let importResult = await ImportPDFDocumentsUseCase.execute(
                 urls: urls,
                 into: libraryURL,
@@ -1257,10 +1267,13 @@ final class LibraryCoordinator {
             }
 
             guard !Task.isCancelled else {
-                self?.activeImportTask = nil
+                if self?.importGeneration == generation {
+                    self?.activeImportTask = nil
+                }
                 return
             }
 
+            guard self?.importGeneration == generation else { return }
             self?.importProgress = nil
             self?.activeImportTask = nil
 
@@ -1278,6 +1291,7 @@ final class LibraryCoordinator {
     }
 
     func cancelImport() {
+        importGeneration += 1
         activeImportTask?.cancel()
         activeImportTask = nil
         importProgress = nil
@@ -1302,7 +1316,7 @@ final class LibraryCoordinator {
         let generation = ocrBackfillGeneration
 
         activeOCRTask = Task { @MainActor [weak self] in
-            await ExtractDocumentTextUseCase.backfillAll(
+            let didSaveOCRResults = await ExtractDocumentTextUseCase.backfillAll(
                 documents: documents,
                 libraryURL: libraryURL,
                 modelContext: modelContext,
@@ -1319,6 +1333,12 @@ final class LibraryCoordinator {
             }
 
             guard self?.ocrBackfillGeneration == generation else { return }
+            guard didSaveOCRResults else {
+                self?.ocrProgress = nil
+                self?.activeOCRTask = nil
+                self?.importSummaryMessage = "OCR results could not be saved. Please try again."
+                return
+            }
             self?.ocrProgress = nil
             self?.activeOCRTask = nil
             self?.recomputeFilteredDocuments()
@@ -1363,7 +1383,13 @@ final class LibraryCoordinator {
             document.fullText = nil
             document.ocrCompleted = false
         }
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            importSummaryMessage = "OCR could not be prepared. Please try again."
+            return
+        }
 
         if activeOCRTask == nil {
             runOCRBackfill(documents: extractableDocuments, libraryURL: libraryURL, modelContext: modelContext)
@@ -1389,8 +1415,13 @@ final class LibraryCoordinator {
                 document.documentDate = document.importedAt
             }
         }
-        try? modelContext.save()
-        recomputeFilteredDocuments()
+        do {
+            try modelContext.save()
+            recomputeFilteredDocuments()
+        } catch {
+            modelContext.rollback()
+            importSummaryMessage = "Document dates could not be saved. Please try again."
+        }
     }
 
     func setDocumentDate(_ date: Date?, for documents: [DocumentRecord], modelContext: ModelContext) {
@@ -1524,7 +1555,14 @@ final class LibraryCoordinator {
 
         let labelsToAssign = allLabels.filter { labelIDs.contains($0.id) }
 
-        Task { @MainActor [weak self] in
+        let previousImportTask = activeImportTask
+        previousImportTask?.cancel()
+        importGeneration += 1
+        let generation = importGeneration
+        activeImportTask = Task { @MainActor [weak self] in
+            if let previousImportTask {
+                await previousImportTask.value
+            }
             let result = await ImportPDFDocumentsUseCase.execute(
                 urls: urls,
                 into: libraryURL,
@@ -1532,6 +1570,8 @@ final class LibraryCoordinator {
                 existingContentHashes: self?.existingContentHashes ?? [],
                 using: modelContext
             )
+
+            guard !Task.isCancelled, self?.importGeneration == generation else { return }
 
             if result.importedCount > 0 {
                 self?.importSummaryMessage = "Watch folder: imported \(result.importedCount) document\(result.importedCount == 1 ? "" : "s")."
@@ -1543,6 +1583,7 @@ final class LibraryCoordinator {
                 modelContext: modelContext,
                 dateFallbacksByDocumentID: Self.dateFallbacksByDocumentID(for: result.importedDocuments)
             )
+            self?.activeImportTask = nil
         }
     }
 

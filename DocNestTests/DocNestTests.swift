@@ -339,7 +339,9 @@ final class DocNestTests: XCTestCase {
 
         XCTAssertEqual(controller.selectedLibraryURL?.standardizedFileURL.path, secondCreatedLibraryURL.standardizedFileURL.path)
         XCTAssertNotEqual(controller.selectedLibraryURL?.standardizedFileURL.path, firstCreatedLibraryURL.standardizedFileURL.path)
-        XCTAssertNil(DocumentLibraryService.readLockFile(for: firstCreatedLibraryURL))
+        // The lock file remains as diagnostic metadata after release; ownership is
+        // enforced by the held fcntl descriptor rather than file presence.
+        XCTAssertNotNil(DocumentLibraryService.readLockFile(for: firstCreatedLibraryURL))
         XCTAssertNotNil(DocumentLibraryService.readLockFile(for: secondCreatedLibraryURL))
     }
 
@@ -1053,7 +1055,7 @@ final class DocNestTests: XCTestCase {
         DocumentLibraryService.releaseLock(for: libraryURL)
     }
 
-    func testReleaseLockRemovesLockFile() throws {
+    func testReleaseLockAllowsAnotherSessionToAcquireTheLock() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
 
@@ -1068,10 +1070,11 @@ final class DocNestTests: XCTestCase {
         try DocumentLibraryService.acquireLock(for: libraryURL)
         DocumentLibraryService.releaseLock(for: libraryURL)
 
-        XCTAssertNil(DocumentLibraryService.readLockFile(for: libraryURL))
+        XCTAssertNoThrow(try DocumentLibraryService.acquireLock(for: libraryURL))
+        DocumentLibraryService.releaseLock(for: libraryURL)
     }
 
-    func testAcquireLockRejectsActiveNonStaleLock() throws {
+    func testAcquireLockIgnoresUnheldLegacyLockFile() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
 
@@ -1106,11 +1109,8 @@ final class DocNestTests: XCTestCase {
             .appendingPathComponent(".lock")
         try data.write(to: lockURL, options: .atomic)
 
-        XCTAssertThrowsError(try DocumentLibraryService.acquireLock(for: libraryURL)) { error in
-            XCTAssertTrue(error is DocumentLibraryService.LockError)
-        }
-
-        try? FileManager.default.removeItem(at: lockURL)
+        XCTAssertNoThrow(try DocumentLibraryService.acquireLock(for: libraryURL))
+        DocumentLibraryService.releaseLock(for: libraryURL)
     }
 
     func testAcquireLockSucceedsWhenExistingLockIsStale() throws {
@@ -1582,6 +1582,34 @@ final class DocNestTests: XCTestCase {
 
         XCTAssertTrue(storedFilePath.hasPrefix("Originals/"))
         XCTAssertTrue(DocumentStorageService.fileExists(at: storedFilePath, libraryURL: libraryURL))
+    }
+
+    func testInvalidStoredPathCannotDeleteFileOutsideLibrary() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(at: tempRoot.appendingPathComponent("Library"))
+        let sentinelURL = tempRoot.appendingPathComponent("outside.pdf")
+        try Data("sentinel".utf8).write(to: sentinelURL)
+
+        DocumentStorageService.deleteStoredFile(at: "../outside.pdf", libraryURL: libraryURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinelURL.path))
+        XCTAssertFalse(DocumentStorageService.fileExists(at: "../outside.pdf", libraryURL: libraryURL))
+    }
+
+    func testLocationPhotoURLRejectsTraversalOutsideLibrary() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+        let libraryURL = try DocumentLibraryService.createLibrary(at: tempRoot.appendingPathComponent("Library"))
+
+        let resolved = DocumentLibraryService.locationPhotoURL(for: "../outside.png", libraryURL: libraryURL)
+
+        XCTAssertFalse(resolved.standardizedFileURL.path.hasPrefix(tempRoot.path + "/outside"))
+        XCTAssertTrue(DocumentLibraryService.contains(resolved, inLibrary: libraryURL))
     }
 
     func testStoredFileRenameCanBeRestoredAfterMetadataFailure() throws {
@@ -4657,7 +4685,7 @@ final class DocNestTests: XCTestCase {
             try AppUpdateService.verifyCodeSignature(
                 of: URL(fileURLWithPath: "/tmp/DocNest.app", isDirectory: true),
                 expectedBundleIdentifier: "com.kaps.docnest",
-                expectedTeamIdentifier: nil,
+                expectedTeamIdentifier: "TESTTEAM",
                 processRunner: { _, _ in
                     throw NSError(
                         domain: "DocNestTests",
@@ -4677,6 +4705,19 @@ final class DocNestTests: XCTestCase {
                 "The downloaded update could not be verified. code object is not signed at all"
             )
         }
+    }
+
+    @MainActor
+    func testAppUpdateVerifyCodeSignatureRejectsMissingSignerMetadata() {
+        XCTAssertThrowsError(
+            try AppUpdateService.verifyCodeSignature(
+                of: URL(fileURLWithPath: "/tmp/DocNest.app", isDirectory: true),
+                expectedBundleIdentifier: "com.kaps.docnest",
+                expectedTeamIdentifier: "TESTTEAM",
+                processRunner: { _, _ in Data() },
+                metadataProvider: { _ in (identifier: nil, teamIdentifier: nil) }
+            )
+        )
     }
 
     @MainActor

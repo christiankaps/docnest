@@ -37,6 +37,12 @@ enum DocumentStorageService {
             at: destinationDirectory,
             withIntermediateDirectories: true
         )
+        guard DocumentLibraryService.contains(
+            destinationDirectory,
+            inLibrary: DocumentLibraryService.originalsDirectory(for: libraryURL)
+        ) else {
+            throw CocoaError(.fileWriteNoPermission)
+        }
 
         let ext = sourceURL.pathExtension
         let baseName = sanitizeForFilesystem(title)
@@ -122,7 +128,20 @@ enum DocumentStorageService {
     }
 
     static func fileURL(for path: String, libraryURL: URL) -> URL {
-        libraryURL.appendingPathComponent(path, isDirectory: false)
+        guard let url = resolvedFileURL(for: path, libraryURL: libraryURL) else {
+            return invalidPathURL(in: libraryURL)
+        }
+        return url
+    }
+
+    /// Resolves a persisted document path only when it remains inside `Originals/`.
+    /// Library databases are user-controlled files, so persisted paths are never
+    /// trusted as filesystem locations without this confinement check.
+    static func resolvedFileURL(for path: String, libraryURL: URL) -> URL? {
+        guard isSafeRelativePath(path, requiredRoot: "Originals") else { return nil }
+        let root = DocumentLibraryService.originalsDirectory(for: libraryURL)
+        let url = libraryURL.appendingPathComponent(path, isDirectory: false)
+        return DocumentLibraryService.contains(url, inLibrary: root) ? url : nil
     }
 
     static func fileExists(at path: String, libraryURL: URL) -> Bool {
@@ -153,6 +172,17 @@ enum DocumentStorageService {
 
     private static func relativePath(of url: URL, in libraryURL: URL) -> String {
         url.path.replacingOccurrences(of: libraryURL.path + "/", with: "")
+    }
+
+    static func isSafeRelativePath(_ path: String, requiredRoot: String) -> Bool {
+        guard !path.isEmpty, !path.hasPrefix("/") else { return false }
+        let components = path.split(separator: "/", omittingEmptySubsequences: false)
+        guard components.first == Substring(requiredRoot), components.count > 1 else { return false }
+        return components.allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+    }
+
+    private static func invalidPathURL(in libraryURL: URL) -> URL {
+        libraryURL.appendingPathComponent(".docnest-invalid-stored-path", isDirectory: false)
     }
 
     private static func sanitizeForFilesystem(_ input: String) -> String {

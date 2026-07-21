@@ -90,6 +90,9 @@ enum OCRTextExtractionService {
 
     /// Rendering DPI for converting PDF pages to images for OCR.
     private static let renderDPI: CGFloat = 300.0
+    /// Bounds memory use for hostile or unusually large PDF media boxes.
+    private static let maximumRenderPixels: CGFloat = 40_000_000
+    private static let ocrmyPDFTimeout: TimeInterval = 5 * 60
     static var isOCRmyPDFAvailable: Bool {
         ocrmyPDFExecutableURL() != nil && tesseractExecutableURL() != nil
     }
@@ -183,19 +186,22 @@ enum OCRTextExtractionService {
                     "-"
                 ]
 
-                let outputPipe = Pipe()
-                process.standardOutput = outputPipe
-                process.standardError = outputPipe
+                process.standardOutput = FileHandle.nullDevice
+                process.standardError = FileHandle.nullDevice
 
                 try process.run()
-                process.waitUntilExit()
+                let deadline = Date().addingTimeInterval(ocrmyPDFTimeout)
+                while process.isRunning {
+                    if Task.isCancelled || Date() >= deadline {
+                        process.terminate()
+                        process.waitUntilExit()
+                        return nil
+                    }
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                }
 
                 guard process.terminationStatus == 0 else {
-                    let message = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    if !message.isEmpty {
-                        logger.warning("OCRmyPDF failed: \(message, privacy: .public)")
-                    }
+                    logger.warning("OCRmyPDF exited unsuccessfully")
                     return nil
                 }
 
@@ -207,7 +213,7 @@ enum OCRTextExtractionService {
                 let text = try String(contentsOf: sidecarURL, encoding: .utf8)
                 return text.trimmingCharacters(in: .whitespacesAndNewlines)
             } catch {
-                logger.warning("OCRmyPDF execution failed: \(error.localizedDescription, privacy: .public)")
+                logger.warning("OCRmyPDF execution failed: \(error.localizedDescription, privacy: .private)")
                 return nil
             }
         }.value
@@ -317,8 +323,16 @@ enum OCRTextExtractionService {
     private static func renderPageToImage(_ page: PDFPage) -> CGImage? {
         let mediaBox = page.bounds(for: .mediaBox)
         let scale = renderDPI / 72.0
-        let width = Int(mediaBox.width * scale)
-        let height = Int(mediaBox.height * scale)
+        let renderedWidth = mediaBox.width * scale
+        let renderedHeight = mediaBox.height * scale
+        guard renderedWidth.isFinite, renderedHeight.isFinite,
+              renderedWidth > 0, renderedHeight > 0,
+              renderedWidth * renderedHeight <= maximumRenderPixels else {
+            logger.warning("Skipped OCR for page whose rendered dimensions exceed the safe limit")
+            return nil
+        }
+        let width = Int(renderedWidth)
+        let height = Int(renderedHeight)
 
         guard width > 0, height > 0 else { return nil }
 

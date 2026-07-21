@@ -105,6 +105,23 @@ struct ImportPDFDocumentsResult {
 /// so duplicate handling, recursive folder expansion, self-import protection,
 /// storage behavior, and record creation remain consistent.
 enum ImportPDFDocumentsUseCase {
+    private static let maximumSourceBytes: Int64 = 512 * 1_024 * 1_024
+    private static let maximumExtractedArchiveBytes: Int64 = 1_024 * 1_024 * 1_024
+    private static let downloadTimeout: TimeInterval = 60
+
+    private enum ImportValidationError: LocalizedError {
+        case fileTooLarge
+        case archiveExpandsTooLarge
+
+        var errorDescription: String? {
+            switch self {
+            case .fileTooLarge:
+                return "This file exceeds DocNest's 512 MB import limit."
+            case .archiveExpandsTooLarge:
+                return "This archive expands beyond DocNest's 1 GB safety limit."
+            }
+        }
+    }
     #if DEBUG
     static var resolveFileURLsDidStartForTesting: (() -> Void)?
     static var stagedImportForTesting: (() -> Void)?
@@ -341,10 +358,17 @@ enum ImportPDFDocumentsUseCase {
     /// Downloads a PDF from a web URL to a temporary file.
     /// The caller is responsible for deleting the temp file after import.
     private static func downloadPDF(from url: URL) async throws -> URL {
-        let (tempURL, response) = try await URLSession.shared.download(for: URLRequest(url: url))
+        var request = URLRequest(url: url)
+        request.timeoutInterval = downloadTimeout
+        let (tempURL, response) = try await URLSession.shared.download(for: request)
+        let size = try tempURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size <= maximumSourceBytes else {
+            try? FileManager.default.removeItem(at: tempURL)
+            throw ImportValidationError.fileTooLarge
+        }
 
         // Derive a meaningful filename from the URL or Content-Disposition header
-        let suggestedName = suggestedFileName(from: url, response: response)
+        let suggestedName = safeDownloadFileName(suggestedFileName(from: url, response: response))
 
         let destinationURL = tempURL.deletingLastPathComponent().appendingPathComponent(suggestedName)
         try? FileManager.default.removeItem(at: destinationURL)
@@ -373,6 +397,12 @@ enum ImportPDFDocumentsUseCase {
         }
 
         return "Downloaded.pdf"
+    }
+
+    private static func safeDownloadFileName(_ proposedName: String) -> String {
+        let name = URL(fileURLWithPath: proposedName).lastPathComponent
+        guard !name.isEmpty, name != ".", name != ".." else { return "Downloaded.pdf" }
+        return name.hasSuffix(".pdf") ? name : name + ".pdf"
     }
 
     private static let contentDispositionFilenameRegexes: [NSRegularExpression] = {
@@ -629,6 +659,9 @@ enum ImportPDFDocumentsUseCase {
         let (fileSize, creationDate, contentHash, pdfDocument) = try await Task.detached(priority: .userInitiated) {
             let resourceValues = try fileURL.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
             let fileSize = Int64(resourceValues.fileSize ?? 0)
+            guard fileSize <= maximumSourceBytes else {
+                throw ImportValidationError.fileTooLarge
+            }
             let creationDate = resourceValues.creationDate
             let contentHash = try hashFile(at: fileURL)
             let pdfDocument = PDFDocument(url: fileURL)
@@ -760,6 +793,10 @@ enum ImportPDFDocumentsUseCase {
     /// Extracts a zip archive to a temporary directory using the system `ditto` command.
     /// Returns the URL of the temporary directory, or `nil` on failure.
     private static func extractZipFile(at url: URL) throws -> URL? {
+        let archiveSize = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard archiveSize <= maximumSourceBytes else {
+            throw ImportValidationError.fileTooLarge
+        }
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("DocNestZipImport-\(UUID().uuidString)", isDirectory: true)
 
@@ -780,6 +817,12 @@ enum ImportPDFDocumentsUseCase {
             try process.run()
             while process.isRunning {
                 try Task.checkCancellation()
+                if directorySize(at: tempDir) > maximumExtractedArchiveBytes {
+                    process.terminate()
+                    process.waitUntilExit()
+                    try? FileManager.default.removeItem(at: tempDir)
+                    throw ImportValidationError.archiveExpandsTooLarge
+                }
                 Thread.sleep(forTimeInterval: 0.05)
             }
         } catch is CancellationError {
@@ -799,6 +842,22 @@ enum ImportPDFDocumentsUseCase {
         }
 
         return tempDir
+    }
+
+    private static func directorySize(at directory: URL) -> Int64 {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+                  values.isRegularFile == true else { continue }
+            total += Int64(values.fileSize ?? 0)
+            if total > maximumExtractedArchiveBytes { return total }
+        }
+        return total
     }
 
     private static func isZipFile(_ url: URL) -> Bool {
