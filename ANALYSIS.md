@@ -4,6 +4,29 @@ This file is an append-only log of analyses (investigations, reviews, audits) pe
 
 ---
 
+## Complete Post-Implementation App Review
+
+- **Date:** 2026-07-21
+- **AI model:** GPT-5 (`gpt-5`)
+- **Prompt:** "Implement the plan. Redo the complete app review at the very end"
+
+### Result
+
+Reviewed the complete final implementation and affected app workflows: library opening and locking, managed filesystem paths, document import/export, ZIP and URL handling, OCR, updater verification, watch-folder integration, SwiftData persistence, and main-actor UI work.
+
+No further actionable findings were identified in the final implementation diff.
+
+Verified remediation includes package-root confinement for persisted paths, native `fcntl` locking, bounded source/expanded archive/PDF OCR resource use, updater fail-closed signing verification, serialized import task ownership, off-main-actor derived filtering, OCR cancellation and save-failure handling, and private logging for sensitive paths/tool output.
+
+Residual risks:
+
+- The shipped updater intentionally remains unavailable until a production `DocNestUpdateTeamIdentifier` is configured; this is the chosen fail-closed behavior for the current ad-hoc signing setup.
+- Runtime stress testing with real adversarial PDFs, archives, and external OCRmyPDF installations remains advisable despite the static checks and unit suite.
+
+Verification: `make test` passed with 201 tests executed, 1 skipped, and 0 failures.
+
+---
+
 ## Deep Security, Code Quality, and Performance Review
 
 - **Date:** 2026-07-21
