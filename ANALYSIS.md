@@ -4,6 +4,97 @@ This file is an append-only log of analyses (investigations, reviews, audits) pe
 
 ---
 
+## Deep Security, Code Quality, and Performance Review
+
+- **Date:** 2026-07-21
+- **AI model:** GPT-5 (`gpt-5`)
+- **Prompt:** "Proceed with the analysis"
+
+### Result
+
+Read-only static review of the DocNest macOS app, including the import/export, library package, persistence, locking, OCR, watch-folder, preview, update, and coordinator paths. No app code was modified and no build or test command was run.
+
+#### Findings
+
+1. **High — Library metadata can cause reads and deletion outside its package.**
+   - **Locations:** `DocNest/Infrastructure/Library/DocumentStorageService.swift:120-136`, `DocNest/Domain/UseCases/DeleteDocumentsUseCase.swift:31-51`, `DocNest/Domain/UseCases/ManageWatchFoldersUseCase.swift:234-245`
+   - **Category:** Security, data safety
+   - **Issue:** `storedFilePath` and `coverPhotoPath` are persisted strings from a user-selectable library package. They are appended directly to the library URL without rejecting absolute paths, `..` components, or symlink escapes. The resulting URLs are used for previews, Quick Look, export, OCR, and—most critically—best-effort `removeItem` calls. The integrity checker detects an out-of-library document path only after it has already used the same path for filesystem inspection.
+   - **Impact:** A tampered, shared, or corrupted library database can make DocNest expose readable user files through document UI or delete files outside the library when the bin or a location cover photo is removed. The project is not sandboxed, making the affected scope the current user's writable files.
+   - **Smallest practical remediation:** Centralize a throwing, confinement-checked resolver. Require a relative path under the intended root (`Originals/` for documents and `LocationPhotos/` for photos), reject absolute and traversal components, and compare standardized, symlink-resolved URLs against that root before every read, move, copy, or delete. Treat invalid persisted paths as integrity errors and never delete them.
+   - **Suggested tests:** Open a library whose SQLite metadata contains `../outside.pdf`, an absolute path, and a symlink escape; assert preview/export/OCR reject the record and permanent deletion never touches an external sentinel file. Repeat for `coverPhotoPath`.
+
+2. **High — The library lock is a check-then-write advisory file, so concurrent opens can both succeed.**
+   - **Locations:** `DocNest/Infrastructure/Library/DocumentLibraryService.swift:529-566`
+   - **Category:** Correctness, concurrency, data safety
+   - **Issue:** `acquireLock` reads a lock and then overwrites it using atomic replacement. Two processes can both observe no lock (or a stale lock) before either writes, then both open the same SwiftData store. The heartbeat has the same overwrite semantics and provides no ownership verification.
+   - **Impact:** Concurrent DocNest instances can write the same SQLite/SwiftData package, risking lost updates, migration/repair races, and database corruption. The five-second integrity-refresh work makes this race especially consequential immediately after open.
+   - **Smallest practical remediation:** Use an OS-backed exclusive lock held for the library session (for example a file descriptor with `flock`/`fcntl` advisory locking) or an atomic exclusive-create protocol that verifies a unique owner token before refresh/release. Do not rely on PID/hostname JSON as the lock primitive.
+   - **Suggested tests:** Launch two independent processes against the same temporary library at a synchronization barrier; assert exactly one can obtain a session. Test that a non-owner cannot refresh or remove an active owner's lock.
+
+3. **High — Importing remote files and ZIP archives has no resource limits.**
+   - **Locations:** `DocNest/Domain/UseCases/ImportPDFDocumentsUseCase.swift:174-188`, `:343-352`, `:627-659`, `:662-801`; `DocNest/Infrastructure/OCR/OCRTextExtractionService.swift:316-343`
+   - **Category:** Security, performance, reliability
+   - **Issue:** The importer accepts arbitrary HTTP(S) downloads and extracts ZIPs with `ditto` before imposing a byte limit, entry limit, compression-ratio limit, extraction quota, or timeout. It then hashes every file and accepts arbitrary PDF page dimensions. Vision OCR renders each page at 300 DPI into an unbounded RGBA bitmap; a crafted or simply very large media box can request gigabytes of memory.
+   - **Impact:** A URL or ZIP supplied through drag-and-drop, Services, or a watch folder can exhaust disk space, CPU, or memory and freeze/terminate the application. This is a practical local denial-of-service route for a document-management app that intentionally accepts untrusted files.
+   - **Smallest practical remediation:** Set documented maximum download size, archive entry count, expanded-byte budget, and per-operation timeout; stop enumeration/extraction when a quota is exceeded. Validate PDF file/page limits before hashing or OCR, cap rendered pixel dimensions/total pixels, and report a clear per-file failure.
+   - **Suggested tests:** Use a local URL protocol fixture with an oversized response, a highly compressed ZIP exceeding an expanded-size quota, a ZIP with excessive entries, and a PDF with an extreme media box; assert safe rejection and temporary-file cleanup.
+
+4. **High — The self-updater permits path traversal before signature verification and does not require complete signer identity.**
+   - **Locations:** `DocNest/App/AboutWindowController.swift:761-764`, `:820-829`, `:963-965`, `:999-1013`
+   - **Category:** Security
+   - **Issue:** The updater uses the remotely supplied release asset name as a path component without validating it, then unconditionally removes an existing destination before moving the download. An asset name containing traversal components can escape the freshly created update directory. Separately, signature identity checks are conditional: absent `Identifier`, absent expected team ID, or absent actual team ID all pass after a generic `codesign --verify`. The checked-in project uses manual ad-hoc signing settings, making a missing team identifier a realistic configuration.
+   - **Impact:** A malicious/compromised release response can delete or overwrite user-writable files before the update payload is rejected. In deployments without a resolved team identifier, a validly signed app with the expected bundle identifier is not pinned to the publisher's signing identity.
+   - **Smallest practical remediation:** Ignore remote filenames for filesystem paths or reduce them to a validated basename with a required `.dmg` extension; ensure the standardized destination remains under the generated temporary root. Pin a non-optional expected Developer ID team identifier (or certificate requirement) in shipped configuration, and fail closed when either identifier cannot be read or differs.
+   - **Suggested tests:** Exercise `prepareInstaller` with `../sentinel.dmg`, an absolute asset name, and a nested asset name while placing sentinels outside the temporary root. Add signature-verification cases for missing signing identifier, missing expected team, and missing actual team; all must reject.
+
+5. **Medium — Import coordination allows overlapping runs, defeating duplicate protection and corrupting progress state.**
+   - **Locations:** `DocNest/App/LibraryCoordinator.swift:1243-1283`, `:1522-1546`; `DocNest/Domain/UseCases/ImportPDFDocumentsUseCase.swift:218-224`, `:451-531`
+   - **Category:** Concurrency, correctness
+   - **Issue:** Starting a manual import replaces `activeImportTask` without cancelling or awaiting the prior task. Watch-folder callbacks create entirely untracked tasks. Each run snapshots known hashes before staging files, and `DocumentRecord.contentHash` has no uniqueness constraint, so concurrent runs can both stage and save the same PDF. The shared progress/summary state is also last-writer-wins.
+   - **Impact:** Duplicate document records and duplicate stored files can be created after simultaneous drops, Services requests, or closely spaced watch events. Canceling an import may cancel only the most recently stored task while earlier work continues invisibly.
+   - **Smallest practical remediation:** Serialize all imports per open library through one actor/queue, coalesce duplicate URLs or hashes before staging, and expose one cancellation-owned task. Enforce content-hash uniqueness transactionally at persistence level if SwiftData schema support allows it, otherwise recheck immediately before save within the serialized critical section.
+   - **Suggested tests:** Start two imports of the same PDF concurrently and assert one stored file and one record. Trigger overlapping watch imports and then cancel; assert no untracked import continues and progress state remains coherent.
+
+6. **Medium — Derived search/sidebar computation still executes on the main actor.**
+   - **Locations:** `DocNest/App/LibraryCoordinator.swift:346-432`, `:464-535`
+   - **Category:** Performance, code smell
+   - **Issue:** The coordinator is `@MainActor`, and `Task { ... }` created in `recomputeFilteredDocuments` inherits that actor. `buildDerivedState` is synchronous, so marking it `nonisolated` does not move the work to another executor. The function repeatedly scans all document snapshots for filtering, smart-folder counts, label counts, and location counts—while its documentation claims the work happens off the main actor.
+   - **Impact:** Typing in search, changing filters, or ingesting a large OCR-indexed library can block event handling and produce visible UI stalls. Cancellation checks cannot help while the main actor is occupied by the current computation.
+   - **Smallest practical remediation:** Capture the existing `Sendable` snapshots and run `buildDerivedState` inside `Task.detached` (or a dedicated actor), then apply only the generation-checked result on `MainActor`. Profile/limit repeated full-library count calculations for large libraries.
+   - **Suggested tests:** Add a performance regression test with a large snapshot set that asserts the main actor remains responsive while recomputation is pending, plus correctness tests that stale detached results never overwrite newer searches.
+
+7. **Medium — OCR cancellation and failures can leave costly subprocesses running and silently lose extracted metadata.**
+   - **Locations:** `DocNest/Infrastructure/OCR/OCRTextExtractionService.swift:160-213`, `DocNest/Domain/UseCases/ExtractDocumentTextUseCase.swift:37-68`
+   - **Category:** Performance, reliability
+   - **Issue:** OCRmyPDF is run in a detached task using `waitUntilExit()`, without cancellation propagation, a timeout, or streamed pipe draining. Cancelling the parent OCR operation cannot stop the subprocess; a verbose child can also fill the shared stdout/stderr pipe before exit. After all OCR work, `modelContext.save()` is wrapped in `try?`, so a persistence failure is hidden even though records were marked `ocrCompleted` in memory.
+   - **Impact:** Cancelled OCR can keep CPU/disk-heavy child processes running and delay subsequent work. A failed final save can leave the user believing OCR completed while no extracted text is durable.
+   - **Smallest practical remediation:** Use a cancellation handler that terminates and reaps the process, enforce a timeout, and drain stdout/stderr concurrently or redirect it safely. Return/propagate the model-save error and only show completion after a successful save (or restore state and surface a retryable error).
+   - **Suggested tests:** Inject a long-running OCR process and assert cancellation terminates it; inject a model-context save failure and assert the result is an explicit failure without falsely reporting completed OCR.
+
+8. **Low — User paths and external tool output are intentionally made public in logs.**
+   - **Locations:** `DocNest/Infrastructure/Library/FolderMonitorService.swift:100-102`, `:317-319`; `DocNest/Infrastructure/OCR/OCRTextExtractionService.swift:193-210`
+   - **Category:** Privacy
+   - **Issue:** Watch-folder paths and OCRmyPDF stderr/error text are interpolated with `privacy: .public`. Those values can include user names, sensitive folder names, filenames, and external-tool diagnostics.
+   - **Impact:** Private library/watch-folder information can be exposed in unified logging and diagnostics beyond the app's own UI.
+   - **Smallest practical remediation:** Use default/private OSLog interpolation for paths and tool output; log only stable error codes/counts publicly. Make any detailed diagnostic collection an explicit, user-controlled export.
+   - **Suggested tests:** Use OSLog test hooks or a logging abstraction to assert sensitive paths are not emitted as public fields.
+
+#### Areas reviewed without further actionable findings
+
+- Future library format validation now rejects formats newer than `currentFormatVersion` before opening the model container.
+- The import pipeline hashes files incrementally rather than loading whole files into memory.
+- Thumbnail loading has bounded in-flight work and cache-cost limits.
+- SwiftData schema versions and migrations are explicitly enumerated through V6.
+
+#### Residual risks and recommended verification
+
+- Static review cannot validate PDFKit, Vision, `ditto`, and external OCRmyPDF behavior against malicious real-world documents; the quota and cancellation tests above should be followed by controlled runtime stress tests.
+- Test after fixes using `make test` (required stable suite); additionally run targeted process/ZIP/PDF stress tests and `make test-ui` for import, cancellation, and update UI wiring where local macOS services permit.
+- Overall readiness: **not ready for security-sensitive release** until findings 1–4 are resolved. Findings 5–7 should be addressed before claiming reliability or large-library performance readiness.
+
+---
+
 ## Local Changes Commit Readiness
 
 - **Date:** 2026-07-21
