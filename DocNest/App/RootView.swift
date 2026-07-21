@@ -162,6 +162,7 @@ struct RootView: View {
         .focusedSceneValue(\.toggleInspectorAction) {
             coordinator.isInspectorCollapsed.toggle()
         }
+        .focusedSceneValue(\.quickLabelAction, quickLabelAction)
         .focusedSceneValue(\.isInspectorCollapsed, coordinator.isInspectorCollapsed)
         .task {
             coordinator.libraryURL = libraryURL
@@ -221,22 +222,7 @@ struct RootView: View {
                 )
                 .padding(20)
             }
-
-            if coordinator.isQuickLabelPickerPresented {
-                Color.black.opacity(0.001)
-                    .onTapGesture {
-                        coordinator.isQuickLabelPickerPresented = false
-                    }
-
-                QuickLabelPickerView(
-                    isPresented: Bindable(coordinator).isQuickLabelPickerPresented
-                )
-                .padding(.top, 80)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
-            }
         }
-        .animation(.easeOut(duration: 0.15), value: coordinator.isQuickLabelPickerPresented)
         .background(AppTheme.windowBackground)
         .background { QuickLookPanelResponder(coordinator: quickLook) }
         .onDrop(of: [.fileURL], delegate: FileImportDropDelegate(coordinator: coordinator))
@@ -270,9 +256,29 @@ struct RootView: View {
             Button {
                 coordinator.isImporting = true
             } label: {
-                Label("Import PDFs", systemImage: "plus")
+                Label("Import…", systemImage: "plus")
             }
-            .help("Import PDFs or folders")
+            .accessibilityIdentifier("import-documents")
+            .help("Import PDFs, ZIP archives, or folders")
+        }
+
+        ToolbarItem(placement: .secondaryAction) {
+            Button {
+                coordinator.isQuickLabelPickerPresented = true
+            } label: {
+                Label("Assign Labels", systemImage: "tag")
+            }
+            .accessibilityIdentifier("assign-labels")
+            .disabled(quickLabelAction == nil)
+            .help("Assign labels to selected documents (Command-L)")
+            .popover(
+                isPresented: Bindable(coordinator).isQuickLabelPickerPresented,
+                arrowEdge: .bottom
+            ) {
+                QuickLabelPickerView(
+                    isPresented: Bindable(coordinator).isQuickLabelPickerPresented
+                )
+            }
         }
 
         ToolbarItem(placement: .secondaryAction) {
@@ -339,6 +345,16 @@ struct RootView: View {
         coordinator.beginSelectionInteraction()
         let documents = coordinator.filteredDocuments
         coordinator.selectedDocumentIDs = Set(documents.map(\.persistentModelID))
+    }
+
+    private var quickLabelAction: (() -> Void)? {
+        guard !coordinator.selectedDocuments.isEmpty, !coordinator.isBinSelected else {
+            return nil
+        }
+
+        return {
+            coordinator.isQuickLabelPickerPresented = true
+        }
     }
 
 }
@@ -450,7 +466,7 @@ private struct RootViewDialogsModifier: ViewModifier {
                 isPresented: coordinator.pendingDroppedLabelAssignmentBinding,
                 titleVisibility: .visible
             ) {
-                Button("Assign Label", role: .destructive) {
+                Button("Assign Label") {
                     coordinator.confirmDroppedLabelAssignment(allDocuments: allDocuments)
                 }
                 Button("Cancel", role: .cancel) {
@@ -588,11 +604,6 @@ private struct ChangeHandlersNotifications: ViewModifier {
         content
             .onReceive(NotificationCenter.default.publisher(for: .docNestFocusSearch)) { _ in
                 SearchToolbarFocus.focusSearchField()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .docNestQuickLabelPicker)) { _ in
-                guard !coordinator.selectedDocuments.isEmpty,
-                      !coordinator.isBinSelected else { return }
-                coordinator.isQuickLabelPickerPresented = true
             }
             .onReceive(NotificationCenter.default.publisher(for: .docNestLabelManager)) { _ in
                 AppSettingsController.shared.show(.labels)

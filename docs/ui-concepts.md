@@ -32,7 +32,7 @@ The sidebar is permanent in open-library mode. The inspector can be toggled, but
 
 ### Toolbar
 
-The toolbar is the command surface for high-frequency actions such as import, search, presentation mode, sharing, inspector visibility, OCR progress, and appearance. It should use native macOS toolbar behavior and avoid duplicating commands already available in obvious context menus.
+The toolbar is the command surface for high-frequency actions such as import, label assignment, search, presentation mode, sharing, inspector visibility, OCR progress, and appearance. It should use native macOS toolbar behavior and avoid duplicating commands already available in obvious context menus. Import uses the native file picker and accepts PDFs, ZIP archives, and folders. Label assignment is presented from an anchored native popover when documents are selected.
 
 ### Sidebar
 
@@ -95,7 +95,7 @@ A physical location is a reusable place where an original paper document can be 
 
 ### Native macOS First
 
-Use platform conventions for menus, keyboard shortcuts, window behavior, dialogs, drag and drop, pasteboard handling, share sheets, Quick Look-style preview, Finder reveal, Services, and fullscreen.
+Use platform conventions for menus, keyboard shortcuts, window behavior, dialogs, drag and drop, pasteboard handling, share sheets, Quick Look-style preview, Finder reveal, Services, spelling and writing tools, and fullscreen. Preserve standard macOS menu commands unless a DocNest action intentionally replaces the same behavior.
 
 Custom styling should clarify DocNest-specific concepts without replacing familiar macOS behavior.
 

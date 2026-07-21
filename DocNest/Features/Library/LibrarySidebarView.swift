@@ -88,6 +88,8 @@ struct LibrarySidebarView: View {
                     .frame(width: 0.5)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Library sidebar")
         .navigationTitle(coordinator.libraryURL?.deletingPathExtension().lastPathComponent ?? "DocNest")
         .confirmationDialog(
             pendingLabelDeletion?.title ?? "Delete Label",
@@ -176,6 +178,9 @@ struct LibrarySidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .sidebarRow()
+                .accessibilityAddTraits(
+                    coordinator.sidebarSelection == .section(section) ? .isSelected : []
+                )
                 .dropDestination(for: String.self) { items, _ in
                     guard section == .bin else {
                         return false

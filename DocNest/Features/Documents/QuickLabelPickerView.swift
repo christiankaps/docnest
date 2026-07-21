@@ -85,6 +85,7 @@ struct QuickLabelPickerView: View {
         .fixedSize(horizontal: false, vertical: true)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.2), radius: 16, y: 8)
+        .accessibilityIdentifier("quick-label-picker")
         .onAppear {
             refreshPreparedState()
             highlightedIndex = selectableIndices.first ?? 0

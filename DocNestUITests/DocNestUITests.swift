@@ -101,6 +101,45 @@ final class DocNestUITests: XCTestCase {
     }
 
     @MainActor
+    func testOpenLibraryUsesNativeImportAndAnchoredLabelAssignmentActions() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Label Actions Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try createLibraryFixture(at: libraryURL)
+
+        let app = XCUIApplication()
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES",
+                                "-selectedLibraryPath", libraryURL.path,
+                                "-uiTestSeedAssignedLocationName", "Label Test Shelf"]
+        app.launch()
+
+        XCTAssertTrue(waitForOpenLibraryRoot(in: app))
+
+        let importButton = app.buttons["import-documents"]
+        XCTAssertTrue(importButton.waitForExistence(timeout: 10))
+        XCTAssertEqual(importButton.label, "Import…")
+
+        let seededDocument = app.staticTexts["UI Test Assigned Document: Label Test Shelf"]
+        XCTAssertTrue(seededDocument.waitForExistence(timeout: 10))
+        seededDocument.click()
+
+        let assignLabelsButton = app.buttons["assign-labels"]
+        XCTAssertTrue(assignLabelsButton.waitForExistence(timeout: 10))
+        XCTAssertTrue(assignLabelsButton.isEnabled)
+        assignLabelsButton.click()
+
+        XCTAssertTrue(
+            app.otherElements["quick-label-picker"].waitForExistence(timeout: 10),
+            "Expected label assignment to open from its toolbar popover"
+        )
+    }
+
+    @MainActor
     func testLocationsCanBeCreatedRenamedAndDeletedFromSidebar() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

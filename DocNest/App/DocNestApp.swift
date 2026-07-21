@@ -30,6 +30,10 @@ private struct ToggleInspectorActionKey: FocusedValueKey {
     typealias Value = () -> Void
 }
 
+private struct QuickLabelActionKey: FocusedValueKey {
+    typealias Value = () -> Void
+}
+
 private struct InspectorCollapsedStateKey: FocusedValueKey {
     typealias Value = Bool
 }
@@ -60,6 +64,11 @@ extension FocusedValues {
         set { self[ToggleInspectorActionKey.self] = newValue }
     }
 
+    var quickLabelAction: (() -> Void)? {
+        get { self[QuickLabelActionKey.self] }
+        set { self[QuickLabelActionKey.self] = newValue }
+    }
+
     var isInspectorCollapsed: Bool? {
         get { self[InspectorCollapsedStateKey.self] }
         set { self[InspectorCollapsedStateKey.self] = newValue }
@@ -68,174 +77,11 @@ extension FocusedValues {
 
 // MARK: - App Delegate
 
+/// Keeps DocNest's document-oriented lifecycle while leaving standard macOS
+/// menus and command handling under SwiftUI/AppKit control.
 private final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var menuCleanupTimer: Timer?
-    private var menuCleanupDeadline: Date?
-
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
-    }
-
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        startMenuCleanupPass()
-    }
-
-    func applicationDidBecomeActive(_ notification: Notification) {
-        startMenuCleanupPass()
-    }
-
-    func applicationWillResignActive(_ notification: Notification) {
-        stopMenuCleanupTimer()
-    }
-
-    private func configureMainMenu() {
-        removeUnwantedMenuItems()
-        normalizeMenusRecursively()
-        removeEmptyMenus()
-    }
-
-    private func startMenuCleanupPass() {
-        configureMainMenu()
-
-        menuCleanupDeadline = Date().addingTimeInterval(5)
-        if menuCleanupTimer == nil {
-            menuCleanupTimer = Timer.scheduledTimer(
-                withTimeInterval: 0.5,
-                repeats: true
-            ) { [weak self] _ in
-                guard let self else { return }
-                self.configureMainMenu()
-
-                if let deadline = self.menuCleanupDeadline, Date() >= deadline {
-                    self.stopMenuCleanupTimer()
-                }
-            }
-        }
-    }
-
-    private func stopMenuCleanupTimer() {
-        menuCleanupTimer?.invalidate()
-        menuCleanupTimer = nil
-        menuCleanupDeadline = nil
-    }
-
-    /// Removes system-injected menu items that are not relevant for this app.
-    private func removeUnwantedMenuItems() {
-        guard let mainMenu = NSApplication.shared.mainMenu else { return }
-        let unwantedExactTitles: Set<String> = [
-            "Writing Tools",
-            "Schreibwerkzeuge",
-            "AutoFill",
-            "Spelling and Grammar",
-            "Rechtschreibung und Grammatik",
-            "Substitutions",
-            "Ersetzungen",
-            "Transformations",
-            "Umwandlungen",
-            "Speech",
-            "Sprachausgabe",
-            "Start Dictation…",
-            "Diktat starten…",
-            "Emoji & Symbols",
-            "Emoji und Symbole",
-            "Toolbar",
-            "Show Toolbar",
-            "Hide Toolbar",
-            "Customize Toolbar…",
-            "Show Sidebar",
-            "Hide Sidebar"
-        ]
-        let unwantedTitleFragments = [
-            "Writing Tools",
-            "Schreibwerkzeuge"
-        ]
-        removeMenuItems(
-            in: mainMenu,
-            matchingExactTitles: unwantedExactTitles,
-            containingTitleFragments: unwantedTitleFragments
-        )
-
-        if let formatMenuItem = mainMenu.items.first(where: { $0.title == "Format" }) {
-            mainMenu.removeItem(formatMenuItem)
-        }
-    }
-
-    private func removeMenuItems(
-        in menu: NSMenu,
-        matchingExactTitles exactTitles: Set<String>,
-        containingTitleFragments titleFragments: [String]
-    ) {
-        for item in menu.items.reversed() {
-            if let submenu = item.submenu {
-                removeMenuItems(
-                    in: submenu,
-                    matchingExactTitles: exactTitles,
-                    containingTitleFragments: titleFragments
-                )
-            }
-
-            let matchesExactTitle = exactTitles.contains(item.title)
-            let matchesTitleFragment = titleFragments.contains { fragment in
-                item.title.localizedCaseInsensitiveContains(fragment)
-            }
-
-            if matchesExactTitle || matchesTitleFragment {
-                menu.removeItem(item)
-            }
-        }
-    }
-
-    /// Removes empty items and repeated/edge separators so partially replaced
-    /// SwiftUI command groups do not leave visual debris in the menu bar.
-    private func normalizeMenusRecursively() {
-        guard let mainMenu = NSApplication.shared.mainMenu else { return }
-        normalize(menu: mainMenu)
-    }
-
-    private func normalize(menu: NSMenu) {
-        for item in menu.items {
-            if let submenu = item.submenu {
-                normalize(menu: submenu)
-            }
-        }
-
-        var previousWasSeparator = true
-        for item in menu.items.reversed() {
-            let submenuIsEmpty = item.submenu.map { submenu in
-                submenu.items.allSatisfy(\.isSeparatorItem)
-            } ?? false
-
-            let isEmptyLeafItem = !item.isSeparatorItem
-                && item.submenu == nil
-                && item.action == nil
-                && item.keyEquivalent.isEmpty
-                && item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
-            if submenuIsEmpty || isEmptyLeafItem {
-                menu.removeItem(item)
-                continue
-            }
-
-            if item.isSeparatorItem {
-                if previousWasSeparator {
-                    menu.removeItem(item)
-                }
-                previousWasSeparator = true
-            } else {
-                previousWasSeparator = false
-            }
-        }
-    }
-
-    /// Removes top-level menus that have no meaningful content.
-    private func removeEmptyMenus() {
-        guard let mainMenu = NSApplication.shared.mainMenu else { return }
-        let removableMenus: Set<String> = ["File", "Edit", "Format", "View", "Window", "Help"]
-        mainMenu.items.removeAll { item in
-            guard removableMenus.contains(item.title) else { return false }
-            let realItems = item.submenu?.items.filter { !$0.isSeparatorItem } ?? []
-            return realItems.isEmpty
-        }
     }
 }
 
@@ -248,6 +94,7 @@ struct DocNestApp: App {
     @FocusedValue(\.pasteDocumentsAction) private var pasteDocumentsAction
     @FocusedValue(\.selectAllDocumentsAction) private var selectAllDocumentsAction
     @FocusedValue(\.toggleInspectorAction) private var toggleInspectorAction
+    @FocusedValue(\.quickLabelAction) private var quickLabelAction
     @FocusedValue(\.isInspectorCollapsed) private var isInspectorCollapsed
 
     /// Kept alive for the lifetime of the app so macOS can invoke the service.
@@ -256,11 +103,8 @@ struct DocNestApp: App {
     init() {
         NSWindow.allowsAutomaticWindowTabbing = false
 
-        // Suppress system-injected Edit menu items that are not relevant for this app.
-        UserDefaults.standard.set(true, forKey: "NSDisabledDictationMenuItem")
-        UserDefaults.standard.set(true, forKey: "NSDisabledCharacterPaletteMenuItem")
-
-        // Defer services registration until NSApp is fully initialized.
+        // Defer services registration until NSApp is fully initialized while
+        // preserving the standard macOS Services menu and writing tools.
         DispatchQueue.main.async { [servicesProvider] in
             NSApp.servicesProvider = servicesProvider
         }
@@ -280,13 +124,13 @@ struct DocNestApp: App {
         )
         .windowResizability(.contentMinSize)
         .commands {
-            SuppressUnusedMenuCommands()
             DocNestMenuCommands(
                 librarySession: librarySession,
                 exportDocumentsAction: exportDocumentsAction,
                 pasteDocumentsAction: pasteDocumentsAction,
                 selectAllDocumentsAction: selectAllDocumentsAction,
                 toggleInspectorAction: toggleInspectorAction,
+                quickLabelAction: quickLabelAction,
                 isInspectorCollapsed: isInspectorCollapsed
             )
         }
@@ -301,23 +145,6 @@ struct DocNestApp: App {
 
 // MARK: - Menu Commands
 
-/// Suppresses unused system-injected command groups so the menu bar only shows
-/// actions DocNest actually supports.
-struct SuppressUnusedMenuCommands: Commands {
-    var body: some Commands {
-        CommandGroup(replacing: .undoRedo) { }
-        CommandGroup(replacing: .saveItem) { }
-        CommandGroup(replacing: .printItem) { }
-        CommandGroup(replacing: .newItem) { }
-        CommandGroup(replacing: .systemServices) { }
-        CommandGroup(replacing: .windowArrangement) { }
-        CommandGroup(replacing: .windowSize) { }
-        CommandGroup(replacing: .sidebar) { }
-        CommandGroup(replacing: .toolbar) { }
-        CommandGroup(replacing: .textFormatting) { }
-    }
-}
-
 /// App-specific menu bar commands.
 struct DocNestMenuCommands: Commands {
     let librarySession: LibrarySessionController?
@@ -325,6 +152,7 @@ struct DocNestMenuCommands: Commands {
     let pasteDocumentsAction: (() -> Void)?
     let selectAllDocumentsAction: (() -> Void)?
     let toggleInspectorAction: (() -> Void)?
+    let quickLabelAction: (() -> Void)?
     let isInspectorCollapsed: Bool?
 
     var body: some Commands {
@@ -358,9 +186,11 @@ struct DocNestMenuCommands: Commands {
             Button("Create Library") {
                 librarySession?.createLibrary()
             }
+            .keyboardShortcut("n", modifiers: [.command])
             Button("Open Library") {
                 librarySession?.openLibrary()
             }
+            .keyboardShortcut("o", modifiers: [.command])
             Divider()
             Button("Show in Finder") {
                 if let url = librarySession?.selectedLibraryURL {
@@ -395,9 +225,10 @@ struct DocNestMenuCommands: Commands {
             .keyboardShortcut("f", modifiers: [.command])
 
             Button("Assign Labels") {
-                NotificationCenter.default.post(name: .docNestQuickLabelPicker, object: nil)
+                quickLabelAction?()
             }
             .keyboardShortcut("l", modifiers: [.command])
+            .disabled(quickLabelAction == nil)
 
             Button("Select All") {
                 selectAllDocumentsAction?()

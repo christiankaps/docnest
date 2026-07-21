@@ -59,7 +59,6 @@
 		EFE086EED508E58D74F74FD9 /* SearchDocumentsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9CF39DD2A6316E2DFD9361 /* SearchDocumentsUseCase.swift */; };
 		F22FD6DFE33CA7A4E0FB515A /* LabelGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB512C3E39AFAADEF25ED81E /* LabelGroup.swift */; };
 		F7AAF83FE24E2FF0B7EA967B /* ManageLabelGroupsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 017A28BE976C19A8C24D376F /* ManageLabelGroupsUseCase.swift */; };
-		F9DE889162FF58D2EF78369C /* QuickLabelPickerCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919162DFA283C5EFA7070194 /* QuickLabelPickerCommand.swift */; };
 		FE3E50539F4B142C71550969 /* ImportPDFDocumentsUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC772C7F97D15E871FCAB48C /* ImportPDFDocumentsUseCase.swift */; };
 /* End PBXBuildFile section */
 
@@ -114,7 +113,6 @@
 		8CB165A57F889D96315A510D /* DocNestSchemaVersioning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestSchemaVersioning.swift; sourceTree = "<group>"; };
 		8CB7E2C1D3955D0BE9F289E6 /* LabelManagerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabelManagerSheet.swift; sourceTree = "<group>"; };
 		8D37E272978F8E318670A391 /* StringNormalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringNormalization.swift; sourceTree = "<group>"; };
-		919162DFA283C5EFA7070194 /* QuickLabelPickerCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLabelPickerCommand.swift; sourceTree = "<group>"; };
 		92578BED978BD6981212760D /* DocumentDragSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentDragSupport.swift; sourceTree = "<group>"; };
 		A1C271308AF16C589CE96C8B /* DeferredSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeferredSelectionState.swift; sourceTree = "<group>"; };
 		A28DA505FA162562D9E4D07F /* DocNest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DocNest.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -299,7 +297,6 @@
 				EC92D622E6EF259A9AF5A669 /* AppSplitViewLayout.swift */,
 				A1C271308AF16C589CE96C8B /* DeferredSelectionState.swift */,
 				0B052286841205E1697345B2 /* LabelManagerCommand.swift */,
-				919162DFA283C5EFA7070194 /* QuickLabelPickerCommand.swift */,
 				EA07191F675258A004D68388 /* ResizeHandleCursorState.swift */,
 				83474F7BD44082F27FE0A810 /* SearchFocusCommand.swift */,
 				384308B1EF0740E0C4F3A350 /* SearchToolbarFocus.swift */,
@@ -509,7 +506,6 @@
 				8679C9096819F2A594824C91 /* ManageWatchFoldersUseCase.swift in Sources */,
 				B80FC2D2728B67A5D31408D4 /* OCRTextExtractionService.swift in Sources */,
 				8D1FC626EFC093CBE2FF7636 /* PDFViewRepresentable.swift in Sources */,
-				F9DE889162FF58D2EF78369C /* QuickLabelPickerCommand.swift in Sources */,
 				A8E3402908D6B5660D0B630A /* QuickLabelPickerView.swift in Sources */,
 				643226050A827565F353FB1A /* QuickLookCoordinator.swift in Sources */,
 				CBEDD8ED4D02BE49E2572D77 /* QuickLookPanelResponder.swift in Sources */,

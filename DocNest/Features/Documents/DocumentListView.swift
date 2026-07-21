@@ -279,12 +279,12 @@ struct DocumentListView: View {
         ContentUnavailableView {
             Label("No Documents", systemImage: "doc.text")
         } description: {
-            Text("Import PDFs to populate the library and review them here.")
+            Text("Import PDFs, ZIP archives, or folders to populate the library and review them here.")
         } actions: {
             Button {
                 coordinator.isImporting = true
             } label: {
-                Label("Import PDFs", systemImage: "plus")
+                Label("Import…", systemImage: "plus")
             }
             .buttonStyle(.borderedProminent)
         }
