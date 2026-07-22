@@ -4,6 +4,35 @@ This file is an append-only log of analyses (investigations, reviews, audits) pe
 
 ---
 
+## Release Compiler Settings and Static Analysis Check
+
+- **Date:** 2026-07-22
+- **AI model:** GPT-5 (`gpt-5`)
+- **Prompt:** "Check Compiler Settings: Is the release build with all optimizations enabled? Is static code check done?"
+
+### Result
+
+**Release optimization:** Yes, the Release profile is fully optimized for normal production use. `make release-build` completed successfully with compiler warnings treated as errors. The effective configuration in `DocNest.xcodeproj/project.pbxproj` and the release build command enables:
+
+- Swift `-O` optimization and whole-module compilation;
+- LLVM link-time optimization;
+- dead-code stripping, copy-phase stripping, and installed-product stripping;
+- release dSYMs, no testability, and disabled NS assertions;
+- fast Metal math; and
+- C/Objective-C size optimization (`GCC_OPTIMIZATION_LEVEL=s`).
+
+The profile deliberately does not use Swift `-Ounchecked`. That mode removes runtime safety checks and is not an appropriate default for a document-management app; `-O` is the correct safe production optimization level.
+
+**Static analysis:** Yes, `make analyze` was run on 2026-07-22 and completed with `** ANALYZE SUCCEEDED **`. The command treats Swift, GCC, and Clang warnings as errors. Xcode emitted only environmental/tool metadata notices (for example, no AppIntents dependency), not analyzer findings or compiler diagnostics.
+
+#### Process finding
+
+The GitHub release workflow (`.github/workflows/release.yml`) archives the Release configuration but does **not** run `make analyze` and does **not** explicitly apply the repository's warning-as-error settings. Thus, static analysis is currently a manual release gate rather than CI-enforced, and a remote archive could accept compiler warnings that local Make targets reject.
+
+**Recommendation:** Add an analysis step before archiving and pass `SWIFT_TREAT_WARNINGS_AS_ERRORS=YES`, `GCC_TREAT_WARNINGS_AS_ERRORS=YES`, and `CLANG_TREAT_WARNINGS_AS_ERRORS=YES` to the archive command (or call the documented Make target). This is a release-workflow change and should be implemented and verified separately.
+
+---
+
 ## UI/UX and macOS-Native Design Review
 
 - **Date:** 2026-07-21
