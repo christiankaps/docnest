@@ -4,6 +4,103 @@ This file is an append-only log of analyses (investigations, reviews, audits) pe
 
 ---
 
+## Complete App Implementation, Security, and Design Review
+
+- **Date:** 2026-09-07
+- **AI model:** GPT-5 (`gpt-5`)
+- **Prompt:** "Do a complete review of the App. Do not question the overall app idea but check for real implementation issues without challanging the app concept. Check for security vulnerabilities and design flaws"
+
+### Result
+
+Static review of the current app implementation, persistence and package format, import/export/OCR pipelines, watch-folder monitoring, update mechanism, UI state architecture, tests, and build/release configuration. The product concept was treated as fixed and was not evaluated. No application code was changed, and no build, test, analyzer, live UI, malicious-file execution, signing, or notarization command was run as part of this read-only audit.
+
+The code has several strong controls already in place: persisted document and location-photo paths are confined to managed library roots; libraries use an OS-backed exclusive file lock; imported source size, archive expansion, and OCR page rendering have explicit limits; updater filenames are not trusted as paths; updater signature checks fail closed when signer identity is absent; subprocess arguments are passed without shell interpolation except in the separately escaped installer script; and no committed credential or private key was found by the repository scan.
+
+#### Findings
+
+1. **High — The release pipeline does not produce an update-verifiable, notarized distribution.**
+   - **Locations:** `project.yml:6-17`; `DocNest.xcodeproj/project.pbxproj:587-593,732-737`; `.github/workflows/release.yml:38-92`; `DocNest/App/AboutWindowController.swift:754-770,968-1024`
+   - **Issue:** Both generated build configurations use manual ad-hoc signing (`CODE_SIGN_IDENTITY = "-"`) with an empty development team. The release workflow does not override those settings, inject `DocNestUpdateTeamIdentifier`, sign with a Developer ID certificate, notarize the app/DMG, or staple a notarization ticket. The updater correctly refuses installation without a configured trusted team, so an artifact produced by this workflow cannot pass its own automatic-update trust policy. The uploaded DMG also lacks a normal Developer ID/notarization distribution chain.
+   - **Impact:** The advertised Install Update path is nonfunctional for workflow-built releases, and users receive weaker provenance/Gatekeeper behavior than the updater design assumes. Treating ad-hoc artifacts as public releases also makes a later signing transition harder to validate safely.
+   - **Recommendation:** Sign release archives with a protected Developer ID Application identity, set the trusted team identifier in the built Info.plist, notarize and staple the app/DMG, and fail the workflow unless `codesign --verify --strict`, designated-requirement/team checks, `spctl --assess`, and stapler validation all pass. Keep ad-hoc signing only for local development.
+   - **Tests/gates:** Add a release-artifact verification step that reads the actual built app's team identifier and updater configuration, then rejects an absent/mismatched identity or unstapled artifact.
+
+2. **High — “Permanent” deletion can silently retain the PDF after deleting its only metadata record.**
+   - **Locations:** `DocNest/Domain/UseCases/DeleteDocumentsUseCase.swift:31-51`; `DocNest/Infrastructure/Library/DocumentStorageService.swift:126-128`; `DocNestTests/DocNestTests.swift:2602-2635`
+   - **Issue:** Hard deletion first deletes the SwiftData records and saves. It then removes each stored file through a non-throwing helper that suppresses every filesystem error. A permissions error, open-file error, volume failure, or transient I/O error therefore leaves the PDF in `Originals/` while the app reports success and has discarded the record needed to locate it. The integrity checker only walks records, so it will not report this orphan.
+   - **Impact:** Sensitive document content can remain on disk after the user explicitly chose permanent deletion. The orphan is also no longer manageable from the app, producing package bloat and a privacy/data-retention defect.
+   - **Recommendation:** Make file removal report failures and make the workflow crash-robust. Prefer moving files atomically to a library-owned quarantine/staging directory, saving metadata deletion, and then removing the staged files; restore them if the save fails. If final removal fails, retain recoverable metadata or record a visible cleanup issue instead of claiming success.
+   - **Tests:** Inject a failing filesystem operation and assert that the document remains recoverable and the user receives an error; add orphan detection/repair coverage.
+
+3. **High — Closing or switching libraries can release the exclusive lock while detached work still reads or writes the old library.**
+   - **Locations:** `DocNest/App/DocNestApp.swift:582-596,636-669`; `DocNest/Infrastructure/Library/DocumentLibraryService.swift:419-443,474-526`; `DocNest/App/LibraryCoordinator.swift:144-155,1230-1298,1318-1347,1454-1460`; `DocNest/Domain/UseCases/ExtractDocumentTextUseCase.swift:37-68`; `DocNest/Domain/UseCases/ImportPDFDocumentsUseCase.swift:659-669`
+   - **Issue:** Session close cancels the integrity wrapper and immediately releases the library lock. The integrity operation itself is an unstructured `Task.detached` with no cancellation handler/check and can still open a second model container, repair metadata, save, and write diagnostics. Import metadata and OCR also use unstructured detached tasks whose cancellation is not propagated from the owning UI task. Coordinator teardown requests cancellation but does not await quiescence before the session releases the lock.
+   - **Impact:** After a user closes/switches a library, background work can continue touching it without ownership of the lock. Another DocNest process can acquire the lock meanwhile, defeating the lock's data-integrity guarantee and allowing cross-session writes/races. The OCR Cancel button can also appear to finish while a current detached extraction continues, potentially for the five-minute external-tool timeout.
+   - **Recommendation:** Give the library session ownership of all library-scoped tasks. Use structured child tasks where possible; otherwise explicitly cancel and await detached tasks. Do not release the file lock or security scope until all mutating/reading maintenance, import, and OCR tasks have stopped. Avoid opening a second independent `ModelContainer` for repair while the live one is active; perform maintenance through a coordinated context/container.
+   - **Tests:** Block integrity repair/OCR/import at deterministic barriers, close or switch the library, and assert no post-release filesystem/database write occurs and a second process cannot acquire the lock until work is quiescent.
+
+4. **High — Import resource limits do not fully contain untrusted downloads and ZIP archives.**
+   - **Locations:** `DocNest/Domain/UseCases/ImportPDFDocumentsUseCase.swift:108-123,358-376,698-723,762-860`
+   - **Issue:** Remote content is fully downloaded by `URLSession.download` before the 512 MB check, so the limit does not bound network or temporary-disk consumption. ZIP extraction has an expanded-byte check but no entry-count, path-depth, per-file, or total-operation time limit. Its polling repeatedly walks the growing extraction tree, which becomes increasingly expensive, and extraction can continue while that full scan runs. A very large number of tiny/empty entries can remain below the byte limit while exhausting memory, inodes, CPU, and the `results` array. Non-cancellation resolver errors, including safety-limit errors, are swallowed and converted into an empty result, obscuring the cause from the user.
+   - **Impact:** A pasted/opened URL or ZIP can cause local denial of service, excessive disk/inode use, or a long UI workflow despite the documented limits. Watch-folder and folder enumeration similarly materialize every PDF URL before import.
+   - **Recommendation:** Stream downloads with a delegate that cancels as soon as received bytes exceed the limit and validate expected length/status/content type early. Preflight archives with a bounded entry listing, enforce entry count/path depth/per-entry and total expanded quotas, add a wall-clock timeout, and avoid repeated whole-tree scans. Stream/batch directory candidates rather than accumulating an unbounded array. Preserve and display validation errors.
+   - **Tests:** Cover a chunked oversized response, unknown-length response, excessive-entry ZIP, deep-path ZIP, expansion overshoot, timeout, and clear error reporting/temporary cleanup.
+
+5. **Medium — Files are accepted as documents by extension even when PDFKit cannot parse them.**
+   - **Locations:** `DocNest/Domain/UseCases/ImportPDFDocumentsUseCase.swift:256-283,659-679,877-889`
+   - **Issue:** A `.pdf` extension is sufficient to enter the pipeline. `PDFDocument(url:)` is optional, but a `nil` result is converted into `pageCount = 0` and still committed as a normal document. Corrupt, non-PDF, or unsupported/encrypted inputs therefore become persistent records with unusable previews and OCR rather than per-file failures.
+   - **Impact:** The library can accumulate invalid records that look successfully imported, weakening metadata integrity and confusing duplicate, preview, OCR, and export behavior.
+   - **Recommendation:** Require PDFKit to open the file and validate a usable page count before copying/committing it. Define explicit behavior for locked/encrypted and zero-page PDFs and report those cases in the import summary.
+   - **Tests:** Add renamed-non-PDF, truncated/corrupt PDF, encrypted PDF, and zero-page fixtures and assert the documented outcome.
+
+6. **Medium — Two expensive “background” UI computations still execute on the main actor.**
+   - **Locations:** `DocNest/Features/Documents/DocumentListView.swift:79-121`; `DocNest/App/LibraryCoordinator.swift:691-753`
+   - **Issue:** `DocumentListView.recomputeSortedDocuments` and label-value statistics use `Task { ... }` from main-actor-isolated UI/coordinator code. Such tasks inherit the actor context, so the synchronous sort, statistics passes, dictionary construction, and reductions run on the main actor. The later `MainActor.run` does not move the preceding work off it. This contradicts the code's responsiveness intent and the requirements for non-blocking selection/statistics.
+   - **Impact:** Large libraries or value sets can cause typing, sorting, selection, and scrolling stalls. Cancellation cannot interrupt the synchronous sort/reductions until they complete.
+   - **Recommendation:** Snapshot only Sendable value data on the main actor, perform pure sorting/statistics in `Task.detached` (or a dedicated actor), include periodic cancellation checks, and apply results on the main actor behind the existing generation guards.
+   - **Tests/verification:** Add large synthetic snapshot performance/cancellation tests and profile search, sort, selection, and label statistics with Time Profiler and hangs instrumentation.
+
+7. **Medium — Custom Edit-menu replacement removes standard macOS editing commands from text-entry workflows.**
+   - **Locations:** `DocNest/App/DocNestApp.swift:207-238`; text-entry surfaces throughout `DocumentListView`, `DocumentInspectorView`, and label/location editors
+   - **Issue:** Replacing the entire `.pasteboard` group with only Paste removes the standard Cut and Copy menu items. Replacing `.textEditing` with only Find, Assign Labels, and Select All removes system-provided editing/writing commands from the menu even though the app contains editable title, label, location, numeric-value, and date fields. This partially reintroduces the native-menu defect that the most recent UI remediation intended to remove.
+   - **Impact:** Expected menu discoverability, responder-chain behavior, Services/writing tools, keyboard accessibility, and assistive automation can be impaired in focused text fields.
+   - **Recommendation:** Preserve the standard pasteboard and text-editing groups. Add app-specific Find/Assign/Select commands in an additive command group or route commands conditionally through the focused responder without replacing unrelated native actions.
+   - **Verification:** Check Cut/Copy/Paste, Undo/Redo, Select All, spelling/writing tools, Services, and VoiceOver in every editable field.
+
+8. **Medium — The app has no App Sandbox boundary despite routinely parsing untrusted files and invoking external tools.**
+   - **Locations:** `project.yml:6-17,24-44`; `DocNest.xcodeproj/project.pbxproj` (no app-sandbox entitlement/settings); `DocNest/Domain/UseCases/ImportPDFDocumentsUseCase.swift`; `DocNest/Infrastructure/OCR/OCRTextExtractionService.swift:157-281`
+   - **Issue:** Hardened Runtime is enabled, but the app target has no App Sandbox entitlement or entitlements file. It accepts PDFs/ZIPs/URLs and watch-folder content, exercises PDFKit/Vision/system archive parsing, and can launch locally discovered OCR executables. Any exploitable parser or dependency defect therefore executes with all filesystem/network access granted to the user's process rather than access limited to selected libraries/watch folders and required network destinations.
+   - **Impact:** This is a defense-in-depth gap: a malicious document or compromised local OCR tool has a much larger blast radius. It is not evidence of a currently exploitable parser bug, but it materially worsens the outcome of one.
+   - **Recommendation:** Evaluate enabling App Sandbox with user-selected read/write access, persistent security-scoped bookmarks for libraries/watch folders, and outbound network access only where required. If sandboxing is intentionally deferred, document the threat model and avoid searching arbitrary inherited `PATH` entries for OCR executables; require an explicit trusted executable choice or fixed trusted locations.
+
+9. **Low — Diagnostics and some logs can disclose document/library metadata.**
+   - **Locations:** `DocNest/Infrastructure/Library/DocumentLibraryService.swift:446-470,489-519`; `DocNest/App/DocNestApp.swift:667`; `DocNest/Domain/UseCases/ExtractDocumentTextUseCase.swift:48`; `DocNest/Domain/UseCases/ExportDocumentsUseCase.swift:131,180`
+   - **Issue:** The diagnostics file stored inside every portable library includes the user's absolute library path and document titles in repair messages. Several logs interpolate document titles, and library-maintenance errors are explicitly marked public even though filesystem errors can include absolute paths.
+   - **Impact:** Sharing or backing up a library also shares local username/path and document-title metadata; unified logs can retain sensitive names and paths useful for support but unnecessary for normal operation.
+   - **Recommendation:** Store a package-relative or redacted path in diagnostics, use document UUIDs or private log interpolation for titles, and mark filesystem error text private unless the user explicitly exports a diagnostic report with informed consent.
+
+10. **Low — CI and release builds bypass the repository's documented warning/static-analysis policy.**
+    - **Locations:** `Makefile:8-13,40-68`; `docs/testing.md:12-46`; `.github/workflows/ci.yml:23-52`; `.github/workflows/release.yml:38-49`
+    - **Issue:** Local Make targets pass Swift/GCC/Clang warnings-as-errors, but CI invokes raw `xcodebuild` without those flags. The release workflow also skips the analyzer and the explicit release optimization/warning flags used by `make archive`.
+    - **Impact:** Code that the documented local gate rejects can build, test, and ship remotely. This is especially risky in a codebase using concurrency, filesystem APIs, Core Foundation callbacks, and subprocesses where compiler diagnostics are valuable.
+    - **Recommendation:** Make CI call the canonical Make targets or pass the identical flags, run `make analyze` before packaging, and fail releases unless required unit tests and artifact verification have passed for the exact release commit.
+
+#### Architectural observations and residual risks
+
+- The domain/use-case/infrastructure separation is sound, but several UI/controller files are very large (`DocumentListView`, `DocumentInspectorView`, `LibrarySidebarView`, `LibraryCoordinator`, and `AboutWindowController`). This is maintainability risk rather than a standalone defect; future changes should extract cohesive behavior only when backed by tests, not perform a wholesale rewrite.
+- Current tests cover many important success, cancellation, migration, path-confinement, locking, label-value, export, and updater-signature paths. The main gaps align with the findings above: injected filesystem failures, close/switch task quiescence, adversarial archive/download limits, invalid PDF parsing, release artifact identity, and large-dataset main-thread behavior.
+- No direct credential exposure, path-traversal escape from managed document/photo storage, shell argument injection in ordinary subprocess calls, updater signer-bypass, or concurrent-library-open bypass was identified in the reviewed current source. This does not substitute for dynamic fuzzing of PDF/ZIP inputs, runtime race testing, accessibility testing, or an independent signed-artifact penetration review.
+
+#### Recommended remediation order
+
+1. Make hard deletion recoverable and make session shutdown wait for all library-scoped work before releasing the lock.
+2. Establish Developer ID signing, trusted-team configuration, notarization/stapling, and release-artifact verification before relying on automatic updates.
+3. Finish import download/archive quotas and reject unparseable PDFs.
+4. Move sorting/statistics off the main actor and restore standard Edit-menu groups.
+5. Decide and document the sandbox threat model, then minimize diagnostics/log disclosure and align CI with the documented gates.
+
+---
+
 ## Release Compiler Settings and Static Analysis Check
 
 - **Date:** 2026-07-22
