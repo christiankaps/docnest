@@ -1,157 +1,66 @@
-# Agent Instructions
+# DocNest Agent Guide
 
-These instructions apply to every AI agent working in this repository.
+## Project at a glance
 
-## Scope
+DocNest is a production macOS application for local, PDF-first document libraries. Preserve its native macOS experience, local-data model, and documented library invariants. Start with [PROJECT.md](PROJECT.md) for project policy and the documentation map.
 
-Follow this workflow for every code change, including refactors, regressions, bug fixes, and new features.
+## Session protocol
 
-Documentation-only edits may use a lighter workflow, but code changes must follow the full process below.
-Documentation-only edits do not require AI review or full tests unless they change executable examples, scripts, release behavior, or documented app behavior.
-For investigation, review, planning, or suggestions without code edits, do not run the full change workflow. Inspect the relevant files and provide findings or recommendations. Record the result in `ANALYSIS.md` only when the user requested a review, investigation, audit, or other standalone analysis task, as described in [Analysis Documentation](#analysis-documentation).
+At the start of substantial work:
 
-## Analysis Documentation
+1. Read this file, [PROJECT.md](PROJECT.md), and the Sources of Truth relevant to the task.
+2. Inspect [LESSONS.md](LESSONS.md), an active `PLAN.md` when present, and [INBOX.md](INBOX.md).
+3. If the inbox has content, tell the user and ask whether they want it processed; it is user-owned and must not be changed without authorization.
+4. Check `git status --short` before editing. Preserve unrelated work.
 
-Only standalone analysis tasks must be recorded in `ANALYSIS.md` at the repository root. This includes user-requested investigations, reviews, audits, or other read-only assessment tasks that produce findings or recommendations.
+For substantial, risky, cross-cutting, or cross-session work, create or update `PLAN.md` with the objective, key risks, milestones, and verification. Do not create one for small reversible tasks.
 
-Delta review findings from the required change workflow do not need to be recorded in `ANALYSIS.md`. A normal review of a completed implementation diff is part of the code-change gate, not a standalone review task.
+At handoff, persist material decisions or recurring lessons in their queues until they are consolidated into an authoritative document. Queues should be empty after successful consolidation; do not leave historical tombstones.
 
-- Append a new entry to `ANALYSIS.md` for each standalone analysis task. Never overwrite or delete previous entries; the file is an append-only log with the newest entry on top.
-- Each entry must include:
-  - the date the analysis was performed (`YYYY-MM-DD`),
-  - the AI model that performed it (name and exact model ID),
-  - the exact analysis prompt that was requested, quoted verbatim,
-  - the analysis result (findings and recommendations).
-- Commit `ANALYSIS.md` immediately after the analysis result is written. Use a clear commit message such as `docs(analysis): record <topic> analysis`. Recording an analysis is a documentation-only change, so the full code-change workflow does not apply.
+## Change workflow
 
-## Branching Policy
+For every code change:
 
-- Work directly on the repository's default branch (`main` or `master`, whichever the repository uses).
-- Do not create feature branches, topic branches, or working branches for changes.
-- Do not open pull requests. Commit and push completed changes straight to the default branch.
-- Determine the default branch from git remote metadata rather than assuming `main` or `master`.
+1. Understand the affected code and applicable requirements before editing. Plan corner cases, regressions, data-loss or concurrency risks, affected workflows, and tests.
+2. Prefer Swift and Apple-framework solutions. If a native solution substantially covers a requested custom design but entails a material trade-off, ask the user before choosing the custom route.
+3. Make the smallest coherent implementation. Keep domain behavior in `Domain/UseCases`, persistence and filesystem work in `Infrastructure`, and user workflows in `Features` or `App`.
+4. Add or update tests for each feature or bug fix. Update requirements and other product documentation for user-visible, storage, import, migration, architecture, or release behavior changes.
+5. Perform a read-only normal review of the completed diff, tests, and nearby code. Do not compile, test, or edit during that pass. Fix actionable findings and rereview; after two fix-and-rereview cycles, reassess rather than patching blindly.
+6. After the review is clean, run the stable gate in [docs/testing.md](docs/testing.md): `make test`. Run `make test-ui` or `make test-all` when UI wiring is the primary risk or release confidence is needed; UI automation is optional unless explicitly required.
+7. Commit only after the required gate passes. Do not claim success without reporting performed verification.
 
-## Required Change Workflow
+Documentation-only changes use a proportional review and do not require the full code-change gate unless they alter executable examples, scripts, release behavior, or documented app behavior.
 
-1. Understand the affected code before editing.
-2. Before implementing a new feature or fixing a bug, plan the change thoroughly.
-3. In the plan, identify likely corner cases, regression risks, affected workflows, data-loss risks, concurrency risks, and test coverage needed before editing.
-4. Implement the change.
-5. Add or update tests for every new feature or bug fix as part of the same change.
-6. Run a normal review of the completed diff.
-7. If the review finds issues, fix them and rerun the review until the reviewer reports no further findings.
-8. If findings remain after two fix-and-rereview cycles, stop making local patches, perform a deeper analysis of the problem, and rethink the implementation before continuing.
-9. Run the required stable test suite only after the review is clean.
-10. Create a commit only after the review is clean and the required stable test run passes.
+## Standalone analysis
 
-Before editing, check the worktree. Do not revert or overwrite unrelated user changes. If unrelated changes exist, leave them alone. If they affect the task, work with them or ask before proceeding.
+For a user-requested investigation, review, audit, or other read-only assessment, append the result to `ANALYSIS.md` before ending the work. Each newest-first entry must include the date, performing model and exact model ID, the user's exact quoted prompt, and findings/recommendations. Commit that documentation-only record immediately using a clear `docs(analysis): ...` message. Do not add routine implementation review findings to `ANALYSIS.md`.
 
-## Review Expectations
+## Review standard
 
-- A normal review is required after implementation. It does not need to be performed by a subagent; the main agent may perform it in a dedicated review pass.
-- The review pass is read-only. The reviewer must never edit files, compile, build, run the app, run tests, package artifacts, or execute verification commands.
-- Review findings should prioritize correctness, regressions, missing tests, concurrency risks, data loss risks, and UI behavior mismatches.
-- When there are no actionable findings, say that explicitly and mention any residual risks or tests the implementer should still run.
+Review for concrete correctness, build/API mistakes, unsafe filesystem behavior, data loss, privacy leaks, concurrency hazards, missing regressions, scope creep, and UI mismatches. When clean, state that there are no actionable findings and identify any residual risk and verification still needed.
 
-### Normal Reviewer Instructions
+## Project constraints
 
-Keep the review focused, practical, and biased toward catching concrete mistakes before tests and commit.
+- Never commit secrets, credentials, private certificates, email addresses, user-identifying local paths, or other private data. If existing private data is found, stop and ask before preserving, moving, or deleting it.
+- Preserve documented `.docnestlibrary` layout and import invariants. Treat import, validation, migration, deletion, export, and watch-folder changes as high-risk filesystem work.
+- Use native macOS interactions and preserve existing workflows unless a behavior change is requested. Visually verify practical SwiftUI/AppKit changes.
+- Keep Swift code small, clear, and dependency-light. Use `///` for important non-obvious APIs and comments only for meaningful constraints.
+- Prefer existing project tools and targeted checks. Build, test, analysis, archive, release-build, and packaging commands must treat warnings as errors.
 
-- Review the diff, changed tests, and nearby affected code paths.
-- Prioritize concrete defects: build breaks, incorrect API usage, missing migrations, unsafe file operations, data loss risks, privacy leaks, missing tests for changed behavior, and clear UI regressions.
-- Check that the implementation matches the requested scope and does not include unrelated refactors or accidental behavior changes.
-- Prefer high-signal findings over broad commentary. Each finding should include the affected file or behavior, why it matters, and the smallest practical fix.
-- Do not approve by default. If something is unclear enough to hide a bug, ask for clarification or identify the risk.
-- When there are no actionable findings, say that explicitly and mention any residual risks or tests the implementer should still run.
+## Git and releases
 
-## Testing Expectations
+The integration policy is **Direct**: work on default branch `main`; do not create feature branches or pull requests. Make coherent commits and do not mix unrelated user changes.
 
-- For new features and bug fixes, write tests unless the project truly has no practical way to cover the behavior.
-- Tests should verify documented behavior and public contracts rather than implementation details, private structure, incidental ordering, or current helper internals.
-- Prefer tests that could still pass after a valid refactor. Only test implementation details when they are themselves the documented contract or the only practical way to protect against data loss, migration failure, or another high-risk regression.
-- Prefer focused tests during implementation, but the final gate after clean reviews is the required stable test suite documented in `docs/testing.md`.
-- UI/UX tests are optional because macOS UI automation can fail before app tests execute when local system services are unavailable. Run `make test-ui` or `make test-all` when UI wiring is the relevant risk or when preparing release confidence, but failures in optional UI/UX tests do not block ordinary commits unless the user or task explicitly requires them.
-- Build, build-for-testing, test, static-analysis, archive, release-build, and DMG packaging commands must treat compile warnings as errors. Do not remove or bypass that policy unless the user explicitly asks for a temporary diagnostic run.
-- Use the repository testing guide in [docs/testing.md](docs/testing.md) for the canonical commands.
+For a release, follow [docs/release-process.md](docs/release-process.md): verify the default branch and remote state, derive the next `YYYY.MAJOR.MINOR` tag from the latest GitHub release, and create the GitHub release. Do not wait for the release workflow unless the user requests upload verification.
 
-## Documentation Expectations
+## Sources of Truth
 
-- If a new feature is implemented, update the requirements documentation in the same change.
-- If app behavior changes, update the requirements documentation in the same change.
-- Keep high-level documentation aligned with shipped behavior before considering the change complete.
-- Document APIs and behavior precisely enough that a useful test can be written from the documentation alone.
-- Do not expose unnecessary implementation details in public-facing documentation. Describe observable behavior, inputs, outputs, invariants, errors, persistence guarantees, and compatibility expectations instead of private algorithms or helper structure.
+- [PROJECT.md](PROJECT.md): identity, scope, maturity, policies, invariants, acceptance model, and documentation map.
+- [docs/requirements.md](docs/requirements.md): product behavior and scope.
+- [docs/architecture.md](docs/architecture.md) and [docs/project-structure.md](docs/project-structure.md): architecture and ownership.
+- [docs/library-format.md](docs/library-format.md), [docs/import-pipeline.md](docs/import-pipeline.md), and [docs/search-and-organization.md](docs/search-and-organization.md): persistence and core workflows.
+- [docs/ui-concepts.md](docs/ui-concepts.md): interaction principles.
+- [docs/testing.md](docs/testing.md) and [docs/release-process.md](docs/release-process.md): verification and shipping.
+- [INBOX.md](INBOX.md): user-owned asynchronous input; [DECISIONS.md](DECISIONS.md) and [LESSONS.md](LESSONS.md): temporary agent-maintained queues.
 
-## Private Data and Secrets
-
-- Never commit private data, secrets, credentials, or user-identifying local environment details.
-- Treat email addresses, passwords, API keys, access tokens, signing keys, private certificates, and local paths containing usernames as private unless the repository already intentionally uses a public placeholder.
-- Before staging or committing, inspect new and modified files for accidental private data. Replace private values with placeholders such as `<email>`, `<password>`, `<api-key>`, or `<local-path>`.
-- Do not include private data in tests, fixtures, documentation, comments, release notes, screenshots, generated artifacts, or command transcripts.
-- If private data is already present in the worktree, stop and ask before preserving, moving, or deleting it. If private data may already have been committed, stop and report the risk instead of creating more commits.
-
-## Release Instructions
-
-- Before creating a release, check GitHub for the latest published release and derive the next version from that release rather than from local assumptions.
-- Use the release version schema `YYYY.MAJOR.MINOR`.
-- By default, create a new minor release by incrementing the `MINOR` component of the latest published release.
-- Only create a new `MAJOR` component when the release plan explicitly requires it.
-- When the release year changes, start a new release line for that calendar year and reset the version to `YYYY.1.0` unless an explicit release plan says otherwise.
-- Do not maintain older major lines or older year lines separately. Releases always continue from the latest published version.
-- The release branch is `master` or `main`, whichever is the repository's default branch.
-- When preparing a release, use the repository's default branch as the source branch unless an explicit repository instruction overrides it.
-- Use GitHub or git remote metadata to determine the repository default branch. Do not assume `main` or `master`.
-- Agents are allowed and expected to use `gh` and network access for release work.
-- After creating a GitHub release, do not wait for or watch the GitHub Actions release workflow until the DMG is uploaded unless the user explicitly asks for that verification. Create the release and report the release URL.
-
-Before creating a release:
-
-- ensure the working tree is clean
-- ensure the default branch is checked out
-- fetch and fast-forward the default branch when possible
-- confirm the local default branch matches origin
-- check the latest published GitHub release
-- create the next release from the default branch
-- verify the new release is marked latest
-
-## GitHub Actions
-
-- When editing GitHub Actions workflows, prefer explicit supported runner and Xcode versions over floating assumptions.
-- Verify runner and toolchain availability from GitHub-hosted runner documentation or recent workflow logs before pinning versions.
-
-## UI Changes
-
-- For SwiftUI/AppKit UI changes, preserve macOS-native behavior and existing app workflows unless the user explicitly asks for a behavior change.
-- Perform visual verification where practical and note the key windows or states checked.
-- Add automated tests for behavior that can be tested reliably.
-
-## Platform-Native Preference
-
-- For every new implementation, first check whether the Swift SDK, Apple frameworks, or standard platform behavior provide a native solution covering the requested functionality or similar functionality.
-- Prefer platform-native solutions over custom implementations when they exist.
-- If the requested feature is close to functionality provided by the SDK or platform, stop and ask the user whether the native solution should be used before proceeding with a custom implementation.
-- If a native solution exists but does not fit the requested design 100%, stop and ask the user whether to use the native solution before proceeding with a custom implementation.
-
-## Swift Code Style
-
-- Keep Swift code clear, small, and easy to follow.
-- Prefer native Apple frameworks and existing project patterns over adding abstractions or helper layers without strong need.
-- Keep dependencies minimal. Do not add new package or library dependencies unless they are clearly justified and the change cannot reasonably be implemented with the standard library, Apple frameworks, or existing project code.
-- Place business logic in the existing domain and infrastructure layers instead of duplicating behavior in views or coordinators.
-- Write code comments and documentation for non-obvious types, methods, properties, invariants, concurrency assumptions, filesystem assumptions, and workflow rules.
-- Use `///` documentation comments for important APIs and use inline comments sparingly for tricky logic.
-- Do not add comments that merely restate obvious code.
-
-## Commit Gate
-
-A code change is ready to commit only when all of the following are true:
-
-- the implementation is complete
-- tests were added or updated when required
-- requirements documentation was updated when features or behavior changed
-- code documentation was added or updated where needed
-- the normal review reported no further issues
-- the required stable test run passed
-
-If any gate fails, do not commit yet.
-After all commit gates pass, create a commit automatically unless the user explicitly asked not to commit.
+When sources conflict, prioritize the current user instruction, then authoritative requirements, specialized/local instructions, established conventions, this guide, and finally inferred defaults. Escalate material contradictions rather than silently resolving them.
