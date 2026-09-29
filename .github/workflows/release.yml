@@ -46,7 +46,28 @@ jobs:
             MARKETING_VERSION="$RELEASE_VERSION" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             SKIP_INSTALL=NO \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=NO
+            BUILD_LIBRARY_FOR_DISTRIBUTION=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            CLANG_TREAT_WARNINGS_AS_ERRORS=YES \
+            SWIFT_OPTIMIZATION_LEVEL=-O \
+            SWIFT_COMPILATION_MODE=wholemodule \
+            GCC_OPTIMIZATION_LEVEL=s \
+            DEAD_CODE_STRIPPING=YES \
+            LLVM_LTO=YES \
+            COPY_PHASE_STRIP=YES \
+            STRIP_INSTALLED_PRODUCT=YES
+
+      - name: Static analysis
+        run: |
+          xcodebuild \
+            -project DocNest.xcodeproj \
+            -scheme DocNest \
+            -configuration Release \
+            analyze \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            CLANG_TREAT_WARNINGS_AS_ERRORS=YES
 
       - name: Verify archive
         run: |

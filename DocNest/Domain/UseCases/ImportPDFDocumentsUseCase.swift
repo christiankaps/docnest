@@ -112,6 +112,7 @@ enum ImportPDFDocumentsUseCase {
     private enum ImportValidationError: LocalizedError {
         case fileTooLarge
         case archiveExpandsTooLarge
+        case unreadablePDF
 
         var errorDescription: String? {
             switch self {
@@ -119,6 +120,8 @@ enum ImportPDFDocumentsUseCase {
                 return "This file exceeds DocNest's 512 MB import limit."
             case .archiveExpandsTooLarge:
                 return "This archive expands beyond DocNest's 1 GB safety limit."
+            case .unreadablePDF:
+                return "This file is not a readable PDF document."
             }
         }
     }
@@ -668,7 +671,10 @@ enum ImportPDFDocumentsUseCase {
             return (fileSize, creationDate, contentHash, pdfDocument)
         }.value
 
-        let pageCount = pdfDocument?.pageCount ?? 0
+        guard let pdfDocument, !pdfDocument.isLocked, pdfDocument.pageCount > 0 else {
+            throw ImportValidationError.unreadablePDF
+        }
+        let pageCount = pdfDocument.pageCount
 
         return ImportMetadata(
             contentHash: contentHash,

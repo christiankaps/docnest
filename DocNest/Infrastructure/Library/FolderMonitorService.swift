@@ -393,6 +393,10 @@ final class FolderMonitorService {
             }
 
             let url = URL(fileURLWithPath: path)
+            guard !url.pathComponents.contains(where: { $0.hasSuffix(".docnestlibrary") }) else {
+                removeSnapshots(atOrBelow: path, from: &updatedSnapshots)
+                continue
+            }
             guard url.pathExtension.caseInsensitiveCompare("pdf") == .orderedSame else {
                 removeSnapshots(atOrBelow: path, from: &updatedSnapshots)
                 continue

@@ -27,7 +27,22 @@ jobs:
             -scheme DocNest \
             -configuration Debug \
             -destination 'platform=macOS' \
-            build
+            build \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            CLANG_TREAT_WARNINGS_AS_ERRORS=YES
+
+      - name: Static analysis
+        run: |
+          xcodebuild \
+            -project DocNest.xcodeproj \
+            -scheme DocNest \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            analyze \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            CLANG_TREAT_WARNINGS_AS_ERRORS=YES
 
       - name: Run Unit Tests
         run: |
@@ -38,7 +53,10 @@ jobs:
             -destination 'platform=macOS' \
             -only-testing:DocNestTests \
             -resultBundlePath "$RUNNER_TEMP/UnitTestResults.xcresult" \
-            test
+            test \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            CLANG_TREAT_WARNINGS_AS_ERRORS=YES
 
       - name: Run UI Tests
         run: |
@@ -49,7 +67,10 @@ jobs:
             -destination 'platform=macOS' \
             -only-testing:DocNestUITests \
             -resultBundlePath "$RUNNER_TEMP/UITestResults.xcresult" \
-            test
+            test \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            GCC_TREAT_WARNINGS_AS_ERRORS=YES \
+            CLANG_TREAT_WARNINGS_AS_ERRORS=YES
 
       - name: Upload test results
         if: failure()

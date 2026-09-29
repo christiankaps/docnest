@@ -1367,8 +1367,12 @@ final class LibraryCoordinator {
         } else {
             queuedOCRBackfillDocuments.append(contentsOf: extractableDocuments)
             for document in extractableDocuments {
-                if let fallback = dateFallbacksByDocumentID[document.persistentModelID] {
-                    queuedOCRDateFallbacks.updateValue(fallback, forKey: document.persistentModelID)
+                let documentID = document.persistentModelID
+                if dateFallbacksByDocumentID.keys.contains(documentID) {
+                    queuedOCRDateFallbacks.updateValue(
+                        dateFallbacksByDocumentID[documentID]!,
+                        forKey: documentID
+                    )
                 }
             }
         }

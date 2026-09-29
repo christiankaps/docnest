@@ -479,14 +479,16 @@ final class AppUpdateService: ObservableObject {
 
         let sessionID = beginInstallProgressSession(for: info.latestVersion)
 
-        Task {
+        Task { [weak self, info] in
+            guard let self else { return }
             do {
+                let progressController = self
                 let preparedInstaller = try await Self.prepareInstaller(
                     for: info,
                     currentAppURL: Bundle.main.bundleURL.standardizedFileURL,
                     currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
-                    progressHandler: { [weak self] phase in
-                        await self?.applyUpdateProgress(phase, version: info.latestVersion, sessionID: sessionID)
+                    progressHandler: { [weak progressController] phase in
+                        await progressController?.applyUpdateProgress(phase, version: info.latestVersion, sessionID: sessionID)
                     }
                 )
                 status = .installing(info.latestVersion)
