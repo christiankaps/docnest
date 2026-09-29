@@ -4,6 +4,41 @@ This file is an append-only log of analyses (investigations, reviews, audits) pe
 
 ---
 
+## Overall Project Implementation Status
+
+- **Date:** 2026-09-29
+- **AI model:** GPT-5 (`gpt-5`)
+- **Prompt:** "Nein. Wie ist insgesamt der Projektstatus?"
+
+### Result
+
+DocNest is feature-complete for its documented v1/MVP scope in source and requirements documentation, but it is **not ready to be represented as production-release-ready**. The working tree is clean on `main`. The last substantive application changes landed on 2026-07-21, and the most recent commit (2026-09-07) records a security/design review rather than a remediation. No build, test, static-analysis, UI verification, release-artifact verification, or network-based release check was run for this read-only assessment; current green build/test and GitHub-release status are therefore unknown.
+
+#### Implementation coverage
+
+- The documented v1 workflows are present: local library creation/opening, PDF import from files/folders/URLs/services/Dock/watch folders, duplicate detection, list/thumbnail display, PDF/Quick Look preview, labels/groups/smart folders, filtering and full-text search, export/share/Finder access, OCR, migrations, and package-integrity checks.
+- The codebase has a coherent native-macOS architecture: SwiftUI/AppKit for UI integration, SwiftData with a versioned migration chain through schema V6, and Apple frameworks rather than third-party dependencies. The repository has 49 production Swift files and a consolidated unit/integration test target.
+- The recent implementation history shows meaningful hardening work for import, library, OCR, update, and native-menu behavior. The required test command is documented as `make test`; warnings are configured as errors for build, test, analysis, archive, and packaging commands.
+
+#### Release blockers and material risks
+
+1. **Automatic updates and public distribution are not release-ready.** The 2026-09-07 security review found that the release workflow produces ad-hoc-signed artifacts without a configured trusted update team, Developer ID signing, notarization, or stapling. The updater fails closed when that team is absent, so workflow-built releases cannot use the advertised automatic-install path. This is the primary release blocker.
+2. **Library integrity has unresolved high-risk lifecycle paths.** The same review found that background import/OCR/integrity work can outlive library close/switch and continue accessing the old library after its exclusive lock has been released. Permanent deletion can also report success after metadata is deleted even when removal of the stored PDF fails, leaving an unmanaged sensitive-file orphan.
+3. **Untrusted-import containment is incomplete.** The remote-download and ZIP limits do not yet constrain all temporary disk, entry-count, path-depth, inode, CPU, or elapsed-time costs. This leaves a practical local denial-of-service risk from malicious or extreme inputs.
+4. **Documentation has drifted from the implementation.** `docs/requirements.md` describes watch folders as `DispatchSource`/file-descriptor based, while the active implementation uses `FSEventStream`. The same UI status can report `monitoring` solely because the folder exists and is enabled, even if `FSEventStreamCreate` or `FSEventStreamStart` failed; it also is not recomputed when a monitored path later vanishes. The user-visible contract and implementation need reconciliation.
+
+#### Engineering status
+
+- No current uncommitted work or obvious repository-wide TODO/FIXME backlog was found in production sources. The main structural maintenance concern remains the large `LibraryCoordinator`, which combines UI state, filtering, import/export, OCR, and watch-folder orchestration.
+- The repository has good process documentation and a non-optional code-change gate, but this assessment cannot establish current test health because it intentionally did not execute verification commands.
+- GitHub/origin freshness and latest published release could not be checked in this environment because the configured SSH remote hostname could not be resolved. This is an environment/network limitation, not evidence that the remote is unhealthy.
+
+#### Recommended next status
+
+Treat the project as **MVP-complete, internally usable, and in a release-hardening phase**. Before the next public release, prioritize: (1) signed/notarized release pipeline plus updater-trust verification, (2) library-task shutdown/lock ownership and deletion atomicity, (3) bounded streaming/archive import defenses, (4) correction and testing of watch-folder state/reporting, then (5) a clean `make test`, static analysis, and release-artifact validation on a network-capable machine.
+
+---
+
 ## Complete App Implementation, Security, and Design Review
 
 - **Date:** 2026-09-07
