@@ -654,6 +654,22 @@ enum DocumentLibraryService {
         let documents = try modelContext.fetch(FetchDescriptor<DocumentRecord>())
         var seenHashes: [String: Int] = [:]
 
+        let deletionStagingDirectory = diagnosticsDirectory(for: libraryURL)
+            .appendingPathComponent("DeletionStaging", isDirectory: true)
+        if let stagingEntries = try? FileManager.default.contentsOfDirectory(
+            at: deletionStagingDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ), !stagingEntries.isEmpty {
+            issues.append(
+                LibraryIntegrityIssue(
+                    severity: .error,
+                    code: "document.deletion.cleanup-required",
+                    message: "\(stagingEntries.count) staged document file\(stagingEntries.count == 1 ? "" : "s") still require permanent-deletion cleanup."
+                )
+            )
+        }
+
         for document in documents {
             if let storedFilePath = document.storedFilePath {
                 let fileURL = DocumentStorageService.fileURL(for: storedFilePath, libraryURL: libraryURL)

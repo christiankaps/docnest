@@ -108,10 +108,19 @@ enum ImportPDFDocumentsUseCase {
     private static let maximumSourceBytes: Int64 = 512 * 1_024 * 1_024
     private static let maximumExtractedArchiveBytes: Int64 = 1_024 * 1_024 * 1_024
     private static let downloadTimeout: TimeInterval = 60
+    private static let maximumResolvedDocumentCandidates = 20_000
+    private static let maximumArchiveEntries = 10_000
+    private static let maximumArchivePathDepth = 32
+    private static let archiveExtractionTimeout: TimeInterval = 60
 
     private enum ImportValidationError: LocalizedError {
         case fileTooLarge
         case archiveExpandsTooLarge
+        case archiveHasTooManyEntries
+        case archiveHasUnsafePath
+        case archiveTookTooLong
+        case tooManyDocumentCandidates
+        case invalidDownloadResponse
         case unreadablePDF
 
         var errorDescription: String? {
@@ -120,6 +129,16 @@ enum ImportPDFDocumentsUseCase {
                 return "This file exceeds DocNest's 512 MB import limit."
             case .archiveExpandsTooLarge:
                 return "This archive expands beyond DocNest's 1 GB safety limit."
+            case .archiveHasTooManyEntries:
+                return "This archive contains too many entries to import safely."
+            case .archiveHasUnsafePath:
+                return "This archive contains an unsafe or excessively deep path."
+            case .archiveTookTooLong:
+                return "This archive took too long to extract and was cancelled."
+            case .tooManyDocumentCandidates:
+                return "This import contains too many PDF files to process safely."
+            case .invalidDownloadResponse:
+                return "The download server did not return a successful response."
             case .unreadablePDF:
                 return "This file is not a readable PDF document."
             }
@@ -154,6 +173,7 @@ enum ImportPDFDocumentsUseCase {
     private struct ResolvedFileURLs {
         let urls: [URL]
         let tempDirectories: [URL]
+        let failures: [ImportPDFDocumentsResult.Failure]
     }
 
     /// Resolves the supplied URLs, imports all supported PDFs into the active
@@ -193,11 +213,13 @@ enum ImportPDFDocumentsUseCase {
 
         var downloadFailures: [ImportPDFDocumentsResult.DownloadFailure] = []
         var downloadedTempFiles: [URL] = []
+        var downloadedTempDirectories: [URL] = []
         for webURL in webURLs {
             if Task.isCancelled { break }
             do {
-                let tempFile = try await downloadPDF(from: webURL)
-                downloadedTempFiles.append(tempFile)
+                let downloadedFile = try await downloadPDF(from: webURL)
+                downloadedTempDirectories.append(downloadedFile.temporaryDirectory)
+                downloadedTempFiles.append(downloadedFile.fileURL)
             } catch {
                 downloadFailures.append(.init(url: webURL, message: error.localizedDescription))
             }
@@ -206,10 +228,11 @@ enum ImportPDFDocumentsUseCase {
         let resolvedFileURLs = await resolveFileURLsAsync(fileURLs)
         let zipTempDirectories = resolvedFileURLs.tempDirectories
         let resolvedURLs = resolvedFileURLs.urls + downloadedTempFiles
+        failures.append(contentsOf: resolvedFileURLs.failures)
 
         if Task.isCancelled {
-            for tempFile in downloadedTempFiles {
-                try? FileManager.default.removeItem(at: tempFile)
+            for tempDirectory in downloadedTempDirectories {
+                try? FileManager.default.removeItem(at: tempDirectory)
             }
             for tempDir in zipTempDirectories {
                 try? FileManager.default.removeItem(at: tempDir)
@@ -307,8 +330,8 @@ enum ImportPDFDocumentsUseCase {
             for preparedImport in preparedImports {
                 DocumentStorageService.deleteStoredFile(at: preparedImport.storedFilePath, libraryURL: libraryURL)
             }
-            for tempFile in downloadedTempFiles {
-                try? FileManager.default.removeItem(at: tempFile)
+            for tempDirectory in downloadedTempDirectories {
+                try? FileManager.default.removeItem(at: tempDirectory)
             }
             for tempDir in zipTempDirectories {
                 try? FileManager.default.removeItem(at: tempDir)
@@ -325,8 +348,8 @@ enum ImportPDFDocumentsUseCase {
             )
         }
 
-        for tempFile in downloadedTempFiles {
-            try? FileManager.default.removeItem(at: tempFile)
+        for tempDirectory in downloadedTempDirectories {
+            try? FileManager.default.removeItem(at: tempDirectory)
         }
         for tempDir in zipTempDirectories {
             try? FileManager.default.removeItem(at: tempDir)
@@ -358,25 +381,68 @@ enum ImportPDFDocumentsUseCase {
         return scheme == "http" || scheme == "https"
     }
 
-    /// Downloads a PDF from a web URL to a temporary file.
-    /// The caller is responsible for deleting the temp file after import.
-    private static func downloadPDF(from url: URL) async throws -> URL {
+    private struct DownloadedFile {
+        let fileURL: URL
+        let temporaryDirectory: URL
+    }
+
+    /// Downloads a PDF into a private temporary directory.
+    /// The caller is responsible for deleting that directory after import.
+    private static func downloadPDF(from url: URL) async throws -> DownloadedFile {
         var request = URLRequest(url: url)
         request.timeoutInterval = downloadTimeout
-        let (tempURL, response) = try await URLSession.shared.download(for: request)
-        let size = try tempURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size <= maximumSourceBytes else {
-            try? FileManager.default.removeItem(at: tempURL)
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        if let httpResponse = response as? HTTPURLResponse {
+            guard (200...299).contains(httpResponse.statusCode) else {
+                throw ImportValidationError.invalidDownloadResponse
+            }
+        }
+        guard response.expectedContentLength < 0 || response.expectedContentLength <= maximumSourceBytes else {
             throw ImportValidationError.fileTooLarge
+        }
+
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DocNestDownload-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+        let tempURL = temporaryDirectory.appendingPathComponent("download.partial", isDirectory: false)
+        guard FileManager.default.createFile(atPath: tempURL.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        let handle = try FileHandle(forWritingTo: tempURL)
+        var didSucceed = false
+        defer {
+            try? handle.close()
+            if !didSucceed {
+                try? FileManager.default.removeItem(at: temporaryDirectory)
+            }
+        }
+
+        var byteCount: Int64 = 0
+        var buffer = Data()
+        buffer.reserveCapacity(64 * 1_024)
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            byteCount += 1
+            guard byteCount <= maximumSourceBytes else {
+                throw ImportValidationError.fileTooLarge
+            }
+            buffer.append(byte)
+            if buffer.count == 64 * 1_024 {
+                try handle.write(contentsOf: buffer)
+                buffer.removeAll(keepingCapacity: true)
+            }
+        }
+        if !buffer.isEmpty {
+            try handle.write(contentsOf: buffer)
         }
 
         // Derive a meaningful filename from the URL or Content-Disposition header
         let suggestedName = safeDownloadFileName(suggestedFileName(from: url, response: response))
 
-        let destinationURL = tempURL.deletingLastPathComponent().appendingPathComponent(suggestedName)
-        try? FileManager.default.removeItem(at: destinationURL)
+        let destinationURL = temporaryDirectory.appendingPathComponent(suggestedName)
         try FileManager.default.moveItem(at: tempURL, to: destinationURL)
-        return destinationURL
+        didSucceed = true
+        return DownloadedFile(fileURL: destinationURL, temporaryDirectory: temporaryDirectory)
     }
 
     private static func suggestedFileName(from url: URL, response: URLResponse) -> String {
@@ -709,15 +775,23 @@ enum ImportPDFDocumentsUseCase {
 
             var tempDirectories: [URL] = []
             do {
-                let urls = try resolveFileURLs(urls, tempDirectories: &tempDirectories)
-                return ResolvedFileURLs(urls: urls, tempDirectories: tempDirectories)
+                let result = try resolveFileURLs(urls, tempDirectories: &tempDirectories)
+                return ResolvedFileURLs(
+                    urls: result.urls,
+                    tempDirectories: tempDirectories,
+                    failures: result.failures
+                )
             } catch is CancellationError {
                 for tempDirectory in tempDirectories {
                     try? FileManager.default.removeItem(at: tempDirectory)
                 }
-                return ResolvedFileURLs(urls: [], tempDirectories: [])
+                return ResolvedFileURLs(urls: [], tempDirectories: [], failures: [])
             } catch {
-                return ResolvedFileURLs(urls: [], tempDirectories: tempDirectories)
+                return ResolvedFileURLs(
+                    urls: [],
+                    tempDirectories: tempDirectories,
+                    failures: [.init(fileName: nil, message: error.localizedDescription)]
+                )
             }
         }
 
@@ -728,35 +802,44 @@ enum ImportPDFDocumentsUseCase {
         }
     }
 
-    private static func resolveFileURLs(_ urls: [URL], tempDirectories: inout [URL]) throws -> [URL] {
+    private static func resolveFileURLs(
+        _ urls: [URL],
+        tempDirectories: inout [URL]
+    ) throws -> (urls: [URL], failures: [ImportPDFDocumentsResult.Failure]) {
         var resolved: [URL] = []
+        var failures: [ImportPDFDocumentsResult.Failure] = []
 
         for url in urls {
             try Task.checkCancellation()
-            if isDirectory(url) {
-                resolved.append(contentsOf: try enumeratePDFs(in: url) {
-                    try Task.checkCancellation()
-                })
-            } else if isZipFile(url) {
-                let accessedSecurityScope = url.startAccessingSecurityScopedResource()
-                defer {
-                    if accessedSecurityScope {
-                        url.stopAccessingSecurityScopedResource()
+            do {
+                if isDirectory(url) {
+                    resolved.append(contentsOf: try enumeratePDFs(in: url) {
+                        try Task.checkCancellation()
+                    })
+                } else if isZipFile(url) {
+                    let accessedSecurityScope = url.startAccessingSecurityScopedResource()
+                    defer {
+                        if accessedSecurityScope {
+                            url.stopAccessingSecurityScopedResource()
+                        }
                     }
-                }
 
-                if let extractedDir = try extractZipFile(at: url) {
+                    let extractedDir = try extractZipFile(at: url)
                     tempDirectories.append(extractedDir)
                     resolved.append(contentsOf: try enumeratePDFs(in: extractedDir) {
                         try Task.checkCancellation()
                     })
+                } else {
+                    resolved.append(url)
                 }
-            } else {
-                resolved.append(url)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                failures.append(.init(fileName: url.lastPathComponent, message: error.localizedDescription))
             }
         }
 
-        return resolved
+        return (resolved, failures)
     }
 
     /// Recursively enumerates PDF files inside a directory.
@@ -768,7 +851,7 @@ enum ImportPDFDocumentsUseCase {
     static func enumeratePDFs(
         in directoryURL: URL,
         cancellationCheck: (() throws -> Void)? = nil
-    ) rethrows -> [URL] {
+    ) throws -> [URL] {
         let accessedSecurityScope = directoryURL.startAccessingSecurityScopedResource()
         defer {
             if accessedSecurityScope {
@@ -789,6 +872,9 @@ enum ImportPDFDocumentsUseCase {
                 try cancellationCheck?()
             }
             if isSupportedDocumentURL(fileURL) {
+                guard results.count < maximumResolvedDocumentCandidates else {
+                    throw ImportValidationError.tooManyDocumentCandidates
+                }
                 results.append(fileURL)
             }
             index += 1
@@ -797,12 +883,14 @@ enum ImportPDFDocumentsUseCase {
     }
 
     /// Extracts a zip archive to a temporary directory using the system `ditto` command.
-    /// Returns the URL of the temporary directory, or `nil` on failure.
-    private static func extractZipFile(at url: URL) throws -> URL? {
+    /// Returns the URL of the temporary directory or throws a user-visible
+    /// validation/error result that the resolver preserves in the import summary.
+    private static func extractZipFile(at url: URL) throws -> URL {
         let archiveSize = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
         guard archiveSize <= maximumSourceBytes else {
             throw ImportValidationError.fileTooLarge
         }
+        try preflightZipArchive(at: url)
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("DocNestZipImport-\(UUID().uuidString)", isDirectory: true)
 
@@ -812,7 +900,7 @@ enum ImportPDFDocumentsUseCase {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            return nil
+            throw error
         }
 
         let process = Process()
@@ -821,8 +909,15 @@ enum ImportPDFDocumentsUseCase {
 
         do {
             try process.run()
+            let deadline = Date().addingTimeInterval(archiveExtractionTimeout)
             while process.isRunning {
                 try Task.checkCancellation()
+                if Date() >= deadline {
+                    process.terminate()
+                    process.waitUntilExit()
+                    try? FileManager.default.removeItem(at: tempDir)
+                    throw ImportValidationError.archiveTookTooLong
+                }
                 if directorySize(at: tempDir) > maximumExtractedArchiveBytes {
                     process.terminate()
                     process.waitUntilExit()
@@ -839,15 +934,70 @@ enum ImportPDFDocumentsUseCase {
             throw CancellationError()
         } catch {
             try? FileManager.default.removeItem(at: tempDir)
-            return nil
+            throw error
         }
 
         guard process.terminationStatus == 0 else {
             try? FileManager.default.removeItem(at: tempDir)
-            return nil
+            throw CocoaError(.fileReadCorruptFile)
         }
 
         return tempDir
+    }
+
+    /// Preflights ZIP entry names before extraction so an archive cannot create
+    /// an unbounded or traversal-shaped filesystem tree inside temporary storage.
+    private static func preflightZipArchive(at url: URL) throws {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-Z1", url.path]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        defer {
+            if process.isRunning {
+                process.terminate()
+                process.waitUntilExit()
+            }
+        }
+
+        let handle = output.fileHandleForReading
+        var pending = Data()
+        var entryCount = 0
+        while true {
+            let data = try handle.read(upToCount: 4_096) ?? Data()
+            if data.isEmpty { break }
+            pending.append(data)
+            while let newlineIndex = pending.firstIndex(of: 0x0A) {
+                let line = pending.prefix(upTo: newlineIndex)
+                pending.removeSubrange(...newlineIndex)
+                try validateArchiveEntry(String(decoding: line, as: UTF8.self), count: &entryCount)
+            }
+            try Task.checkCancellation()
+        }
+        if !pending.isEmpty {
+            try validateArchiveEntry(String(decoding: pending, as: UTF8.self), count: &entryCount)
+        }
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+    }
+
+    private static func validateArchiveEntry(_ entry: String, count: inout Int) throws {
+        count += 1
+        guard count <= maximumArchiveEntries else {
+            throw ImportValidationError.archiveHasTooManyEntries
+        }
+        let normalizedEntry = entry.hasSuffix("/") ? String(entry.dropLast()) : entry
+        let components = normalizedEntry.split(separator: "/", omittingEmptySubsequences: false)
+        guard !normalizedEntry.isEmpty,
+              !normalizedEntry.hasPrefix("/"),
+              components.count <= maximumArchivePathDepth,
+              components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
+            throw ImportValidationError.archiveHasUnsafePath
+        }
     }
 
     private static func directorySize(at directory: URL) -> Int64 {

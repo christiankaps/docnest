@@ -55,9 +55,19 @@ When the pipeline receives an HTTP or HTTPS URL, it downloads the file into a te
 
 Downloaded temp files are cleaned up after the import finishes.
 
+Downloads are streamed and cancelled when they exceed the 512 MB source limit.
+Unsuccessful HTTP responses are reported as download failures.
+
 ## ZIP Import
 
 ZIP files are extracted into temporary directories using the system `ditto` tool. Extracted contents are then scanned recursively for PDFs. Temporary extraction directories are removed after the run.
+
+Before extraction, DocNest validates archive entry count and path shape. It
+rejects archives with more than 10,000 entries, paths deeper than 32 components,
+unsafe traversal paths, expansion beyond 1 GB, or extraction taking longer than
+60 seconds. Folder and archive discovery also caps a single import at 20,000 PDF
+candidates. Safety-limit failures appear in the import summary; they are not
+reported as empty folders.
 
 ## Metadata Extraction
 

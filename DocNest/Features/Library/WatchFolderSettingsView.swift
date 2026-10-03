@@ -149,6 +149,7 @@ private struct WatchFolderRow: View {
         case .monitoring: "eye.fill"
         case .paused: "pause.circle"
         case .pathInvalid: "exclamationmark.triangle"
+        case .unavailable: "exclamationmark.triangle"
         }
     }
 
@@ -157,6 +158,7 @@ private struct WatchFolderRow: View {
         case .monitoring: .green
         case .paused: .secondary
         case .pathInvalid: .orange
+        case .unavailable: .orange
         }
     }
 
@@ -165,6 +167,7 @@ private struct WatchFolderRow: View {
         case .monitoring: "Monitoring"
         case .paused: "Paused"
         case .pathInvalid: "Path not found"
+        case .unavailable: "Monitoring unavailable"
         }
     }
 

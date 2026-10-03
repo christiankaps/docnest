@@ -1600,6 +1600,30 @@ final class DocNestTests: XCTestCase {
         XCTAssertFalse(DocumentStorageService.fileExists(at: "../outside.pdf", libraryURL: libraryURL))
     }
 
+    func testStagedStoredFileCanBeRestoredAfterMetadataTransactionFailure() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tempRoot) }
+
+        let libraryURL = try DocumentLibraryService.createLibrary(at: tempRoot.appendingPathComponent("Library"))
+        let storedPath = "Originals/2026/10/transaction.pdf"
+        let originalURL = libraryURL.appendingPathComponent(storedPath)
+        try FileManager.default.createDirectory(at: originalURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("important document".utf8).write(to: originalURL)
+
+        let staged = try XCTUnwrap(
+            DocumentStorageService.stageStoredFileForDeletion(at: storedPath, libraryURL: libraryURL)
+        )
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: originalURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: staged.stagedURL.path))
+
+        try DocumentStorageService.restoreStagedStoredFile(staged)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: originalURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staged.stagedURL.path))
+    }
+
     func testLocationPhotoURLRejectsTraversalOutsideLibrary() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

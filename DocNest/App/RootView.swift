@@ -149,7 +149,7 @@ struct RootView: View {
         .toolbar { toolbarContent }
         .modifier(RootViewImportModifier(coordinator: coordinator))
         .modifier(RootViewDialogsModifier(coordinator: coordinator, allDocuments: allDocuments))
-        .modifier(RootViewChangeHandlers(coordinator: coordinator, thumbnailCache: thumbnailCache, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allDocumentLocations: allDocumentLocations, allWatchFolders: allWatchFolders, allLabelValues: allLabelValues))
+        .modifier(RootViewChangeHandlers(librarySession: librarySession, coordinator: coordinator, thumbnailCache: thumbnailCache, allDocuments: allDocuments, allLabels: allLabels, allSmartFolders: allSmartFolders, allLabelGroups: allLabelGroups, allDocumentLocations: allDocumentLocations, allWatchFolders: allWatchFolders, allLabelValues: allLabelValues))
         .focusedSceneValue(\.exportDocumentsAction) {
             coordinator.exportDocuments(coordinator.displayedSelectedDocuments)
         }
@@ -167,6 +167,9 @@ struct RootView: View {
         .task {
             coordinator.libraryURL = libraryURL
             coordinator.modelContext = modelContext
+            librarySession.prepareForClose = { [coordinator] in
+                await coordinator.quiesceForLibraryClose()
+            }
             AppSettingsController.shared.setActiveLibraryContext(
                 coordinator: coordinator,
                 modelContainer: librarySession.modelContainer
@@ -482,6 +485,7 @@ private struct RootViewDialogsModifier: ViewModifier {
 }
 
 private struct RootViewChangeHandlers: ViewModifier {
+    let librarySession: LibrarySessionController
     let coordinator: LibraryCoordinator
     let thumbnailCache: ThumbnailCache
     let allDocuments: [DocumentRecord]
@@ -570,7 +574,7 @@ private struct RootViewChangeHandlers: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .modifier(ChangeHandlersNotifications(coordinator: coordinator, thumbnailCache: thumbnailCache))
+            .modifier(ChangeHandlersNotifications(librarySession: librarySession, coordinator: coordinator, thumbnailCache: thumbnailCache))
             .modifier(ChangeHandlersData(
                 coordinator: coordinator,
                 allDocuments: allDocuments,
@@ -597,6 +601,7 @@ private struct LabelValueChangeToken: Equatable {
 }
 
 private struct ChangeHandlersNotifications: ViewModifier {
+    let librarySession: LibrarySessionController
     let coordinator: LibraryCoordinator
     let thumbnailCache: ThumbnailCache
 

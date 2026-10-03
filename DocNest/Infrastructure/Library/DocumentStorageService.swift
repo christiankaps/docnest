@@ -6,6 +6,25 @@ import Foundation
 /// collision handling, and relative-path semantics stay consistent across import,
 /// rename, export, and deletion workflows.
 enum DocumentStorageService {
+    enum StoredFileDeletionError: LocalizedError {
+        case invalidStoredPath(String)
+        case stagedFileMissing(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidStoredPath:
+                return "The stored document path is outside the library originals directory."
+            case .stagedFileMissing(let path):
+                return "The staged document file could not be found at \(path)."
+            }
+        }
+    }
+
+    struct StagedStoredFile {
+        let originalPath: String
+        let originalURL: URL
+        let stagedURL: URL
+    }
     enum StoredFileRestoreError: LocalizedError {
         case renamedFileMissing(String)
 
@@ -125,6 +144,45 @@ enum DocumentStorageService {
 
     static func deleteStoredFile(at path: String, libraryURL: URL) {
         try? FileManager.default.removeItem(at: fileURL(for: path, libraryURL: libraryURL))
+    }
+
+    /// Moves an original into a library-local staging area before metadata is
+    /// deleted. The caller can restore it if the metadata transaction fails.
+    static func stageStoredFileForDeletion(at path: String, libraryURL: URL) throws -> StagedStoredFile? {
+        guard let originalURL = resolvedFileURL(for: path, libraryURL: libraryURL) else {
+            throw StoredFileDeletionError.invalidStoredPath(path)
+        }
+        guard FileManager.default.fileExists(atPath: originalURL.path) else {
+            return nil
+        }
+
+        let stagingDirectory = libraryURL
+            .appendingPathComponent("Diagnostics", isDirectory: true)
+            .appendingPathComponent("DeletionStaging", isDirectory: true)
+        try FileManager.default.createDirectory(at: stagingDirectory, withIntermediateDirectories: true)
+        let stagedURL = stagingDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(originalURL.pathExtension)
+        try FileManager.default.moveItem(at: originalURL, to: stagedURL)
+        return StagedStoredFile(originalPath: path, originalURL: originalURL, stagedURL: stagedURL)
+    }
+
+    static func restoreStagedStoredFile(_ stagedFile: StagedStoredFile) throws {
+        guard FileManager.default.fileExists(atPath: stagedFile.stagedURL.path) else {
+            throw StoredFileDeletionError.stagedFileMissing(stagedFile.originalPath)
+        }
+        try FileManager.default.createDirectory(
+            at: stagedFile.originalURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.moveItem(at: stagedFile.stagedURL, to: stagedFile.originalURL)
+    }
+
+    static func permanentlyDeleteStagedStoredFile(_ stagedFile: StagedStoredFile) throws {
+        guard FileManager.default.fileExists(atPath: stagedFile.stagedURL.path) else {
+            throw StoredFileDeletionError.stagedFileMissing(stagedFile.originalPath)
+        }
+        try FileManager.default.removeItem(at: stagedFile.stagedURL)
     }
 
     static func fileURL(for path: String, libraryURL: URL) -> URL {

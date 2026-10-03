@@ -57,6 +57,11 @@ These rules are implemented in [DocumentStorageService.swift](DocNest/Infrastruc
 
 `Diagnostics/` is used for integrity and repair-related output, including integrity reports written during validation and repair workflows.
 
+During permanent deletion, DocNest may temporarily move an original to
+`Diagnostics/DeletionStaging/` before committing metadata removal. A file left
+there means final removal failed: it is deliberately retained for recovery and
+is reported as an integrity issue rather than silently treated as deleted.
+
 ## Versioning
 
 The package format and the SwiftData schema version are related but distinct:

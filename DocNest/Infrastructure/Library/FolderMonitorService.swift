@@ -60,18 +60,20 @@ final class FolderMonitorService {
     )
 
     var onNewPDFsDetected: ((_ urls: [URL], _ labelIDs: [UUID]) -> Void)?
+    var onMonitoringStopped: ((_ watchFolderID: UUID) -> Void)?
 
     // MARK: - Public API
 
     /// Starts monitoring one watch folder, replacing any existing monitor for
     /// the same watch-folder identifier.
-    func startMonitoring(_ watchFolder: WatchFolder) {
+    @discardableResult
+    func startMonitoring(_ watchFolder: WatchFolder) -> Bool {
         stopMonitoring(id: watchFolder.id)
 
         let path = watchFolder.folderPath
         guard folderExists(at: path) else {
             Self.logger.warning("Watch folder path does not exist: \(path, privacy: .private)")
-            return
+            return false
         }
 
         let monitorToken = (monitorTokenByFolderID[watchFolder.id] ?? 0) &+ 1
@@ -102,7 +104,7 @@ final class FolderMonitorService {
         ) else {
             Unmanaged<EventStreamContext>.fromOpaque(callbackContext).release()
             Self.logger.error("Failed to create event stream for: \(path, privacy: .private)")
-            return
+            return false
         }
         FSEventStreamSetDispatchQueue(stream, monitorQueue)
         guard FSEventStreamStart(stream) else {
@@ -110,7 +112,7 @@ final class FolderMonitorService {
             FSEventStreamRelease(stream)
             Unmanaged<EventStreamContext>.fromOpaque(callbackContext).release()
             Self.logger.error("Failed to start event stream for: \(path, privacy: .private)")
-            return
+            return false
         }
 
         let entry = MonitoredFolder(
@@ -130,6 +132,7 @@ final class FolderMonitorService {
         scheduleScan(for: entry)
 
         Self.logger.info("Started monitoring: \(path, privacy: .private)")
+        return true
     }
 
     func stopMonitoring(id: UUID) {
@@ -221,6 +224,12 @@ final class FolderMonitorService {
         guard monitorTokenByFolderID[folderID] == monitorToken else { return }
         guard let monitor = monitors[folderID] else { return }
         guard monitor.monitorToken == monitorToken else { return }
+
+        guard folderExists(at: monitor.folderPath) else {
+            stopMonitoring(id: folderID)
+            onMonitoringStopped?(folderID)
+            return
+        }
 
         for event in events {
             if Self.shouldPerformFullScan(for: event, in: monitor.folderPath) {

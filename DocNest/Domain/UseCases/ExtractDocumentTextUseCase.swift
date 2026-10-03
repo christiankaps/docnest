@@ -43,13 +43,18 @@ enum ExtractDocumentTextUseCase {
 
             onProgress?(index, pending.count, title)
 
-            let text: String? = await Task.detached(priority: .utility) {
+            let extractionTask = Task.detached(priority: .utility) {
                 guard let pdfDocument = PDFDocument(url: fileURL) else {
                     logger.error("Could not open PDF for '\(title)'")
                     return nil as String?
                 }
                 return await OCRTextExtractionService.extractText(from: pdfDocument, sourceURL: fileURL)
-            }.value
+            }
+            let text: String? = await withTaskCancellationHandler {
+                await extractionTask.value
+            } onCancel: {
+                extractionTask.cancel()
+            }
 
             if Task.isCancelled { break }
 

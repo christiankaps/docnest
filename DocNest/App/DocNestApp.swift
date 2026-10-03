@@ -520,6 +520,10 @@ final class LibrarySessionController: ObservableObject {
     private var terminationObserver: Any?
     private var activeLibraryAccessSession: DocumentLibraryService.LibraryAccessSession?
     private var integrityRefreshTask: Task<Void, Never>?
+    /// Set by the open-library root view so session closure can stop UI-owned
+    /// work before relinquishing the filesystem lock and security scope.
+    var prepareForClose: (() async -> Void)?
+    private var closingTask: Task<Void, Never>?
 
     func queueImportURLs(_ urls: [URL]) {
         pendingImportURLs.append(contentsOf: urls)
@@ -580,6 +584,26 @@ final class LibrarySessionController: ObservableObject {
     }
 
     func closeLibrary() {
+        guard prepareForClose != nil else {
+            releaseCurrentLibrary()
+            return
+        }
+        guard closingTask == nil else { return }
+        closingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.closeCurrentLibraryAfterQuiescing()
+            self.closingTask = nil
+        }
+    }
+
+    private func closeCurrentLibraryAfterQuiescing() async {
+        if let prepareForClose {
+            await prepareForClose()
+        }
+        await releaseCurrentLibraryAfterIntegrityRefresh()
+    }
+
+    private func releaseCurrentLibrary() {
         integrityRefreshTask?.cancel()
         integrityRefreshTask = nil
         stopLockHeartbeat()
@@ -595,10 +619,39 @@ final class LibrarySessionController: ObservableObject {
         modelContainer = nil
     }
 
+    private func releaseCurrentLibraryAfterIntegrityRefresh() async {
+        let integrityTask = integrityRefreshTask
+        integrityRefreshTask?.cancel()
+        integrityRefreshTask = nil
+        await integrityTask?.value
+        releaseCurrentLibrary()
+    }
+
     private func openValidatedLibrary(_ accessSession: DocumentLibraryService.LibraryAccessSession) {
         if isSelectedLibrary(accessSession.url) {
             if accessSession.startedAccessingSecurityScope {
                 accessSession.url.stopAccessingSecurityScopedResource()
+            }
+            return
+        }
+
+        if selectedLibraryURL != nil, prepareForClose != nil {
+            guard closingTask == nil else {
+                if accessSession.startedAccessingSecurityScope {
+                    accessSession.url.stopAccessingSecurityScopedResource()
+                }
+                return
+            }
+            closingTask = Task { @MainActor [weak self] in
+                guard let self else {
+                    if accessSession.startedAccessingSecurityScope {
+                        accessSession.url.stopAccessingSecurityScopedResource()
+                    }
+                    return
+                }
+                await self.closeCurrentLibraryAfterQuiescing()
+                self.closingTask = nil
+                self.openValidatedLibrary(accessSession)
             }
             return
         }

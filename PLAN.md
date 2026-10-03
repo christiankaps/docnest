@@ -73,4 +73,9 @@ Resolve every finding from the 2026-10-03 technical review while preserving the 
 
 ## Status
 
-Not started. The prior partial hardening remains in the history: warnings-as-errors and CI analysis, unreadable-PDF rejection, nil OCR date fallback preservation, and `.docnestlibrary` event filtering. The six milestones above supersede earlier broad remediation notes.
+In progress (2026-10-03).
+
+- Milestones 1–4 have an initial implementation: library-local deletion staging with integrity reporting; close-time cancellation/awaiting of UI-owned import and OCR work; bounded streamed downloads and ZIP preflight/extraction; and watch-folder status based on active monitoring registration.
+- Focused deletion recovery coverage was added. `make test` (202 tests, 1 skipped) and `make analyze` pass. `make test-ui` could not start because macOS LocalAuthentication was already active; no UI test ran.
+- Remaining work includes the specified fault-injection and lifecycle regression coverage, manual existing-library/workflow validation, final documentation updates, and a release workflow/artifact verification.
+- Milestone 5 is blocked pending release-owner-provided protected signing, team, and notarization configuration. No credentials or identifiers will be invented or committed.

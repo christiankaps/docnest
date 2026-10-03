@@ -29,6 +29,7 @@ enum WatchFolderStatus {
     case monitoring
     case paused
     case pathInvalid
+    case unavailable
 }
 
 @MainActor
@@ -922,6 +923,30 @@ final class LibraryCoordinator {
         tearDownWatchFolderMonitoring()
     }
 
+    /// Cancels and awaits UI-owned library work. The session invokes this before
+    /// releasing its advisory lock or security-scoped library access.
+    func quiesceForLibraryClose() async {
+        let importTask = activeImportTask
+        let ocrTask = activeOCRTask
+        importGeneration += 1
+        ocrBackfillGeneration += 1
+        importTask?.cancel()
+        ocrTask?.cancel()
+        activeImportTask = nil
+        activeOCRTask = nil
+        importProgress = nil
+        ocrProgress = nil
+        queuedOCRBackfillDocuments = []
+        queuedOCRDateFallbacks = [:]
+        cancelPendingLabelFilter()
+        cancelPendingDisplayedSelectionUpdate()
+        cancelPendingSearchRecompute()
+        cancelPendingDerivedStateRefresh()
+        tearDownWatchFolderMonitoring()
+        await importTask?.value
+        await ocrTask?.value
+    }
+
     func syncDisplayedSelectionImmediately() {
         displayedSelectedDocuments = selectedDocuments
         displayedShareURLs = []
@@ -1708,6 +1733,14 @@ extension LibrarySidebarCounts {
 @MainActor
 private final class WatchFolderController {
     private let folderMonitorService = FolderMonitorService()
+    private var latestWatchFolders: [WatchFolder] = []
+
+    init() {
+        folderMonitorService.onMonitoringStopped = { [weak self] _ in
+            guard let self else { return }
+            self.recomputeStatuses(for: self.latestWatchFolders)
+        }
+    }
 
     var onImportRequested: ((_ urls: [URL], _ labelIDs: [UUID]) -> Void)? {
         didSet {
@@ -1718,6 +1751,7 @@ private final class WatchFolderController {
     private(set) var statuses: [UUID: WatchFolderStatus] = [:]
 
     func refresh(with watchFolders: [WatchFolder]) {
+        latestWatchFolders = watchFolders
         let currentIDs = Set(watchFolders.map(\.id))
 
         for folder in watchFolders {
@@ -1743,6 +1777,7 @@ private final class WatchFolderController {
 
     func tearDown() {
         folderMonitorService.stopAll()
+        latestWatchFolders = []
         statuses = [:]
     }
 
@@ -1753,6 +1788,8 @@ private final class WatchFolderController {
                 nextStatuses[folder.id] = .pathInvalid
             } else if !folder.isEnabled {
                 nextStatuses[folder.id] = .paused
+            } else if !folderMonitorService.isMonitoring(id: folder.id) {
+                nextStatuses[folder.id] = .unavailable
             } else {
                 nextStatuses[folder.id] = .monitoring
             }
