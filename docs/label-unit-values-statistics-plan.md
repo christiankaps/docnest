@@ -14,7 +14,7 @@ Example: if `Invoice` has unit `€`, documents labeled `Invoice` can store invo
 - `LibraryCoordinator` derives active, trashed, filtered, and selected document sets, and does expensive filter work off the main actor using `SearchDocumentsUseCase.Snapshot`.
 - The document inspector owns single-document label assignment UI and multi-selection label operations.
 - The bottom of the left sidebar is the preferred place to show aggregate value information because it has enough room to show filtered and selected scopes together.
-- SwiftData schema evolution is managed in `DocNestSchemaVersioning.swift`; the current schema is V4.
+- SwiftData uses the current model schema; earlier library schemas are unsupported.
 
 ## Product Decisions
 
@@ -71,18 +71,9 @@ Add helper APIs around value lookup and mutation rather than reading raw value r
 - deduplicate repeated `(documentID, labelID)` rows during repair/prune
 - repair/prune values whose document or label was removed outside the supported use cases
 
-## Migration Plan
+## Persistence
 
-Create schema V5 in `DocNestSchemaVersioning.swift`:
-
-- V5 includes `DocumentRecord`, `LabelTag`, `SmartFolder`, `LabelGroup`, `WatchFolder`, and `DocumentLabelValue`.
-- `LabelTag` gains nullable `unitSymbol`.
-- Add `MigrationStage.lightweight(fromVersion: DocNestSchemaV4.self, toVersion: DocNestSchemaV5.self)` if SwiftData accepts the nullable field and new model as lightweight changes.
-- If lightweight migration fails in testing, switch to a custom V4-to-V5 stage that opens old labels/documents unchanged and initializes no value rows.
-
-Update `DocumentLibraryService.openModelContainer` only if its schema model list or diagnostics need explicit references to the new model. Also update integrity reporting to identify orphaned value rows if the repair path is added there.
-
-Regression risk: the current V4 schema references top-level model types directly. V5 should either continue that pattern carefully or snapshot nested V5 model types if the project wants future checksums to be more stable. The implementation should verify opening an existing V4 library with labels still preserves assignments and creates no spurious values.
+Use the current SwiftData model schema. Earlier library versions and migration paths are unsupported under the macOS 27 platform policy.
 
 ## Domain Logic Plan
 
@@ -360,7 +351,7 @@ Add focused tests in `DocNestTests`:
 - smart folder with multiple value-enabled labels suppresses statistics
 - changing a value while the filter is unchanged refreshes statistics
 - changing a label unit while the filter is unchanged shows or hides statistics as appropriate
-- migration opens a pre-V5 library with existing labels and documents intact
+- current-format libraries reopen with existing labels and documents intact
 - existing test container helpers and previews include `DocumentLabelValue` so tests do not accidentally run with a partial schema
 - value input rejects overlong numbers, excessive fractional digits, exponent notation, `NaN`, and infinity-like strings
 - removing a label from the inspector clears value state and cannot recreate the value on submit/focus loss
@@ -445,7 +436,7 @@ For the major release:
 
 ## Risks and Mitigations
 
-- SwiftData migration risk: verify V4 libraries open cleanly before any UI work is considered complete.
+- Persistence risk: verify current-format libraries reopen cleanly.
 - Partial schema risk: update every `ModelContainer(for:)` test helper, preview container, and root `@Query` ingestion path so `DocumentLabelValue` exists wherever label-value code can run.
 - Relationship consistency risk: keep the existing label relationship as assignment truth and prune value rows whenever assignments change.
 - Identity stability risk: treat document and label UUIDs as immutable because value rows reference them directly.

@@ -1,8 +1,9 @@
 name: DocNest
 options:
   bundleIdPrefix: com.kaps
+  xcodeVersion: "27.0"
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "27.0"
 settings:
   base:
     ARCHS: arm64
@@ -15,6 +16,9 @@ settings:
     CODE_SIGN_IDENTITY: "-"
     DEVELOPMENT_TEAM: ""
     ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    STRING_CATALOG_GENERATE_SYMBOLS: YES
+    DEAD_CODE_STRIPPING: YES
   configs:
     Release:
       COPY_PHASE_STRIP: YES
@@ -49,6 +53,7 @@ targets:
       - path: DocNestTests
         excludes:
           - README.md
+          - Fixtures
     dependencies:
       - target: DocNest
     settings:
@@ -62,6 +67,7 @@ targets:
       - path: DocNestUITests
         excludes:
           - README.md
+          - Fixtures
     dependencies:
       - target: DocNest
     settings:

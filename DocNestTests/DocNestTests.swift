@@ -134,7 +134,7 @@ final class DocNestTests: XCTestCase {
 
     func testBuildDmgScriptPropagatesCreateDmgFailures() throws {
         let scriptURL = repositoryRootURL.appendingPathComponent("scripts/build-dmg.sh")
-        let script = try String(contentsOf: scriptURL)
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
 
         XCTAssertFalse(script.contains("|| true"))
         XCTAssertTrue(script.contains("hdiutil imageinfo"))
@@ -398,6 +398,42 @@ final class DocNestTests: XCTestCase {
         )
     }
 
+    func testValidateLibraryRejectsOlderManifestVersionWithoutWritingArtifacts() throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Future Library.docnestlibrary", isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let createdLibraryURL = try DocumentLibraryService.createLibrary(at: libraryURL)
+        let manifestURL = createdLibraryURL
+            .appendingPathComponent("Metadata", isDirectory: true)
+            .appendingPathComponent("library.json")
+        let futureVersion = DocumentLibraryService.currentFormatVersion - 1
+        let futureManifest = DocumentLibraryManifest(formatVersion: futureVersion, createdAt: .now)
+        try TestLibraryManifestWriter.write(futureManifest, to: manifestURL)
+
+        XCTAssertThrowsError(try DocumentLibraryService.validateLibrary(at: createdLibraryURL)) { error in
+            guard case DocumentLibraryService.ValidationError.unsupportedOlderFormat(let found, let supported) = error else {
+                return XCTFail("Expected unsupported older format error, got \(error)")
+            }
+            XCTAssertEqual(found, futureVersion)
+            XCTAssertEqual(supported, DocumentLibraryService.currentFormatVersion)
+        }
+
+        XCTAssertNil(DocumentLibraryService.readLockFile(for: createdLibraryURL))
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: createdLibraryURL
+                    .appendingPathComponent("Diagnostics", isDirectory: true)
+                    .appendingPathComponent("integrity-report.json")
+                    .path
+            )
+        )
+    }
+
     func testRepairLibraryRejectsFutureManifestVersionWithoutCreatingMissingDirectories() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -429,26 +465,35 @@ final class DocNestTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: previewsURL.path))
     }
 
-    func testMigrateLibraryRejectsFutureManifestVersionDefensively() throws {
+    func testRepairLibraryRejectsOlderManifestVersionWithoutCreatingMissingDirectories() throws {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let libraryURL = tempRoot.appendingPathComponent("Future Migration Library.docnestlibrary", isDirectory: true)
+        let libraryURL = tempRoot.appendingPathComponent("Future Repair Library.docnestlibrary", isDirectory: true)
 
         defer {
             try? FileManager.default.removeItem(at: tempRoot)
         }
 
         let createdLibraryURL = try DocumentLibraryService.createLibrary(at: libraryURL)
-        let futureVersion = DocumentLibraryService.currentFormatVersion + 1
-        let manifest = DocumentLibraryManifest(formatVersion: futureVersion, createdAt: .now)
+        let manifestURL = createdLibraryURL
+            .appendingPathComponent("Metadata", isDirectory: true)
+            .appendingPathComponent("library.json")
+        let futureVersion = DocumentLibraryService.currentFormatVersion - 1
+        let futureManifest = DocumentLibraryManifest(formatVersion: futureVersion, createdAt: .now)
+        try TestLibraryManifestWriter.write(futureManifest, to: manifestURL)
 
-        XCTAssertThrowsError(try DocumentLibraryService.migrateLibraryIfNeeded(at: createdLibraryURL, manifest: manifest)) { error in
-            guard case DocumentLibraryService.ValidationError.unsupportedFutureFormat(let found, let supported) = error else {
-                return XCTFail("Expected unsupported future format error, got \(error)")
+        let previewsURL = createdLibraryURL.appendingPathComponent("Previews", isDirectory: true)
+        try FileManager.default.removeItem(at: previewsURL)
+
+        XCTAssertThrowsError(try DocumentLibraryService.repairLibraryPackageIfNeeded(at: createdLibraryURL)) { error in
+            guard case DocumentLibraryService.ValidationError.unsupportedOlderFormat(let found, let supported) = error else {
+                return XCTFail("Expected unsupported older format error, got \(error)")
             }
             XCTAssertEqual(found, futureVersion)
             XCTAssertEqual(supported, DocumentLibraryService.currentFormatVersion)
         }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: previewsURL.path))
     }
 
     func testPersistedLibraryURLRoundTripsNormalizedPath() throws {
@@ -531,6 +576,28 @@ final class DocNestTests: XCTestCase {
                 from: ["DocNest", "-selectedLibraryPath"]
             )
         )
+    }
+
+    func testAsyncVisionOCRRecognizesImageOnlyPDF() async throws {
+        guard ProcessInfo.processInfo.environment["DOCNEST_TEST_VISION_OCR"] == "1" else {
+            throw XCTSkip("Opt-in Vision integration test requires installed macOS text recognition models")
+        }
+        let image = NSImage(size: NSSize(width: 612, height: 792))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: 612, height: 792).fill()
+        ("DocNest OCR" as NSString).draw(
+            at: NSPoint(x: 60, y: 600),
+            withAttributes: [.font: NSFont.systemFont(ofSize: 48), .foregroundColor: NSColor.black]
+        )
+        image.unlockFocus()
+        let page = try XCTUnwrap(PDFPage(image: image))
+        let document = PDFDocument()
+        document.insert(page, at: 0)
+        XCTAssertTrue((page.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+        let text = await OCRTextExtractionService.extractText(from: document)
+        XCTAssertTrue(try XCTUnwrap(text).contains("DocNest OCR"))
     }
 
     func testOCRBackendDefaultsToVisionDuringTests() {
@@ -1345,193 +1412,6 @@ final class DocNestTests: XCTestCase {
         XCTAssertEqual(documentsInLibraryA.count, 1)
         XCTAssertEqual(documentsInLibraryA.first?.title, "Invoice")
         XCTAssertTrue(FileManager.default.fileExists(atPath: DocumentLibraryService.metadataStoreURL(for: createdLibraryAURL).path))
-    }
-
-    @MainActor
-    func testOpeningV5LibraryMigratesDocumentsToUnknownAvailability() throws {
-        let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let libraryURL = try DocumentLibraryService.createLibrary(
-            at: tempRoot.appendingPathComponent("V5 Library")
-        )
-
-        defer {
-            try? FileManager.default.removeItem(at: tempRoot)
-        }
-
-        let configuration = ModelConfiguration(
-            "DocNestLibrary",
-            url: DocumentLibraryService.metadataStoreURL(for: libraryURL),
-            cloudKitDatabase: .none
-        )
-        let v5Schema = Schema(versionedSchema: DocNestSchemaV5.self)
-        do {
-            let v5Container = try ModelContainer(for: v5Schema, configurations: configuration)
-            let context = v5Container.mainContext
-            let document = DocNestSchemaV5.DocumentRecord(
-                originalFileName: "invoice.pdf",
-                title: "Invoice",
-                importedAt: .now,
-                pageCount: 1
-            )
-            context.insert(document)
-            try context.save()
-        }
-
-        let migratedContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
-        let context = migratedContainer.mainContext
-        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
-        let locations = try context.fetch(FetchDescriptor<DocumentLocation>())
-
-        XCTAssertEqual(documents.count, 1)
-        XCTAssertEqual(documents.first?.availability, .unknown)
-        XCTAssertNil(documents.first?.physicalLocationID)
-        XCTAssertTrue(locations.isEmpty)
-    }
-
-    @MainActor
-    func testOpeningReleasedV5LibraryFixtureMigratesDocumentsToUnknownAvailability() throws {
-        let testFileURL = URL(fileURLWithPath: #filePath)
-        let fixtureURL = testFileURL
-            .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/ReleasedV5Library.docnestlibrary", isDirectory: true)
-        let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let libraryURL = tempRoot.appendingPathComponent("ReleasedV5Library.docnestlibrary", isDirectory: true)
-
-        defer {
-            try? FileManager.default.removeItem(at: tempRoot)
-        }
-
-        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
-        try FileManager.default.copyItem(at: fixtureURL, to: libraryURL)
-
-        let repair = try DocumentLibraryService.repairLibraryPackageIfNeeded(at: libraryURL)
-        let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: libraryURL)
-        let migration = try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
-
-        XCTAssertTrue(repair.performedRepair)
-        XCTAssertEqual(migration.toFormatVersion, DocumentLibraryService.currentFormatVersion)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: libraryURL.appendingPathComponent("LocationPhotos", isDirectory: true).path))
-
-        let migratedContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
-        let context = migratedContainer.mainContext
-        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
-        let labels = try context.fetch(FetchDescriptor<LabelTag>())
-        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
-        let locations = try context.fetch(FetchDescriptor<DocumentLocation>())
-
-        XCTAssertEqual(documents.count, 1)
-        XCTAssertEqual(labels.count, 1)
-        XCTAssertEqual(values.count, 1)
-        XCTAssertTrue(locations.isEmpty)
-        XCTAssertEqual(documents.first?.title, "Released V5 Document")
-        XCTAssertEqual(documents.first?.labels.first?.name, "Fixture Label")
-        XCTAssertEqual(documents.first?.availability, .unknown)
-        XCTAssertNil(documents.first?.physicalLocationID)
-        XCTAssertEqual(labels.first?.unitSymbol, "EUR")
-        XCTAssertEqual(values.first?.decimalString, "42.50")
-    }
-
-    @MainActor
-    func testOpeningV4LibraryMigratesLabelsAndSupportsLabelValues() throws {
-        let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let libraryURL = try DocumentLibraryService.createLibrary(
-            at: tempRoot.appendingPathComponent("V4 Library")
-        )
-
-        defer {
-            try? FileManager.default.removeItem(at: tempRoot)
-        }
-
-        let configuration = ModelConfiguration(
-            "DocNestLibrary",
-            url: DocumentLibraryService.metadataStoreURL(for: libraryURL),
-            cloudKitDatabase: .none
-        )
-        let v4Schema = Schema(versionedSchema: DocNestSchemaV4.self)
-        do {
-            let v4Container = try ModelContainer(for: v4Schema, configurations: configuration)
-            let context = v4Container.mainContext
-            let label = DocNestSchemaV4.LabelTag(name: "Invoice", colorName: LabelColor.green.rawValue)
-            let document = DocNestSchemaV4.DocumentRecord(
-                originalFileName: "invoice.pdf",
-                title: "Invoice",
-                importedAt: .now,
-                pageCount: 1,
-                labels: [label]
-            )
-            context.insert(label)
-            context.insert(document)
-            try context.save()
-        }
-
-        let migratedContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
-        let context = migratedContainer.mainContext
-        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
-        let labels = try context.fetch(FetchDescriptor<LabelTag>())
-
-        XCTAssertEqual(documents.count, 1)
-        XCTAssertEqual(labels.count, 1)
-        XCTAssertEqual(documents.first?.labels.first?.name, "Invoice")
-        XCTAssertEqual(documents.first?.availability, .unknown)
-        XCTAssertNil(labels.first?.unitSymbol)
-
-        guard let document = documents.first, let label = labels.first else {
-            XCTFail("Expected migrated document and label.")
-            return
-        }
-
-        label.unitSymbol = "€"
-        try ManageLabelValuesUseCase.setValue("15.50", for: document, label: label, using: context, locale: Locale(identifier: "en_US_POSIX"))
-
-        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
-        XCTAssertEqual(values.count, 1)
-        XCTAssertEqual(values.first?.decimalString, "15.5")
-    }
-
-    @MainActor
-    func testOpeningReleasedV4LibraryFixtureMigratesLabelsAndSupportsLabelValues() throws {
-        let testFileURL = URL(fileURLWithPath: #filePath)
-        let fixtureURL = testFileURL
-            .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/ReleasedV4Library.docnestlibrary", isDirectory: true)
-        let tempRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let libraryURL = tempRoot.appendingPathComponent("ReleasedV4Library.docnestlibrary", isDirectory: true)
-
-        defer {
-            try? FileManager.default.removeItem(at: tempRoot)
-        }
-
-        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
-        try FileManager.default.copyItem(at: fixtureURL, to: libraryURL)
-
-        let migratedContainer = try DocumentLibraryService.openModelContainer(for: libraryURL)
-        let context = migratedContainer.mainContext
-        let documents = try context.fetch(FetchDescriptor<DocumentRecord>())
-        let labels = try context.fetch(FetchDescriptor<LabelTag>())
-
-        XCTAssertEqual(documents.count, 1)
-        XCTAssertEqual(labels.count, 1)
-        XCTAssertEqual(documents.first?.labels.first?.name, "Invoice")
-        XCTAssertEqual(documents.first?.availability, .unknown)
-        XCTAssertNil(labels.first?.unitSymbol)
-
-        guard let document = documents.first, let label = labels.first else {
-            XCTFail("Expected migrated fixture document and label.")
-            return
-        }
-
-        label.unitSymbol = "€"
-        try ManageLabelValuesUseCase.setValue("15.50", for: document, label: label, using: context, locale: Locale(identifier: "en_US_POSIX"))
-
-        let values = try context.fetch(FetchDescriptor<DocumentLabelValue>())
-        XCTAssertEqual(values.count, 1)
-        XCTAssertEqual(values.first?.documentID, document.id)
-        XCTAssertEqual(values.first?.labelID, label.id)
-        XCTAssertEqual(values.first?.decimalString, "15.5")
     }
 
     @MainActor

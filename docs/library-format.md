@@ -30,7 +30,7 @@ The package contains these required directories:
 - `library.json`, the package manifest
 - `.lock`, the cooperative single-instance lock file for an open library
 
-The manifest currently records the library format version and creation date. Format version 2 adds managed physical-location photos.
+The manifest currently records the library format version and creation date. Format version 3 uses the current SwiftData model without historical schema migration.
 
 ## Originals
 
@@ -67,9 +67,9 @@ is reported as an integrity issue rather than silently treated as deleted.
 The package format and the SwiftData schema version are related but distinct:
 
 - the manifest contains a package `formatVersion`
-- SwiftData persistence uses versioned schemas and a migration plan
+- SwiftData persistence uses the current model schema without a migration plan
 
-`DocumentLibraryService` validates the manifest version and can migrate or repair the package structure as needed. Older supported package formats are migrated forward. Newer unsupported package formats are rejected before repair, lock acquisition, integrity-report generation, or SwiftData metadata access so an older app does not write into an unknown library layout. `DocNestSchemaVersioning` handles the database schema side.
+The app supports only the current library format (3). Older and newer formats are rejected before repair, locking, or metadata access. Historical schemas and migration paths are not retained.
 
 The SwiftData schema also stores document-label value rows for labels that define a unit. These rows are supplemental metadata keyed by stable document and label UUIDs. The many-to-many label assignment remains the source of truth for whether a label is assigned; value rows can be pruned when their document or label no longer exists.
 
@@ -96,4 +96,4 @@ These expectations should remain true:
 - a valid library can be opened independently of other libraries
 - the package remains understandable from the filesystem alone
 
-Any future change to package layout or manifest structure should update this document and the repair/migration code together.
+The app supports only the current library format (3). Older and newer formats are rejected before repair, locking, or metadata access. Historical schemas and migration paths are not retained.

@@ -510,7 +510,7 @@ struct LibrarySidebarView: View {
             .buttonStyle(.plain)
             .sidebarRow()
             .dropDestination(for: String.self) { items, _ in
-                handleLabelDropOntoGroup(items, group: group)
+                _ = handleLabelDropOntoGroup(items, group: group)
             }
             .contextMenu {
                 Button("Rename Group") {

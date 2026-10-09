@@ -1,5 +1,7 @@
 # Testing
 
+DocNest requires macOS 27 or later on Apple silicon and Xcode 27 or later. CI and release builds use the GitHub `xcode-27` runner image.
+
 ## Test Targets
 
 The repository currently includes:
@@ -61,6 +63,10 @@ Build a highly optimized local Release app:
 make release-build
 ```
 
+## Vision OCR Integration
+
+The image-only PDF recognition test is opt-in because it needs the OS Vision recognition models. Run `DOCNEST_TEST_VISION_OCR=1 make test` on a host with working text recognition resources.
+
 ## What `DocNestTests` Covers
 
 The unit and integration test target covers:
@@ -85,7 +91,7 @@ Use `DocNestTests` when the behavior can be tested without full UI automation, e
 - storage rules
 - search semantics
 - import pipeline behavior
-- migration and validation helpers
+- validation helpers
 
 ## Optional UI/UX Tests
 

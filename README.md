@@ -35,7 +35,7 @@ The product is intentionally macOS-native. It uses native windows, native file d
 
 ## Build Requirements
 
-- macOS
+- macOS 27 or later (Apple silicon)
 - Xcode
 - `xcodebuild`
 

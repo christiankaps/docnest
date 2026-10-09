@@ -63,7 +63,7 @@ Representative files:
 - document storage layout inside the package
 - watch-folder monitoring
 - preview support and OCR/text extraction
-- SwiftData schema versioning and migration
+- SwiftData current SwiftData metadata schema
 
 ### Shared
 

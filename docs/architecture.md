@@ -1,5 +1,7 @@
 # DocNest Architecture
 
+DocNest requires macOS 27 or later on Apple silicon and Xcode 27 or later. CI and release builds use the GitHub `xcode-27` runner image.
+
 ## Architectural Summary
 
 DocNest is a native macOS SwiftUI application with a pragmatic layered structure:
@@ -18,7 +20,7 @@ DocNest targets native macOS desktop usage. The product and architecture assume:
 
 - Swift and SwiftUI as the primary application and UI stack
 - AppKit where macOS-specific integration is required, such as windows, panels, pasteboard, Services, menus, drag sessions, and Finder-oriented behavior
-- SwiftData for library-local metadata persistence and schema migration
+- SwiftData for library-local metadata persistence
 - PDFKit and Quick Look-style infrastructure for PDF preview and document inspection
 - Vision OCR for scanned or image-based PDF text extraction
 - local filesystem access as a core product capability, with `.docnestlibrary` packages acting as user-controlled library containers
@@ -55,14 +57,13 @@ The `Features` layer contains UI organized by product area. `Documents` owns lis
 
 ### Infrastructure
 
-The `Infrastructure` layer contains concrete services for package access, storage layout, library validation and repair, watch-folder monitoring, OCR extraction, preview support, and schema versioning.
+The `Infrastructure` layer contains concrete services for package access, storage layout, library validation and repair, watch-folder monitoring, OCR extraction, preview support, and metadata persistence.
 
 Important files:
 
 - [DocumentLibraryService.swift](DocNest/Infrastructure/Library/DocumentLibraryService.swift)
 - [DocumentStorageService.swift](DocNest/Infrastructure/Library/DocumentStorageService.swift)
 - [FolderMonitorService.swift](DocNest/Infrastructure/Library/FolderMonitorService.swift)
-- [DocNestSchemaVersioning.swift](DocNest/Infrastructure/Library/DocNestSchemaVersioning.swift)
 
 ### Shared
 
@@ -139,7 +140,6 @@ Infrastructure services are stateless or narrowly stateful helpers for filesyste
 - `DocumentLibraryService` owns library package creation, validation, repair, persistence of the selected library reference, lock management, and integrity reporting.
 - `DocumentStorageService` owns where imported PDFs live inside `Originals/`.
 - `ImportPDFDocumentsUseCase` owns import metadata extraction and database record creation.
-- `DocNestSchemaVersioning` owns SwiftData schema version history and migration plan.
 
 ## Design Principles
 

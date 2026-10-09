@@ -288,34 +288,22 @@ enum OCRTextExtractionService {
             return nil
         }
 
-        return await withCheckedContinuation { continuation in
-            let request = VNRecognizeTextRequest { request, error in
-                if let error {
-                    logger.error("OCR failed on page \(pageIndex): \(error.localizedDescription)")
-                    continuation.resume(returning: nil)
-                    return
-                }
-
-                guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-
-                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
-                let text = lines.joined(separator: "\n")
-                continuation.resume(returning: text.isEmpty ? nil : text)
-            }
-
+        do {
+            try Task.checkCancellation()
+            var request = RecognizeTextRequest()
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
 
-            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-            do {
-                try handler.perform([request])
-            } catch {
-                logger.error("Vision request handler failed on page \(pageIndex): \(error.localizedDescription)")
-                continuation.resume(returning: nil)
-            }
+            let observations = try await request.perform(on: cgImage)
+            try Task.checkCancellation()
+            let text = observations.compactMap { $0.topCandidates(1).first?.string }
+                .joined(separator: "\n")
+            return text.isEmpty ? nil : text
+        } catch is CancellationError {
+            return nil
+        } catch {
+            logger.error("Vision OCR failed on page \(pageIndex): \(error.localizedDescription)")
+            return nil
         }
     }
 

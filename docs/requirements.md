@@ -108,8 +108,7 @@ A reusable library-level place that identifies where a physical document origina
 - Library is treated as a macOS package (UTExportedTypeDeclarations with com.apple.package conformance), appearing as a single file in Finder and app file dialogs.
 - The .docnestlibrary package uses a dedicated file icon in Finder and in macOS open/save panels.
 - App provides a "Show in Finder" action for libraries and individual documents.
-- The library manifest includes a format version number. When opening a library created by an older app version, the app detects the version mismatch and runs any necessary migration steps before loading the library. After migration, the manifest is updated to the current version. Libraries whose manifest format is newer than the app supports are rejected before migration, repair, locking, or metadata access.
-- The SwiftData schema uses `VersionedSchema` and `SchemaMigrationPlan` to manage database evolution across app versions. Each schema version is captured as a full model snapshot. The `ModelContainer` is opened with the migration plan so that older databases are migrated forward automatically. Lightweight migrations (new columns with defaults) use `MigrationStage.lightweight`; breaking changes use `MigrationStage.custom`.
+The app supports only the current library format (3). Older and newer formats are rejected before repair, locking, or metadata access. Historical schemas and migration paths are not retained.
 - Release builds bake the marketing version and build number into the app bundle, and the app surfaces that information in About/App Info UI.
 
 ### 6.2 Document Import
@@ -173,7 +172,7 @@ A reusable library-level place that identifies where a physical document origina
 - The left sidebar is not toggleable in open-library mode.
 - File list uses clear row separation with alternating row colors (even/odd) for readability at scale.
 - Metadata detail view.
-- Every document has an availability state: Unknown, Digital Only, or Physical. Unknown is a normal state and the default for migrated and newly imported documents until the user classifies them.
+- Every document has an availability state: Unknown, Digital Only, or Physical. Unknown is a normal state and the default for newly imported documents until the user classifies them.
 - Physical documents can reference one reusable physical location. Digital Only and Unknown documents do not keep a physical location reference.
 - PDF preview for selected document.
 - Finder integration: open original file, show in Finder, export.
@@ -272,7 +271,7 @@ A reusable library-level place that identifies where a physical document origina
 
 #### v1 Assumption
 - For PDFs with extractable text, embedded text is indexed.
-- For scanned or image-based PDFs, Vision framework OCR extracts text using VNRecognizeTextRequest with accurate recognition level. Pages with embedded text use the fast PDFKit path; pages without embedded text are rendered at 300 DPI and processed through OCR. Pages are processed sequentially to manage memory, and rendering is skipped when it would exceed the 40-million-pixel safety limit.
+- For scanned or image-based PDFs, Vision framework OCR extracts text using the async Swift Vision `RecognizeTextRequest` API with accurate recognition level. Pages with embedded text use the fast PDFKit path; pages without embedded text are rendered at 300 DPI and processed through OCR. Pages are processed sequentially to manage memory, and rendering is skipped when it would exceed the 40-million-pixel safety limit.
 - Import stores new documents immediately after copy and cheap metadata extraction. OCR/text extraction is marked pending for new documents and runs in the background after import completes.
 - Background OCR also runs on app launch for documents not yet processed.
 - A toolbar progress indicator shows OCR backfill progress (document count and cancel button) next to the search bar.
@@ -299,7 +298,7 @@ The Document Date represents the semantic content date of a document (e.g. the i
 **Attribute and Data Model**
 - Every document has an optional `documentDate: Date?` field stored in the metadata database.
 - The field is separate from `importedAt` (set at import time, immutable) and from the file system creation date.
-- The data model field is named `documentDate` and was renamed from `sourceCreatedAt` in schema V4; the SwiftData migration is lightweight using `@Attribute(.originalName("sourceCreatedAt"))`.
+- The document date field is named `documentDate`.
 
 **Date Extraction**
 - During import, the file system creation date is captured as the initial fallback `documentDate` when available.
@@ -377,7 +376,7 @@ The Document Date represents the semantic content date of a document (e.g. the i
 ## 7. Non-Functional Requirements
 
 ### 7.1 Platform
-- Native macOS app in Xcode.
+- Native macOS app in Xcode 27 or later, requiring macOS 27 or later on Apple silicon. Earlier macOS versions are unsupported.
 - Recommended stack for first version: Swift, SwiftUI, PDFKit, Core Data or SwiftData, Spotlight or custom search index depending on feasibility.
 - Project must remain reproducible and traceable in versioned Xcode project definition in repository.
 
@@ -431,7 +430,7 @@ For the first version, a filesystem-friendly structure is preferred that is tech
 ### 8.1 Recommended Form
 - One library as package, for example My Documents.docnestlibrary.
 - Inside the package: clear directories instead of binary monoliths.
-- The library manifest (library.json) carries a `formatVersion` integer. New libraries are stamped with the current version. On open, the app compares the manifest version against its own current version, rejects newer unsupported formats without touching the package, and applies sequential migrations to older supported formats when needed.
+The app supports only the current library format (3). Older and newer formats are rejected before repair, locking, or metadata access. Historical schemas and migration paths are not retained.
 
 ### 8.2 Example Structure
 
@@ -466,7 +465,7 @@ My Documents.docnestlibrary/
 - storedFilePath
 - contentHash
 - title
-- documentDate (optional; semantic content date extracted from OCR text or falling back to file creation date; user-editable; stored as `documentDate`, formerly `sourceCreatedAt`)
+- documentDate (optional; semantic content date extracted from OCR text or falling back to file creation date; user-editable; stored as `documentDate`)
 - importedAt
 - pageCount
 - fileSize
@@ -584,8 +583,7 @@ Goal: app can create and open libraries cleanly.
 
 Current state:
 - Library manifest includes a `formatVersion` field. New libraries are created with the current format version.
-- On open, the app validates the library structure and decodes the manifest. If the manifest version is newer than the app's current version, the open is rejected before repair, lock acquisition, metadata access, or migration. If the manifest version is older than the app's current version, sequential migration steps are applied and the manifest is rewritten.
-- SwiftData schema versioning is implemented via `DocNestSchemaV1` through `DocNestSchemaV6` and `DocNestMigrationPlan` in `DocNestSchemaVersioning.swift`. The `ModelContainer` is opened with the migration plan. The current chain uses lightweight stages for V1→V2 (`ocrCompleted`), V2→V3 (`WatchFolder`), V3→V4 (`documentDate` rename from `sourceCreatedAt`), V4→V5 (label units and document-label values), and V5→V6 (document availability and reusable physical locations).
+The app supports only the current library format (3). Older and newer formats are rejected before repair, locking, or metadata access. Historical schemas and migration paths are not retained.
 
 ### Phase 2: Import Pipeline
 Goal: PDFs are imported robustly into library.

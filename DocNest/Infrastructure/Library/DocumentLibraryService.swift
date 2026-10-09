@@ -17,20 +17,6 @@ struct DocumentLibraryManifest: Codable {
     let createdAt: Date
 }
 
-struct LibraryMigrationResult: Codable {
-    let wasMigrated: Bool
-    let fromFormatVersion: Int
-    let toFormatVersion: Int
-
-    static func none(currentVersion: Int) -> LibraryMigrationResult {
-        LibraryMigrationResult(
-            wasMigrated: false,
-            fromFormatVersion: currentVersion,
-            toFormatVersion: currentVersion
-        )
-    }
-}
-
 struct LibraryRepairAction: Codable, Identifiable {
     enum Kind: String, Codable {
         case createdDirectory
@@ -84,7 +70,6 @@ struct LibraryIntegrityReport: Codable {
     let libraryPath: String
     let manifestFormatVersion: Int
     let schemaVersion: String
-    let migration: LibraryMigrationResult
     let repair: LibraryRepairResult
     let documentCount: Int
     let issues: [LibraryIntegrityIssue]
@@ -116,7 +101,7 @@ struct LibraryLockFile: Codable {
 /// library reference, lock-file handling, and integrity-report generation.
 enum DocumentLibraryService {
     static let packageExtension = "docnestlibrary"
-    static let currentFormatVersion = 2
+    static let currentFormatVersion = 3
 
     struct LibraryAccessSession {
         let url: URL
@@ -277,7 +262,7 @@ enum DocumentLibraryService {
             throw CocoaError(.fileNoSuchFile)
         }
 
-        try rejectUnsupportedFutureFormatFromExistingManifest(for: libraryURL)
+        try rejectUnsupportedFormatFromExistingManifest(for: libraryURL)
 
         for directory in requiredDirectories {
             let directoryURL = libraryURL.appendingPathComponent(directory, isDirectory: true)
@@ -309,30 +294,6 @@ enum DocumentLibraryService {
         return LibraryRepairResult(performedRepair: !actions.isEmpty, actions: actions)
     }
 
-    static func migrateLibraryIfNeeded(at libraryURL: URL, manifest: DocumentLibraryManifest) throws -> LibraryMigrationResult {
-        try rejectUnsupportedFutureFormat(manifest)
-
-        guard manifest.formatVersion < currentFormatVersion else {
-            return .none(currentVersion: manifest.formatVersion)
-        }
-
-        // Future migrations go here, applied in order:
-        // if manifest.formatVersion < 2 { ... }
-
-        let updatedManifest = DocumentLibraryManifest(
-            formatVersion: currentFormatVersion,
-            createdAt: manifest.createdAt
-        )
-        let data = try JSONEncoder.prettyPrinted.encode(updatedManifest)
-        try data.write(to: manifestURL(for: libraryURL), options: .atomic)
-
-        return LibraryMigrationResult(
-            wasMigrated: true,
-            fromFormatVersion: manifest.formatVersion,
-            toFormatVersion: currentFormatVersion
-        )
-    }
-
     static func validateLibrary(at url: URL) throws -> (URL, DocumentLibraryManifest) {
         let libraryURL = url.standardizedFileURL
         var isDirectory: ObjCBool = false
@@ -341,7 +302,7 @@ enum DocumentLibraryService {
             throw CocoaError(.fileNoSuchFile)
         }
 
-        try rejectUnsupportedFutureFormatFromExistingManifest(for: libraryURL)
+        try rejectUnsupportedFormatFromExistingManifest(for: libraryURL)
 
         for directory in requiredDirectories {
             let directoryURL = libraryURL.appendingPathComponent(directory, isDirectory: true)
@@ -352,7 +313,7 @@ enum DocumentLibraryService {
 
         let manifestData = try Data(contentsOf: manifestURL(for: libraryURL))
         let manifest = try JSONDecoder.libraryManifest.decode(DocumentLibraryManifest.self, from: manifestData)
-        try rejectUnsupportedFutureFormat(manifest)
+        try rejectUnsupportedFormat(manifest)
 
         return (libraryURL, manifest)
     }
@@ -407,11 +368,10 @@ enum DocumentLibraryService {
             cloudKitDatabase: .none
         )
 
-        let schema = Schema(versionedSchema: DocNestSchemaV6.self)
+        let schema = Schema([DocumentRecord.self, LabelTag.self, SmartFolder.self, LabelGroup.self, WatchFolder.self, DocumentLabelValue.self, DocumentLocation.self])
 
         return try ModelContainer(
             for: schema,
-            migrationPlan: DocNestMigrationPlan.self,
             configurations: configuration
         )
     }
@@ -419,7 +379,6 @@ enum DocumentLibraryService {
     static func refreshIntegrityArtifacts(
         for libraryURL: URL,
         manifest: DocumentLibraryManifest,
-        migration: LibraryMigrationResult,
         packageRepair: LibraryRepairResult
     ) async throws -> LibraryIntegrityReport {
         try await Task.detached(priority: .utility) {
@@ -436,7 +395,6 @@ enum DocumentLibraryService {
             return try writeIntegrityReport(
                 for: libraryURL,
                 manifest: manifest,
-                migration: migration,
                 repair: repair,
                 modelContext: modelContext
             )
@@ -446,7 +404,6 @@ enum DocumentLibraryService {
     static func writeIntegrityReport(
         for libraryURL: URL,
         manifest: DocumentLibraryManifest,
-        migration: LibraryMigrationResult,
         repair: LibraryRepairResult,
         modelContext: ModelContext
     ) throws -> LibraryIntegrityReport {
@@ -460,8 +417,7 @@ enum DocumentLibraryService {
             generatedAt: .now,
             libraryPath: libraryURL.path,
             manifestFormatVersion: manifest.formatVersion,
-            schemaVersion: "6.0.0",
-            migration: migration,
+            schemaVersion: "current",
             repair: repair,
             documentCount: documentCount,
             issues: issues
@@ -742,7 +698,7 @@ enum DocumentLibraryService {
         try manifestData.write(to: manifestURL(for: libraryURL), options: .atomic)
     }
 
-    private static func rejectUnsupportedFutureFormatFromExistingManifest(for libraryURL: URL) throws {
+    private static func rejectUnsupportedFormatFromExistingManifest(for libraryURL: URL) throws {
         let url = manifestURL(for: libraryURL)
         guard FileManager.default.fileExists(atPath: url.path),
               let data = try? Data(contentsOf: url),
@@ -750,10 +706,13 @@ enum DocumentLibraryService {
             return
         }
 
-        try rejectUnsupportedFutureFormat(manifest)
+        try rejectUnsupportedFormat(manifest)
     }
 
-    private static func rejectUnsupportedFutureFormat(_ manifest: DocumentLibraryManifest) throws {
+    private static func rejectUnsupportedFormat(_ manifest: DocumentLibraryManifest) throws {
+        guard manifest.formatVersion >= currentFormatVersion else {
+            throw ValidationError.unsupportedOlderFormat(found: manifest.formatVersion, supported: currentFormatVersion)
+        }
         guard manifest.formatVersion <= currentFormatVersion else {
             throw ValidationError.unsupportedFutureFormat(
                 found: manifest.formatVersion,
@@ -848,13 +807,16 @@ enum DocumentLibraryService {
     enum ValidationError: LocalizedError {
         case missingDirectory(String)
         case unsupportedFutureFormat(found: Int, supported: Int)
+        case unsupportedOlderFormat(found: Int, supported: Int)
 
         var errorDescription: String? {
             switch self {
             case .missingDirectory(let directory):
                 return "The selected library is missing the required \(directory) directory."
+            case .unsupportedOlderFormat(let found, let supported):
+                return "This library uses an older format (\(found)). Create a new library with format \(supported); migration is not supported."
             case .unsupportedFutureFormat(let found, let supported):
-                return "This library was created by a newer version of DocNest (library format \(found)). This version supports library formats up to \(supported)."
+                return "This library was created by a newer version of DocNest (library format \(found)). This version supports library format \(supported)."
             }
         }
     }

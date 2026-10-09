@@ -89,6 +89,7 @@ struct RootView: View {
     @State private var coordinator = LibraryCoordinator()
     @State private var thumbnailCache = ThumbnailCache()
     @State private var quickLook = QuickLookCoordinator()
+    @FocusState private var isSearchFocused: Bool
 
     @Environment(\.modelContext) private var modelContext
 
@@ -143,6 +144,10 @@ struct RootView: View {
             placement: .toolbar,
             prompt: "Search title, file name, or labels"
         )
+        .searchFocused($isSearchFocused)
+        .onReceive(NotificationCenter.default.publisher(for: .docNestFocusSearch)) { _ in
+            isSearchFocused = true
+        }
         .environment(coordinator)
         .environment(thumbnailCache)
         .environment(quickLook)
@@ -607,9 +612,6 @@ private struct ChangeHandlersNotifications: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onReceive(NotificationCenter.default.publisher(for: .docNestFocusSearch)) { _ in
-                SearchToolbarFocus.focusSearchField()
-            }
             .onReceive(NotificationCenter.default.publisher(for: .docNestLabelManager)) { _ in
                 AppSettingsController.shared.show(.labels)
             }
@@ -832,12 +834,8 @@ private struct FileImportDropDelegate: DropDelegate {
 
     private func loadFileURL(from provider: NSItemProvider) async -> URL? {
         await withCheckedContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
-                if let data = data as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
-                    continuation.resume(returning: url)
-                } else {
-                    continuation.resume(returning: nil)
-                }
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                continuation.resume(returning: url?.isFileURL == true ? url : nil)
             }
         }
     }

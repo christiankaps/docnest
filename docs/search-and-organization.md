@@ -48,7 +48,7 @@ Locations describe where a physical original can be found. Each document is clas
 
 Location rules:
 
-- Unknown is a normal state and the default for migrated and newly imported documents
+- Unknown is a normal state and the default for newly imported documents
 - Digital Only and Unknown documents do not keep a physical location reference
 - deleting a location marks its assigned documents Unknown rather than deleting them
 - each location can have one optional cover photo copied into the library package

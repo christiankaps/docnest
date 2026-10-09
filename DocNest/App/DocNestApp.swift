@@ -660,7 +660,6 @@ final class LibrarySessionController: ObservableObject {
         do {
             let packageRepair = try DocumentLibraryService.repairLibraryPackageIfNeeded(at: accessSession.url)
             let (validatedURL, manifest) = try DocumentLibraryService.validateLibrary(at: accessSession.url)
-            let migration = try DocumentLibraryService.migrateLibraryIfNeeded(at: validatedURL, manifest: manifest)
             try DocumentLibraryService.acquireLock(for: validatedURL)
             acquiredLockURL = validatedURL
             try openLibrary(
@@ -668,11 +667,7 @@ final class LibrarySessionController: ObservableObject {
                     url: validatedURL,
                     startedAccessingSecurityScope: accessSession.startedAccessingSecurityScope
                 ),
-                manifest: DocumentLibraryManifest(
-                    formatVersion: migration.toFormatVersion,
-                    createdAt: manifest.createdAt
-                ),
-                migration: migration,
+                manifest: manifest,
                 packageRepair: packageRepair
             )
         } catch {
@@ -689,7 +684,6 @@ final class LibrarySessionController: ObservableObject {
     private func openLibrary(
         _ accessSession: DocumentLibraryService.LibraryAccessSession,
         manifest: DocumentLibraryManifest,
-        migration: LibraryMigrationResult,
         packageRepair: LibraryRepairResult
     ) throws {
         let container = try DocumentLibraryService.openModelContainer(for: accessSession.url)
@@ -706,12 +700,11 @@ final class LibrarySessionController: ObservableObject {
         observeAppTermination(for: accessSession.url)
         integrityRefreshTask?.cancel()
         if !Self.isRunningUnderTests {
-            integrityRefreshTask = Task { [libraryURL = accessSession.url, manifest, migration, packageRepair] in
+            integrityRefreshTask = Task { [libraryURL = accessSession.url, manifest, packageRepair] in
                 do {
                     _ = try await DocumentLibraryService.refreshIntegrityArtifacts(
                         for: libraryURL,
                         manifest: manifest,
-                        migration: migration,
                         packageRepair: packageRepair
                     )
                 } catch is CancellationError {

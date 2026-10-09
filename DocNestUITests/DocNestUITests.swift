@@ -267,7 +267,7 @@ final class DocNestUITests: XCTestCase {
         let manifest = """
         {
           "createdAt" : "2026-03-10T12:00:00Z",
-          "formatVersion" : 2
+          "formatVersion" : 3
         }
         """
 

@@ -14,12 +14,16 @@ Out of scope unless explicitly approved: cloud-first storage, non-PDF document m
 
 **Maturity:** PRODUCTION.
 
-The app has released versions and must protect existing users, local libraries, documented workflows, and public behavior. A change is accepted when it satisfies applicable requirements, preserves documented compatibility or explicitly records the approved break, has proportionate tests and documentation, passes a clean review, and passes the stable verification gate for code changes.
+The app has released versions and must protect existing users, local libraries, documented workflows, and public behavior. A change is accepted when it satisfies applicable requirements, follows the current platform and library compatibility policy, has proportionate tests and documentation, passes a clean review, and passes the stable verification gate for code changes.
+
+## Platform policy
+
+Minimum supported OS: macOS 27 on Apple silicon. Build with Xcode 27 or later and the macOS 27 SDK or later. Earlier OS compatibility is not required; compatibility with earlier document libraries is not required. Historical schemas and migrations are removed.
 
 ## Invariants
 
 - User libraries and source PDFs remain local and user-controlled.
-- The `.docnestlibrary` package layout, metadata, originals, previews, and diagnostics remain compatible with [docs/library-format.md](docs/library-format.md).
+- The current `.docnestlibrary` package layout is defined in [docs/library-format.md](docs/library-format.md).
 - Every import path uses the documented core pipeline, including duplicate handling and self-import protection.
 - Labels and smart folders organize views; they do not impose filesystem folder hierarchies on originals.
 - Native macOS interactions and current user workflows are preserved unless a deliberate behavior change is documented.
