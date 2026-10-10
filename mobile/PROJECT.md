@@ -14,6 +14,7 @@
 
 - Problem and intended outcome: Easily retrieve a needed document on a phone and store received PDFs for later retrieval.
 - Target users: Individuals organizing personal paperwork. The initial version focuses on personal document management.
+- Experience: Modern, intuitive, and native to iOS. Use familiar platform navigation, controls, gestures, and system interactions; keep common document tasks easy to discover and complete.
 - Primary use cases:
   - Open the app and quickly find a stored document.
   - Send a PDF received by email (for example, an invoice) directly to the app for storage.
@@ -58,6 +59,7 @@
 ## Document actions and recovery
 
 - Initial document actions: Rename documents, share/export the original PDF, and delete documents.
+- Sharing priority: Sharing documents is a primary workflow, alongside finding and importing them. Provide an easily discoverable Share action using the native iOS share sheet to send the original PDF to other apps or people.
 - Library export: Support exporting the entire library, including PDFs and labels, for backup and moving data. Export format is TBD.
 - Library restore: Restore library exports, preserving document names and labels, including on a new iPhone using local-only storage. Merge into an existing library, skip identical PDFs, and retain existing documents. For duplicate PDFs, combine existing and backed-up labels while keeping the current document name.
 - Deletion: Keep deleted documents in Recently Deleted for 30 days before permanent removal, with recovery available during that period.
