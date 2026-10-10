@@ -139,6 +139,7 @@ struct RootView: View {
                 }
         }
         .background(AppTheme.windowBackground)
+        .navigationTitle(libraryURL.deletingPathExtension().lastPathComponent)
         .searchable(
             text: Bindable(coordinator).searchText,
             placement: .toolbar,
@@ -286,6 +287,7 @@ struct RootView: View {
                 QuickLabelPickerView(
                     isPresented: Bindable(coordinator).isQuickLabelPickerPresented
                 )
+                .environment(coordinator)
             }
         }
 
@@ -606,6 +608,7 @@ private struct LabelValueChangeToken: Equatable {
 }
 
 private struct ChangeHandlersNotifications: ViewModifier {
+    @Environment(\.openSettings) private var openSettings
     let librarySession: LibrarySessionController
     let coordinator: LibraryCoordinator
     let thumbnailCache: ThumbnailCache
@@ -613,10 +616,12 @@ private struct ChangeHandlersNotifications: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onReceive(NotificationCenter.default.publisher(for: .docNestLabelManager)) { _ in
-                AppSettingsController.shared.show(.labels)
+                AppSettingsController.shared.selectPane(.labels)
+                openSettings()
             }
             .onReceive(NotificationCenter.default.publisher(for: .docNestWatchFolderSettings)) { _ in
-                AppSettingsController.shared.show(.watchFolders)
+                AppSettingsController.shared.selectPane(.watchFolders)
+                openSettings()
             }
             .onDisappear {
                 coordinator.tearDown()

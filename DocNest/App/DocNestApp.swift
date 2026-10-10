@@ -113,10 +113,6 @@ struct DocNestApp: App {
     var body: some Scene {
         WindowGroup {
             AppRootView()
-                .frame(
-                    minWidth: AppSplitViewLayout.minimumWindowWidth,
-                    minHeight: AppSplitViewLayout.minimumWindowHeight
-                )
         }
         .defaultSize(
             width: AppSplitViewLayout.defaultWindowWidth,
@@ -135,8 +131,7 @@ struct DocNestApp: App {
             )
         }
 
-        // Native Settings scene. Opened programmatically through
-        // `AppSettingsController.show(_:)` so callers can preselect a pane.
+        // Native Settings scene; callers can preselect a pane before opening it.
         Settings {
             AppSettingsRootView()
         }
@@ -154,6 +149,17 @@ struct DocNestMenuCommands: Commands {
     let toggleInspectorAction: (() -> Void)?
     let quickLabelAction: (() -> Void)?
     let isInspectorCollapsed: Bool?
+
+    private var textResponder: NSResponder? {
+        guard let responder = NSApp.keyWindow?.firstResponder,
+              responder is NSTextView || responder is NSTextField else { return nil }
+        return responder
+    }
+
+    private func performTextAction(_ action: Selector) -> Bool {
+        guard let responder = textResponder else { return false }
+        return NSApp.sendAction(action, to: responder, from: nil)
+    }
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
@@ -176,10 +182,7 @@ struct DocNestMenuCommands: Commands {
             .keyboardShortcut("?", modifiers: [.command, .shift])
         }
         CommandGroup(replacing: .appSettings) {
-            Button("Settings…") {
-                NSApplication.shared.activate(ignoringOtherApps: true)
-                AppSettingsController.shared.show()
-            }
+            SettingsLink { Text("Settings…") }
             .keyboardShortcut(",", modifiers: [.command])
         }
         CommandGroup(replacing: .newItem) {
@@ -205,11 +208,19 @@ struct DocNestMenuCommands: Commands {
             .disabled(librarySession?.selectedLibraryURL == nil)
         }
         CommandGroup(replacing: .pasteboard) {
+            Button("Cut") { NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil) }
+                .keyboardShortcut("x", modifiers: .command)
+                .disabled(NSApp.target(forAction: #selector(NSText.cut(_:))) == nil)
+            Button("Copy") { NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) }
+                .keyboardShortcut("c", modifiers: .command)
+                .disabled(NSApp.target(forAction: #selector(NSText.copy(_:))) == nil)
             Button("Paste") {
-                pasteDocumentsAction?()
+                if !performTextAction(#selector(NSText.paste(_:))) {
+                    pasteDocumentsAction?()
+                }
             }
             .keyboardShortcut("v", modifiers: [.command])
-            .disabled(pasteDocumentsAction == nil)
+            .disabled(pasteDocumentsAction == nil && textResponder == nil)
         }
         CommandGroup(replacing: .importExport) {
             Button("Export\u{2026}") {
@@ -223,6 +234,7 @@ struct DocNestMenuCommands: Commands {
                 NotificationCenter.default.post(name: .docNestFocusSearch, object: nil)
             }
             .keyboardShortcut("f", modifiers: [.command])
+            .disabled(librarySession?.selectedLibraryURL == nil)
 
             Button("Assign Labels") {
                 quickLabelAction?()
@@ -231,10 +243,12 @@ struct DocNestMenuCommands: Commands {
             .disabled(quickLabelAction == nil)
 
             Button("Select All") {
-                selectAllDocumentsAction?()
+                if !performTextAction(#selector(NSText.selectAll(_:))) {
+                    selectAllDocumentsAction?()
+                }
             }
             .keyboardShortcut("a", modifiers: [.command])
-            .disabled(selectAllDocumentsAction == nil)
+            .disabled(selectAllDocumentsAction == nil && textResponder == nil)
         }
         CommandGroup(replacing: .help) {
             Button("DocNest Help") {
@@ -243,7 +257,7 @@ struct DocNestMenuCommands: Commands {
             }
             .keyboardShortcut("?", modifiers: [.command, .shift])
         }
-        CommandMenu("View") {
+        CommandGroup(after: .sidebar) {
             Button(isInspectorCollapsed == true ? "Show Details" : "Hide Details") {
                 toggleInspectorAction?()
             }
@@ -310,10 +324,12 @@ private struct AppRootView: View {
                let modelContainer = librarySession.modelContainer {
                 RootView(libraryURL: libraryURL, librarySession: librarySession)
                     .modelContainer(modelContainer)
-                    .accessibilityIdentifier("library-open-root")
+                    .frame(minWidth: AppSplitViewLayout.minimumOpenLibraryWindowWidth,
+                           minHeight: AppSplitViewLayout.minimumWindowHeight)
             } else {
                 closedLibraryContent
-                    .accessibilityIdentifier("library-closed-root")
+                    .frame(minWidth: AppSplitViewLayout.minimumClosedLibraryWindowWidth,
+                           minHeight: AppSplitViewLayout.minimumClosedLibraryWindowHeight)
             }
         }
         .onAppear {
@@ -375,101 +391,66 @@ private struct AppRootView: View {
         }
     }
 
-    // MARK: - Closed-library three-panel layout (req 10.5)
+    // MARK: - Welcome
 
     @State private var isClosedLibraryDropTargeted = false
 
     private var closedLibraryContent: some View {
-        HStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    closedSidebarSection("Library") {
-                        Label("No library open", systemImage: "books.vertical")
-                            .font(AppTypography.body)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 7)
+        ZStack {
+            VStack(spacing: 24) {
+                Image(systemName: "books.vertical")
+                    .font(.system(size: 56, weight: .light))
+                    .foregroundStyle(.tint)
+                    .accessibilityHidden(true)
+
+                VStack(spacing: 8) {
+                    Text("Welcome to DocNest")
+                        .font(.largeTitle.weight(.semibold))
+                    Text("Your documents, organized and kept on your Mac.")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(spacing: 12) {
+                    Button(action: librarySession.createLibrary) {
+                        Label("Create Library…", systemImage: "plus")
+                            .frame(maxWidth: .infinity)
                     }
-                    closedSidebarSection("Labels") {
-                        Label("No labels", systemImage: "tag")
-                            .font(AppTypography.body)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 7)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("create-library")
+
+                    Button(action: librarySession.openLibrary) {
+                        Label("Open Library…", systemImage: "folder")
+                            .frame(maxWidth: .infinity)
                     }
+                    .accessibilityIdentifier("open-library")
                 }
+                .controlSize(.large)
+                .frame(width: 240)
+
+                Text("A library keeps your PDFs and labels together in one place.\nCreate one to get started, or open a library you already have.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(width: AppSplitViewLayout.sidebarWidth)
-            .fixedSize(horizontal: true, vertical: false)
-            .background {
-                ZStack {
-                    Rectangle()
-                        .fill(.bar)
-                    AppTheme.windowBackground.opacity(0.12)
-                }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 480)
+            .padding(40)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if isClosedLibraryDropTargeted {
+                DocumentImportDropOverlay(
+                    title: "Open a Library",
+                    message: "Drop a DocNest library to open it. Create or open a library before importing PDFs."
+                )
+                .padding(20)
+                .allowsHitTesting(false)
             }
-
-            Divider()
-
-            ZStack {
-                ContentUnavailableView {
-                    Label("No Library Open", systemImage: "books.vertical")
-                } description: {
-                    Text("Create a DocNest library or open an existing one before importing documents.")
-                } actions: {
-                    HStack(spacing: 12) {
-                        Button(action: librarySession.createLibrary) {
-                            Label("Create Library", systemImage: "plus")
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        Button(action: librarySession.openLibrary) {
-                            Label("Open Library", systemImage: "folder")
-                        }
-                    }
-                }
-
-                if isClosedLibraryDropTargeted {
-                    DocumentImportDropOverlay(
-                        title: "Open a Library First",
-                        message: "Create or open a DocNest library before dropping PDFs or folders into the app."
-                    )
-                    .padding(20)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .dropDestination(for: URL.self) { urls, _ in
-                handleDroppedURLsWithoutLibrary(urls)
-            } isTargeted: { isTargeted in
-                isClosedLibraryDropTargeted = isTargeted
-            }
-
-            Divider()
-
-            ContentUnavailableView(
-                "No Document Selected",
-                systemImage: "doc.text",
-                description: Text("Open a library and select a document to see its details.")
-            )
-            .frame(width: AppSplitViewLayout.inspectorWidth)
-            .background(AppTheme.panelBackground)
         }
         .background(AppTheme.windowBackground)
-        .padding([.top, .bottom, .trailing], AppSplitViewLayout.windowContentInset)
-    }
-
-    private func closedSidebarSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(AppTypography.sidebarSection)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 4)
-
-            content()
-        }
+        .dropDestination(for: URL.self) { urls, _ in
+            handleDroppedURLsWithoutLibrary(urls)
+        } isTargeted: { isClosedLibraryDropTargeted = $0 }
     }
 
     // MARK: - Helpers
@@ -488,6 +469,11 @@ private struct AppRootView: View {
     private func handleDroppedURLsWithoutLibrary(_ urls: [URL]) -> Bool {
         guard !urls.isEmpty else {
             return false
+        }
+
+        if let library = urls.first(where: { $0.pathExtension.caseInsensitiveCompare("docnestlibrary") == .orderedSame }) {
+            librarySession.openLibraryFromFinder(library)
+            return true
         }
 
         if ImportPDFDocumentsUseCase.containsImportableDocuments(in: urls) {

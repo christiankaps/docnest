@@ -40,7 +40,7 @@ struct DocumentListView: View {
     private let documentColumnCompactMinWidth = 132.0
     private let labelsColumnMinWidth = 110.0
     private let listColumnSpacing = 10.0
-    private let listHorizontalPadding = 28.0
+    private let listHorizontalPadding = Double(AppSpacing.browserHorizontalInset) * 2 + 16 + 10
     private let listPanelBackground = AppTheme.windowBackground
 
     @Environment(LibraryCoordinator.self) private var coordinator
@@ -241,10 +241,7 @@ struct DocumentListView: View {
         .background {
             GeometryReader { proxy in
                 Color.clear
-                    .onAppear {
-                        availableListWidth = proxy.size.width
-                    }
-                    .onChange(of: proxy.size.width) { _, newWidth in
+                    .onChange(of: proxy.size.width, initial: true) { _, newWidth in
                         availableListWidth = newWidth
                     }
             }
@@ -275,24 +272,56 @@ struct DocumentListView: View {
         }
     }
 
+    private var isSearching: Bool {
+        !coordinator.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var isFilteredEmptyState: Bool {
+        coordinator.sidebarSelection != .section(.allDocuments)
+            || !coordinator.labelFilterSelection.visualSelection.isEmpty
+    }
+
     private var emptyContent: some View {
         ContentUnavailableView {
-            Label("No Documents", systemImage: "doc.text")
-        } description: {
-            Text("Import PDFs, ZIP archives, or folders to populate the library and review them here.")
-        } actions: {
-            Button {
-                coordinator.isImporting = true
-            } label: {
-                Label("Import…", systemImage: "plus")
+            if isSearching {
+                Label("No Search Results", systemImage: "magnifyingglass")
+            } else if coordinator.isBinSelected {
+                Label("Bin Is Empty", systemImage: "trash")
+            } else if isFilteredEmptyState {
+                Label("No Matching Documents", systemImage: "line.3.horizontal.decrease")
+            } else {
+                Label("Add Your First Documents", systemImage: "doc.badge.plus")
             }
-            .buttonStyle(.borderedProminent)
+        } description: {
+            if isSearching {
+                Text("Try another search or clear it to see this view again.")
+            } else if coordinator.isBinSelected {
+                Text("Documents you move to the Bin appear here. You can restore them before deleting them permanently.")
+            } else if isFilteredEmptyState {
+                Text("This view has no documents yet. Choose All Documents to browse your library.")
+            } else {
+                Text("Import PDFs, ZIP archives, or folders. You can also drag them into this window.")
+            }
+        } actions: {
+            if isSearching {
+                Button("Clear Search") { coordinator.searchText = "" }
+            } else if isFilteredEmptyState {
+                Button("Show All Documents") {
+                    coordinator.sidebarSelection = .section(.allDocuments)
+                    coordinator.labelFilterSelection.replaceVisualSelection(with: [])
+                }
+            } else {
+                Button {
+                    coordinator.isImporting = true
+                } label: {
+                    Label("Import Documents…", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppTheme.windowBackground)
-        .contextMenu {
-            listColumnContextMenuItems
-        }
+        .contextMenu { listColumnContextMenuItems }
     }
 
     private var listHeader: some View {
@@ -361,6 +390,10 @@ struct DocumentListView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    // Reserve the same trailing drag-handle column as every row.
+                    Color.clear.frame(width: 16)
+                        .accessibilityHidden(true)
                 }
             } else {
                 HStack(spacing: 10) {
@@ -377,7 +410,7 @@ struct DocumentListView: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, AppSpacing.browserHorizontalInset)
         .padding(.vertical, 8)
         .background {
             Rectangle()
@@ -424,7 +457,7 @@ struct DocumentListView: View {
                                         .font(AppTypography.caption)
                                         .foregroundStyle(.tertiary)
                                 }
-                                .padding(.horizontal, 14)
+                                .padding(.horizontal, AppSpacing.browserHorizontalInset)
                                 .padding(.vertical, 6)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background {
@@ -459,7 +492,7 @@ struct DocumentListView: View {
                 handleRowTap(document: document, in: allDocs)
             }
         )
-            .padding(.horizontal, 12)
+            .padding(.horizontal, AppSpacing.browserHorizontalInset)
             .background(rowBackground(index: index, isSelected: isSelected))
             .overlay(alignment: .bottom) {
                 Rectangle()
@@ -542,7 +575,7 @@ struct DocumentListView: View {
 
         return ScrollViewReader { proxy in
             ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbnailSize), spacing: 16)], spacing: 16) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: thumbnailSize), spacing: 16, alignment: .top)], spacing: 16) {
                     ForEach(sortedDocs, id: \.persistentModelID) { document in
                         DocumentThumbnailCell(
                             document: document,
@@ -1396,6 +1429,7 @@ struct DocumentLabelStrip: View {
     let states: [DocumentLabelChipState]
     let isRowSelected: Bool
     let showsEmptyPlaceholder: Bool
+    let axis: Axis
     var onSelect: (() -> Void)?
     var onRemove: ((LabelTag) -> Void)?
     var onValueCommit: ((LabelTag, String) throws -> String?)?
@@ -1408,6 +1442,7 @@ struct DocumentLabelStrip: View {
         states: [DocumentLabelChipState],
         isRowSelected: Bool,
         showsEmptyPlaceholder: Bool = true,
+        axis: Axis = .horizontal,
         onSelect: (() -> Void)? = nil,
         onRemove: ((LabelTag) -> Void)? = nil,
         onValueCommit: ((LabelTag, String) throws -> String?)? = nil
@@ -1415,6 +1450,7 @@ struct DocumentLabelStrip: View {
         self.states = states
         self.isRowSelected = isRowSelected
         self.showsEmptyPlaceholder = showsEmptyPlaceholder
+        self.axis = axis
         self.onSelect = onSelect
         self.onRemove = onRemove
         self.onValueCommit = onValueCommit
@@ -1431,7 +1467,10 @@ struct DocumentLabelStrip: View {
                 EmptyView()
             }
         } else {
-            HStack(spacing: 6) {
+            let layout = axis == .horizontal
+                ? AnyLayout(HStackLayout(spacing: 6))
+                : AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            layout {
                 ForEach(visibleStates) { state in
                     RemovableLabelChip(
                         state: state,
@@ -1803,14 +1842,23 @@ struct DocumentThumbnailCell: View {
                 .contentShape(Rectangle())
                 .onTapGesture(perform: onSelect)
 
-            DocumentLabelStrip(
-                states: labelStates,
-                isRowSelected: isSelected,
-                showsEmptyPlaceholder: false,
-                onSelect: onSelect,
-                onValueCommit: onValueCommit
-            )
+            ViewThatFits(in: .horizontal) {
+                thumbnailLabelStrip(axis: .horizontal)
+                    .fixedSize(horizontal: true, vertical: false)
+                thumbnailLabelStrip(axis: .vertical)
+            }
         }
+    }
+
+    private func thumbnailLabelStrip(axis: Axis) -> some View {
+        DocumentLabelStrip(
+            states: labelStates,
+            isRowSelected: isSelected,
+            showsEmptyPlaceholder: false,
+            axis: axis,
+            onSelect: onSelect,
+            onValueCommit: onValueCommit
+        )
     }
 
     @ViewBuilder

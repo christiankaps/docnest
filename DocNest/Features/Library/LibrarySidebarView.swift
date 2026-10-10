@@ -222,10 +222,9 @@ struct LibrarySidebarView: View {
     private func labelSection<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 8) {
-                Label("Labels", systemImage: "tag")
+                Text("Labels")
                     .font(AppTypography.sidebarSection)
                     .foregroundStyle(.secondary)
-                    .labelStyle(.titleAndIcon)
 
                 Spacer()
 
@@ -239,6 +238,7 @@ struct LibrarySidebarView: View {
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
                     .help("Clear label filters")
+                .accessibilityLabel("Clear label filters")
                 }
 
                 Button {
@@ -251,6 +251,7 @@ struct LibrarySidebarView: View {
                 .fixedSize()
                 .foregroundStyle(.secondary)
                 .help("Add Label")
+                .accessibilityLabel("Add Label")
 
                 Button {
                     isShowingNewGroupAlert = true
@@ -262,6 +263,7 @@ struct LibrarySidebarView: View {
                 .fixedSize()
                 .foregroundStyle(.secondary)
                 .help("Add Label Group")
+                .accessibilityLabel("Add Label Group")
             }
             .padding(.horizontal, 6)
             .padding(.top, 10)
@@ -328,8 +330,6 @@ struct LibrarySidebarView: View {
 
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
-                Image(systemName: "archivebox")
-                    .font(.system(size: 11, weight: .semibold))
                 Text("Locations")
                     .font(AppTypography.sidebarSection)
 
@@ -344,6 +344,7 @@ struct LibrarySidebarView: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("Add Location")
+                .accessibilityLabel("Add Location")
                 .accessibilityIdentifier("location-add-button")
             }
             .foregroundStyle(.secondary)
@@ -621,8 +622,6 @@ struct LibrarySidebarView: View {
         }
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
-                Image(systemName: "folder.badge.gearshape")
-                    .font(.system(size: 11, weight: .semibold))
                 Text("Smart Folders")
                     .font(AppTypography.sidebarSection)
 
@@ -640,6 +639,7 @@ struct LibrarySidebarView: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("Add Smart Folder")
+                .accessibilityLabel("Add Smart Folder")
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, 6)

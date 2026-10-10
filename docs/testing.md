@@ -33,6 +33,8 @@ Run optional UI/UX tests:
 make test-ui
 ```
 
+UI tests build with the isolated `com.kaps.docnest.uitesting` app identity into `/tmp/docnest-ui-derived`, keeping preferences and launch resolution separate from installed DocNest builds. Do not reuse that build directory for another bundle identity. Run one UI suite at a time and avoid interacting with the desktop while it runs. Use `UI_TESTS=DocNestUITests/DocNestUITests/testName` for a focused test and `UI_DERIVED_DATA_DIR` for an alternate isolated build directory. Screenshots are retained as test-result attachments.
+
 Run the required suite plus optional UI/UX tests:
 
 ```sh

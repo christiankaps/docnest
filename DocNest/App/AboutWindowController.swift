@@ -131,17 +131,8 @@ final class AppSettingsController: ObservableObject {
 
     private init() {}
 
-    /// Selects the requested pane and opens the native SwiftUI `Settings` scene.
-    ///
-    /// The scene is declared in `DocNestApp` and surfaced through AppKit's
-    /// standard `showSettingsWindow:` action, which both creates the window on
-    /// first use and brings it forward on subsequent calls.
-    func show(_ pane: AppSettingsPane? = nil) {
-        if let pane {
-            selectedPane = pane
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    func selectPane(_ pane: AppSettingsPane) {
+        selectedPane = pane
     }
 
     func setActiveLibraryContext(coordinator: LibraryCoordinator, modelContainer: ModelContainer?) {

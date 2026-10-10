@@ -96,7 +96,10 @@ struct LabelManagerSheet: View {
     var body: some View {
         Group {
             if isEmbeddedInSettings {
-                contentPanels
+                VStack(spacing: 12) {
+                    contentPanels
+                    footer
+                }
             } else {
                 VStack(spacing: 18) {
                     header
@@ -322,17 +325,12 @@ struct LabelManagerSheet: View {
                 singleLabelEditor
             }
         } else {
-            editorContainer(
-                title: "Select a Label",
-                subtitle: "Choose a label from the list to edit it, or create a new one."
-            ) {
-                ContentUnavailableView(
-                    "Select a Label",
-                    systemImage: "tag",
-                    description: Text("Select a label to edit, or click + to create a new one.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+            ContentUnavailableView(
+                "Select a Label",
+                systemImage: "tag",
+                description: Text("Choose a label from the list to edit it, or use New Label below.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -536,10 +534,9 @@ struct LabelManagerSheet: View {
             Button {
                 beginCreateLabel(inGroup: nil)
             } label: {
-                Image(systemName: "plus")
-                    .frame(width: 24, height: 24)
+                Label("New Label", systemImage: "plus")
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.bordered)
             .fixedSize()
             .help("New Label")
 
@@ -547,12 +544,12 @@ struct LabelManagerSheet: View {
                 newGroupName = ""
                 isCreatingGroup = true
             } label: {
-                Image(systemName: "folder.badge.plus")
-                    .frame(width: 24, height: 24)
+                Label("New Group", systemImage: "folder.badge.plus")
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.bordered)
             .fixedSize()
             .help("New Group")
+            .accessibilityLabel("New Label Group")
 
             Button {
                 deletionTarget = .labels(selectedLabelIDs)
@@ -564,6 +561,7 @@ struct LabelManagerSheet: View {
             .buttonStyle(.borderless)
             .disabled(selectedLabelIDs.isEmpty)
             .help("Delete selected labels")
+            .accessibilityLabel("Delete Selected Labels")
 
             Spacer()
         }

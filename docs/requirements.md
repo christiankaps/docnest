@@ -538,9 +538,9 @@ My Documents.docnestlibrary/
 
 ### 10.5 Startup State Without Library
 - On launch without an open library, app shows no modal dialog and no popup.
-- Instead, regular three-panel layout is shown with empty content.
-- Main content area shows welcoming view with actions to create or open a library, embedded in normal window flow.
-- Sidebar and inspector remain visible but empty or with placeholder content.
+- A single welcome surface offers Create Library and Open Library actions in normal window content.
+- Organization and inspector panels appear only after a library opens. The welcome window supports smaller dimensions than the document workspace.
+- Dropping a library package opens it; dropping PDFs explains that a library must first be created or opened.
 
 ### 10.6 Settings-Based Label Management
 - Full label management lives in `DocNest > Settings… > Labels`, not in an older standalone modal dialog.
@@ -641,7 +641,7 @@ Current state:
 - Document column has a fixed minimum width for approximately 30 characters.
 - Optional columns auto-hide in tight layouts before panel clipping or Document-column violation can occur.
 - Detail view separates PDF preview and metadata with vertical splitter so users can adjust preview height directly.
-- Startup view without library is integrated into regular three-panel layout and no longer shown as separate popup dialog.
+- Startup without a library uses a focused welcome surface in the regular window, without inactive sidebar or inspector panels.
 - Typography is unified into a consistent modern rounded system style.
 - Documents can be renamed inline in both list and thumbnail views via context menu "Rename".
 - Pressing Space or double-clicking a document opens a native Quick Look preview via QLPreviewPanel, similar to Finder behavior.

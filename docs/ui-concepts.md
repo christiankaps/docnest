@@ -20,6 +20,8 @@ DocNest should feel like a focused native macOS document app: local, fast, predi
 
 The welcome state appears when no valid library is open. It should stay calm and direct, with actions for opening or creating a library. It is normal window content, not a blocking modal.
 
+Use one centered surface with equally sized Create Library and Open Library buttons. Organization and inspector panels appear after opening a library. The welcome window can shrink to 560 × 460 points; the document workspace retains its larger minimum. A dropped library opens directly; PDF drops explain the required library context.
+
 ### Main Window
 
 The main window is the everyday work surface. In open-library mode it uses a three-area structure:
@@ -50,6 +52,8 @@ The document browser is the main work area. It supports:
 
 - list mode for dense scanning, sorting, optional columns, grouping, and inline label values
 - thumbnail mode for visual recognition and Finder-like browsing
+
+Empty states explain the current context: first import, no search results, no matching filters, or empty Bin. Offer Import Documents, Clear Search, or Show All Documents as appropriate. Column headers, group headings, and rows share a common horizontal inset. Headers reserve the same trailing drag-handle space as rows. Thumbnail label chips stack when their names and values cannot fit side by side.
 
 Selection must be reliable and visibly immediate. Keyboard navigation follows the currently visible order after filtering, sorting, and grouping.
 
@@ -99,6 +103,8 @@ Use platform conventions for menus, keyboard shortcuts, window behavior, dialogs
 
 Custom styling should clarify DocNest-specific concepts without replacing familiar macOS behavior.
 
+Use the existing native View menu, native popover surfaces, semantic separator colors, and aligned sidebar section headings. Give icon-only controls specific accessibility names. Text editing commands operate on the focused field before falling back to document selection or paste actions.
+
 ### Reliable Selection
 
 Single-click selection is the foundation of the document browser and sidebar. Drag handles, inline editing, context menus, and hover controls should not make ordinary selection feel fragile.
@@ -121,6 +127,10 @@ Import, OCR, preview loading, metadata extraction, and filesystem checks may run
 ### Local Trust
 
 DocNest should make storage behavior understandable. Users should know when files are imported, skipped, exported, moved to Bin, permanently removed, repaired, or missing.
+
+### Settings
+
+Open the native Settings scene through SettingsLink or the openSettings environment action. Label management retains visible New Label and New Group controls when embedded in Settings and shows one no-selection message.
 
 ### Appearance
 

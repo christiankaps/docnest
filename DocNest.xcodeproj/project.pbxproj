@@ -583,6 +583,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
+				DOCNEST_APP_BUNDLE_IDENTIFIER = com.kaps.docnest;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -625,7 +626,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(DOCNEST_APP_BUNDLE_IDENTIFIER)";
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
@@ -639,12 +640,13 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_DocNestAppBundleIdentifier = "$(DOCNEST_APP_BUNDLE_IDENTIFIER)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(DOCNEST_APP_BUNDLE_IDENTIFIER).uitests";
 				SDKROOT = macosx;
 				TEST_TARGET_NAME = DocNest;
 			};
@@ -664,7 +666,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(DOCNEST_APP_BUNDLE_IDENTIFIER)";
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
@@ -678,12 +680,13 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_DocNestAppBundleIdentifier = "$(DOCNEST_APP_BUNDLE_IDENTIFIER)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(DOCNEST_APP_BUNDLE_IDENTIFIER).uitests";
 				SDKROOT = macosx;
 				TEST_TARGET_NAME = DocNest;
 			};
@@ -730,6 +733,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
+				DOCNEST_APP_BUNDLE_IDENTIFIER = com.kaps.docnest;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -774,7 +778,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(DOCNEST_APP_BUNDLE_IDENTIFIER).tests";
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DocNest.app/Contents/MacOS/DocNest";
 			};
@@ -791,7 +795,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(DOCNEST_APP_BUNDLE_IDENTIFIER).tests";
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DocNest.app/Contents/MacOS/DocNest";
 			};

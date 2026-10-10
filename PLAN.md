@@ -1,5 +1,7 @@
 # Remediate Technical Review Findings
 
+UI/UX makeover delivered under revised scope: [findings and validation](docs/ui-ux-review.md). The narrow-window crash is explicitly deferred by the user; final UI activation and broader manual-review limits are documented there. This does not replace the technical remediation milestones below.
+
 ## Objective
 
 Resolve every finding from the 2026-10-03 technical review while preserving the local-library format, data ownership, and native macOS workflows. Completion requires a verified, signed release candidate; work that depends on protected Apple credentials is tracked explicitly rather than bypassed.

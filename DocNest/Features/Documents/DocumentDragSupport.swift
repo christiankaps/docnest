@@ -116,15 +116,19 @@ struct DocumentDragHandleView: NSViewRepresentable {
         override func draw(_ dirtyRect: NSRect) {
             super.draw(dirtyRect)
 
-            let image = NSImage(systemSymbolName: "line.3.horizontal", accessibilityDescription: nil)
-            image?.isTemplate = true
-            NSColor.tertiaryLabelColor.set()
+            let image = NSImage(systemSymbolName: "line.3.horizontal", accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(paletteColors: [.secondaryLabelColor]))
             image?.draw(
                 in: bounds.insetBy(dx: 2, dy: 4),
                 from: .zero,
                 operation: .sourceOver,
                 fraction: 1
             )
+        }
+
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            needsDisplay = true
         }
 
         override func mouseDown(with event: NSEvent) {

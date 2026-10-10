@@ -1241,16 +1241,11 @@ final class DocNestTests: XCTestCase {
         XCTAssertLessThan(AppSplitViewLayout.documentListMinWidth, AppSplitViewLayout.closedLibraryContentMinWidth)
     }
 
-    func testClosedLibraryLayoutPreservesSidePanelWidths() {
-        XCTAssertEqual(AppSplitViewLayout.closedLibraryContentMinWidth, 360)
-        XCTAssertEqual(
-            AppSplitViewLayout.minimumClosedLibraryWindowWidth,
-            AppSplitViewLayout.sidebarWidth + AppSplitViewLayout.closedLibraryContentMinWidth + AppSplitViewLayout.inspectorWidth
-        )
-        XCTAssertEqual(
-            AppSplitViewLayout.minimumWindowWidth,
-            max(AppSplitViewLayout.minimumOpenLibraryWindowWidth, AppSplitViewLayout.minimumClosedLibraryWindowWidth)
-        )
+    func testWelcomeWindowCanBeSmallerThanTheDocumentWorkspace() {
+        XCTAssertLessThan(AppSplitViewLayout.minimumClosedLibraryWindowWidth,
+                          AppSplitViewLayout.minimumOpenLibraryWindowWidth)
+        XCTAssertLessThan(AppSplitViewLayout.minimumClosedLibraryWindowHeight,
+                          AppSplitViewLayout.minimumWindowHeight)
     }
 
     func testResizeHandleCursorStateResetsCursorWhenHoverEnds() {

@@ -7,6 +7,8 @@ DERIVED_DATA_DIR ?= /tmp/docnest-derived
 RELEASE_DERIVED_DATA_DIR ?= /tmp/docnest-release-derived
 ARCHIVE_PATH ?= /tmp/docnest-release/DocNest.xcarchive
 DESTINATION ?= platform=macOS
+UI_TESTS ?= DocNestUITests
+UI_DERIVED_DATA_DIR ?= /tmp/docnest-ui-derived
 
 XCODEBUILD := xcodebuild
 XCODE_FLAGS := -project $(PROJECT) -scheme $(SCHEME) -derivedDataPath $(DERIVED_DATA_DIR)
@@ -45,10 +47,10 @@ test-unit:
 	$(XCODEBUILD) $(XCODE_FLAGS) $(TEST_DESTINATION_FLAGS) test -only-testing:DocNestTests $(WARNING_POLICY_FLAGS)
 
 test-ui:
-	$(XCODEBUILD) $(XCODE_FLAGS) $(TEST_DESTINATION_FLAGS) test -only-testing:DocNestUITests $(WARNING_POLICY_FLAGS)
+	$(XCODEBUILD) DOCNEST_APP_BUNDLE_IDENTIFIER=com.kaps.docnest.uitesting -project $(PROJECT) -scheme $(SCHEME) -derivedDataPath $(UI_DERIVED_DATA_DIR) $(TEST_DESTINATION_FLAGS) test -only-testing:$(UI_TESTS) $(WARNING_POLICY_FLAGS)
 
 test-all: test-unit
-	$(XCODEBUILD) $(XCODE_FLAGS) $(TEST_DESTINATION_FLAGS) test -only-testing:DocNestUITests $(WARNING_POLICY_FLAGS)
+	$(MAKE) test-ui
 
 build-for-testing:
 	$(XCODEBUILD) $(XCODE_FLAGS) $(TEST_DESTINATION_FLAGS) build-for-testing $(WARNING_POLICY_FLAGS)

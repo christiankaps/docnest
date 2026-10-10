@@ -61,7 +61,6 @@ struct DocumentInspectorView: View {
             } else if !documents.isEmpty {
                 multiSelectionInspector
                     .padding(24)
-                    .navigationTitle("Selection")
             } else {
                 ContentUnavailableView(
                     "No Document Selected",
@@ -137,22 +136,21 @@ struct DocumentInspectorView: View {
                 libraryURL: libraryURL,
                 selectedFileAvailable: selectedFileAvailable
             )
-            .frame(minHeight: 420, idealHeight: 620)
+            .frame(minHeight: 240, idealHeight: 420)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
+            .padding(.horizontal, AppSpacing.inspectorInset)
+            .padding(.top, AppSpacing.inspectorInset)
             .padding(.bottom, 8)
 
             ScrollView {
                 documentMetadataSection(for: document)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, AppSpacing.inspectorInset)
                     .padding(.top, 8)
                     .padding(.bottom, 24)
             }
-            .frame(minHeight: 240, idealHeight: 320)
+            .frame(minHeight: 220, idealHeight: 320)
         }
-        .navigationTitle("Preview")
         .background(AppTheme.panelBackground)
     }
 
@@ -273,6 +271,7 @@ struct DocumentInspectorView: View {
                         }
                         .buttonStyle(.borderless)
                         .help("Re-extract date from document text")
+                        .accessibilityLabel("Re-extract Document Date")
                         .disabled(DocumentBulkActionSummary.documentsEligibleForDateExtraction(from: [document]).isEmpty)
 
                         if document.documentDate != nil || !dateFieldText.isEmpty {
@@ -286,6 +285,7 @@ struct DocumentInspectorView: View {
                             }
                             .buttonStyle(.borderless)
                             .help("Clear document date")
+                            .accessibilityLabel("Clear Document Date")
                         }
                     }
 
@@ -412,6 +412,7 @@ struct DocumentInspectorView: View {
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(.secondary)
+                            .accessibilityLabel("Remove \(label.name) label")
                         }
                     }
                 }
