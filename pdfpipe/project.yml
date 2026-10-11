@@ -45,7 +45,7 @@ targets:
     info:
       path: PdfPipe/Info.plist
       properties:
-        CFBundleDisplayName: PdfPipe
+        CFBundleDisplayName: PDF Pipe
         PdfPipeAppGroup: $(APP_GROUP_IDENTIFIER)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
@@ -78,7 +78,7 @@ targets:
     info:
       path: ShareExtension/Info.plist
       properties:
-        CFBundleDisplayName: PdfPipe
+        CFBundleDisplayName: PDF Pipe
         PdfPipeAppGroup: $(APP_GROUP_IDENTIFIER)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services

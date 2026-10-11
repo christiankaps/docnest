@@ -3,6 +3,46 @@ import XCTest
 
 @MainActor
 final class ConfigurationAndExportTests: XCTestCase {
+    func testOCRSkipPreferenceDefaultsForExistingPipelinesAndPersists() throws {
+        let legacy = Data("{\"id\":\"00000000-0000-0000-0000-000000000001\",\"kind\":\"ocr\",\"template\":\"{original}\"}".utf8)
+        XCTAssertTrue(try JSONDecoder().decode(PipelineStep.self, from: legacy).skipExistingText)
+        let configured = try Pipeline().configured(ocr: true, rename: false, template: "", save: false, skipExistingText: false)
+        let decoded = try JSONDecoder().decode(Pipeline.self, from: JSONEncoder().encode(configured))
+        XCTAssertEqual(decoded.steps.count, 1)
+        XCTAssertFalse(try XCTUnwrap(decoded.steps.first).skipExistingText)
+    }
+
+    func testStepSwitchesProduceUniqueFixedOrderAndPreservePipelineIdentity() throws {
+        let legacy = Pipeline(name: "Legacy", steps: [.init(kind: .rename, template: "First"),
+            .init(kind: .ocr), .init(kind: .ocr), .init(kind: .rename, template: "Last")])
+        let configured = try legacy.configured(ocr: true, rename: true,
+            template: try XCTUnwrap(legacy.steps.last?.template), save: false)
+        XCTAssertEqual(configured.id, legacy.id)
+        XCTAssertEqual(configured.steps.map(\.kind), [.ocr, .rename])
+        XCTAssertEqual(try configured.outputFilename(original: "Source", text: "", date: Date()), "Last.pdf")
+        let disabled = try configured.configured(ocr: false, rename: false, template: "{invalid}", save: false)
+        XCTAssertTrue(disabled.steps.isEmpty)
+        XCTAssertEqual(try disabled.outputFilename(original: "Source", text: "", date: Date()), "Source.pdf")
+    }
+
+    func testSaveSwitchRequiresFolderAndDisablingItClearsAutomaticDefault() throws {
+        XCTAssertThrowsError(try Pipeline().configured(ocr: false, rename: true, template: "{original}", save: true))
+        let domain = "PdfPipeStepTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let store = PipelineStore(defaults: defaults)
+        let original = Pipeline(destination: .init(bookmark: Data(), name: "Folder"), unattended: true)
+        try store.save(original, isDefault: true)
+        let disabled = try original.configured(ocr: true, rename: false, template: "", save: false)
+        XCTAssertNil(disabled.destination)
+        XCTAssertFalse(disabled.unattended)
+        try store.save(disabled, isDefault: false)
+        XCTAssertNil(PipelineStore(defaults: defaults).configuration.defaultID)
+        let enabled = try original.configured(ocr: true, rename: false, template: "", save: true)
+        XCTAssertEqual(enabled.destination, original.destination)
+        XCTAssertTrue(enabled.unattended)
+    }
+
     func testTemplatesValidateAndDoNotReinterpretSourceTokens() throws {
         XCTAssertEqual(try FilenameTemplate.render("{original}_{text}", original: "report{date}", text: "Acme", date: Date()), "report{date}_Acme.pdf")
         XCTAssertThrowsError(try FilenameTemplate.render("{sender}", original: "file", text: "", date: Date()))

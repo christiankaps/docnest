@@ -148,9 +148,10 @@ actor DocumentEngine {
                 report.append("Renamed to \(stepFilename)")
             } else {
                 let next = session.directory.appendingPathComponent("ocr-\(UUID().uuidString).pdf")
-                let count = try await ocr(output, to: next, deadline: deadline, progress: progress)
+                let count = try await ocr(output, to: next, deadline: deadline,
+                    skipExistingText: step.skipExistingText, progress: progress)
                 output = next
-                report.append("OCR processed \(count) pages; existing text pages kept")
+                report.append("OCR processed \(count) pages" + (step.skipExistingText ? "; existing text pages kept" : "; all pages recognized"))
             }
         }
         try Task.checkCancellation()
@@ -168,7 +169,7 @@ actor DocumentEngine {
         return try describe(target, filename: filename, report: document.report)
     }
 
-    private func ocr(_ source: URL, to target: URL, deadline: Date,
+    private func ocr(_ source: URL, to target: URL, deadline: Date, skipExistingText: Bool,
                      progress: @Sendable (String) async -> Void) async throws -> Int {
         guard let pdf = PDFDocument(url: source) else { throw PipeError.message("Cannot open the PDF for OCR.") }
         try validate(pdf)
@@ -186,7 +187,7 @@ actor DocumentEngine {
             }
         }
         var initial = CGRect(x: 0, y: 0, width: 612, height: 792)
-        guard let context = CGContext(target as CFURL, mediaBox: &initial, [kCGPDFContextCreator: "PdfPipe"] as CFDictionary) else {
+        guard let context = CGContext(target as CFURL, mediaBox: &initial, [kCGPDFContextCreator: "PDF Pipe"] as CFDictionary) else {
             throw PipeError.message("Cannot write the searchable PDF.")
         }
         var completed = false
@@ -202,11 +203,14 @@ actor DocumentEngine {
                 let rotated = abs(cgPage.rotationAngle) % 180 == 90
                 let box = CGRect(x: 0, y: 0, width: rotated ? crop.height : crop.width, height: rotated ? crop.width : crop.height)
                 context.beginPDFPage([kCGPDFContextMediaBox: NSData(bytes: [box], length: MemoryLayout<CGRect>.size)] as CFDictionary)
-                context.saveGState()
-                context.concatenate(cgPage.getDrawingTransform(.cropBox, rect: box, rotate: 0, preserveAspectRatio: true))
-                context.drawPDFPage(cgPage)
-                context.restoreGState()
-                if page.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+                let hasText = !(page.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+                if skipExistingText || !hasText {
+                    context.saveGState()
+                    context.concatenate(cgPage.getDrawingTransform(.cropBox, rect: box, rotate: 0, preserveAspectRatio: true))
+                    context.drawPDFPage(cgPage)
+                    context.restoreGState()
+                }
+                if !skipExistingText || !hasText {
                     let scale = min(2.5, sqrt(4_000_000 / (box.width * box.height)))
                     let width = max(1, Int(box.width * scale)), height = max(1, Int(box.height * scale))
                     guard let bitmap = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
@@ -219,6 +223,8 @@ actor DocumentEngine {
                         rect: CGRect(x: 0, y: 0, width: width, height: height), rotate: 0, preserveAspectRatio: true))
                     bitmap.drawPDFPage(cgPage)
                     guard let image = bitmap.makeImage() else { throw PipeError.message("Cannot render the OCR page.") }
+                    // Flatten an existing text layer before replacement so it is not duplicated.
+                    if hasText { context.draw(image, in: box) }
                     let request = VNRecognizeTextRequest()
                     request.recognitionLevel = .accurate
                     request.usesLanguageCorrection = true

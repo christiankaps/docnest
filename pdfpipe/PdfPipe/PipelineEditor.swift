@@ -4,72 +4,106 @@ struct PipelineEditor: View {
     @ObservedObject var store: PipelineStore
     @State var pipeline: Pipeline
     @State var isDefault: Bool
+    @State private var ocrEnabled: Bool
+    @State private var skipExistingText: Bool
+    @State private var renameEnabled: Bool
+    @State private var savingEnabled: Bool
+    @State private var filenameTemplate: String
     @State private var selectingFolder = false
     @State private var error: String?
     @Environment(\.dismiss) private var dismiss
+
+    init(store: PipelineStore, pipeline: Pipeline, isDefault: Bool) {
+        self.store = store
+        _pipeline = State(initialValue: pipeline)
+        _isDefault = State(initialValue: isDefault)
+        _ocrEnabled = State(initialValue: pipeline.steps.contains { $0.kind == .ocr })
+        _skipExistingText = State(initialValue: pipeline.steps.first { $0.kind == .ocr }?.skipExistingText ?? true)
+        _renameEnabled = State(initialValue: pipeline.steps.contains { $0.kind == .rename })
+        _savingEnabled = State(initialValue: pipeline.destination != nil)
+        _filenameTemplate = State(initialValue: pipeline.steps.last { $0.kind == .rename }?.template ?? "{date}_{original}")
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Pipeline") {
                     TextField("Name", text: $pipeline.name).accessibilityIdentifier("pipelineName")
-                    Text("Steps run from top to bottom. Saving is always last.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Enable the steps you need. They always run in this order: OCR → Rename → Save.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Steps") {
-                    ForEach($pipeline.steps) { $step in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label(step.title, systemImage: step.kind == .ocr ? "text.viewfinder" : "character.cursor.ibeam").font(.headline)
-                            if step.kind == .rename {
-                                TextField("Filename template", text: $step.template)
-                                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                                    .accessibilityIdentifier("filenameTemplate")
-                                Text("{original} · {date} · {text}\nDate uses yyyy-MM-dd. The .pdf extension is added automatically.")
-                                    .font(.caption).foregroundStyle(.secondary)
-                                if let preview = try? FilenameTemplate.render(step.template, original: "Invoice", text: "Acme", date: Date()) {
-                                    Text("Example: \(preview)").font(.caption).foregroundStyle(.teal)
-                                }
-                            } else {
-                                Text("Recognize text on pages without existing text. Language detection is automatic. Annotated/form PDFs require a pipeline without OCR.")
-                                    .font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(isOn: $ocrEnabled) {
+                            Label("OCR", systemImage: "text.viewfinder").font(.headline)
+                        }.accessibilityIdentifier("enableOCR")
+                        if ocrEnabled {
+                            Toggle("Skip pages with existing text", isOn: $skipExistingText)
+                                .accessibilityIdentifier("skipExistingText")
+                            Text(skipExistingText ? "Recognize scanned pages while keeping existing searchable text." : "Recognize every page and replace existing text layers with fresh OCR.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text("Make scanned pages searchable. Annotated/form PDFs require OCR to be off.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }.padding(.vertical, 4)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(isOn: $renameEnabled) {
+                            Label("Rename", systemImage: "character.cursor.ibeam").font(.headline)
+                        }.accessibilityIdentifier("enableRename")
+                        if renameEnabled {
+                            TextField("Filename template", text: $filenameTemplate)
+                                .textInputAutocapitalization(.never).autocorrectionDisabled()
+                                .accessibilityIdentifier("filenameTemplate")
+                            Text("{original} · {date} · {text}\nDate uses yyyy-MM-dd. The .pdf extension is added automatically.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            if let preview = try? FilenameTemplate.render(filenameTemplate, original: "Invoice", text: "Acme", date: Date()) {
+                                Text("Example: \(preview)").font(.caption).foregroundStyle(.teal)
                             }
-                        }.padding(.vertical, 4)
-                    }.onDelete { pipeline.steps.remove(atOffsets: $0) }
-                     .onMove { pipeline.steps.move(fromOffsets: $0, toOffset: $1) }
-                    Menu {
-                        ForEach(PipelineStep.Kind.allCases, id: \.self) { kind in
-                            Button(kind == .ocr ? "OCR" : "Rename") { pipeline.steps.append(.init(kind: kind)) }
+                        } else {
+                            Text("Keep the original filename.").font(.caption).foregroundStyle(.secondary)
                         }
-                    } label: { Label("Add step", systemImage: "plus") }
-                    EditButton()
-                }
-                Section("Destination") {
-                    if let destination = pipeline.destination {
-                        Label(destination.name, systemImage: "folder")
-                        Button("Remove destination", role: .destructive) {
-                            pipeline.destination = nil
-                            pipeline.unattended = false
-                            isDefault = false
+                    }.padding(.vertical, 4)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle(isOn: $savingEnabled) {
+                            Label("Save to folder", systemImage: "folder").font(.headline)
+                        }.accessibilityIdentifier("enableSave")
+                            .onChange(of: savingEnabled) { _, enabled in
+                                if !enabled { pipeline.unattended = false; isDefault = false }
+                            }
+                        if savingEnabled {
+                            if let destination = pipeline.destination {
+                                Text(destination.name).foregroundStyle(.secondary)
+                            }
+                            Button(pipeline.destination == nil ? "Choose folder…" : "Change folder…") { selectingFolder = true }
+                                .buttonStyle(.borderless).accessibilityIdentifier("chooseSaveFolder")
+                            Text(pipeline.unattended ? "Saves automatically after processing." : "Save to this folder after reviewing the result.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Text("Share or save manually after processing.").font(.caption).foregroundStyle(.secondary)
                         }
-                    }
-                    Button(pipeline.destination == nil ? "Choose folder…" : "Change folder…") { selectingFolder = true }
-                    Text("A configured folder is optional for reviewed results and required for unattended saving. Existing files are never overwritten.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    }.padding(.vertical, 4)
                 }
                 Section("Execution") {
                     Toggle("Run unattended", isOn: $pipeline.unattended)
+                        .disabled(!savingEnabled)
                         .onChange(of: pipeline.unattended) { _, value in if !value { isDefault = false } }
                     Toggle("Default for shared files", isOn: $isDefault).disabled(!pipeline.unattended)
-                    Text("The explicit default runs automatically when you share a file to PdfPipe. Without a default, you choose a pipeline each time. Unattended steps cannot require {text}.")
+                    Text("The explicit default runs automatically when you share a file to PDF Pipe. Without a default, you choose a pipeline each time. Unattended steps cannot require {text}.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Edit pipeline").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        do { try store.save(pipeline, isDefault: isDefault); dismiss() }
-                        catch { self.error = error.localizedDescription }
+                        do {
+                            let configured = try pipeline.configured(ocr: ocrEnabled, rename: renameEnabled,
+                                template: filenameTemplate, save: savingEnabled, skipExistingText: skipExistingText)
+                            try store.save(configured, isDefault: isDefault)
+                            dismiss()
+                        } catch { self.error = error.localizedDescription }
                     }.accessibilityIdentifier("savePipeline")
                 }
             }

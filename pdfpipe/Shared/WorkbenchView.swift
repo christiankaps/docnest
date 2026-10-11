@@ -51,7 +51,7 @@ struct WorkbenchView: View {
                 }
             }
             .interactiveDismissDisabled()
-            .alert("PdfPipe", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
+            .alert("PDF Pipe", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
                 Button("OK") { model.error = nil }
             } message: { Text(model.error ?? "") }
             .sheet(isPresented: Binding(get: { shareURL != nil }, set: { if !$0 { shareURL = nil } }), onDismiss: finishExport) {
@@ -86,7 +86,7 @@ struct WorkbenchView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose a pipeline").font(.title3.bold())
             if store.configuration.pipelines.isEmpty {
-                Text("Create a pipeline in the PdfPipe app, then share or import this file again.").foregroundStyle(.secondary)
+                Text("Create a pipeline in the PDF Pipe app, then share or import this file again.").foregroundStyle(.secondary)
             } else {
                 Picker("Pipeline", selection: $model.pipelineID) {
                     Text("Select…").tag(nil as UUID?)

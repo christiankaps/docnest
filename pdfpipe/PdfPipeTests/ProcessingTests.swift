@@ -76,6 +76,42 @@ final class ProcessingTests: XCTestCase {
         let result = try await engine.process(Pipeline(steps: [.init(kind: .ocr)]), text: "") { _ in }
         let pdf = try XCTUnwrap(PDFDocument(url: result.url))
         XCTAssertEqual(pdf.findString("Already searchable", withOptions: []).count, 1)
+        XCTAssertEqual(result.report, ["OCR processed 0 pages; existing text pages kept"])
+        try session.cleanup()
+    }
+
+    func testForcedOCRReplacesExistingTextWithoutDuplicatingIt() async throws {
+        let source = try sourcePDF(text: "INVOICE ACME 12345")
+        let original = try Data(contentsOf: source)
+        let (session, engine, _) = try await prepared(source)
+        let result = try await engine.process(Pipeline(steps: [.init(kind: .ocr, skipExistingText: false)]), text: "") { _ in }
+        let pdf = try XCTUnwrap(PDFDocument(url: result.url))
+        XCTAssertEqual(pdf.findString("ACME", withOptions: .caseInsensitive).count, 1)
+        XCTAssertEqual(result.report, ["OCR processed 1 pages; all pages recognized"])
+        let before = try raster(source), after = try raster(result.url)
+        XCTAssertEqual(before.count, after.count)
+        let differences = zip(before, after).filter { abs(Int($0) - Int($1)) > 5 }.count
+        XCTAssertLessThan(Double(differences) / Double(before.count), 0.01)
+        XCTAssertEqual(try Data(contentsOf: source), original)
+        try session.cleanup()
+    }
+
+    func testSkipExistingTextStillRecognizesScannedPagesInMixedPDF() async throws {
+        let textSource = try sourcePDF(text: "EXISTING TEXT")
+        let pdf = try XCTUnwrap(PDFDocument(data: Data(contentsOf: textSource)))
+        let scannedSource = try sourcePDF(text: "SCANNED ACME", scanned: true)
+        let scanned = try XCTUnwrap(PDFDocument(url: scannedSource))
+        pdf.insert(try XCTUnwrap(scanned.page(at: 0)), at: 1)
+        let source = root.appendingPathComponent("mixed.pdf")
+        XCTAssertTrue(pdf.write(to: source))
+        let original = try Data(contentsOf: source)
+        let (session, engine, _) = try await prepared(source)
+        let result = try await engine.process(Pipeline(steps: [.init(kind: .ocr)]), text: "") { _ in }
+        let output = try XCTUnwrap(PDFDocument(url: result.url))
+        XCTAssertEqual(output.findString("EXISTING TEXT", withOptions: []).count, 1)
+        XCTAssertTrue(output.page(at: 1)?.string?.contains("ACME") == true)
+        XCTAssertEqual(result.report, ["OCR processed 1 pages; existing text pages kept"])
+        XCTAssertEqual(try Data(contentsOf: source), original)
         try session.cleanup()
     }
 

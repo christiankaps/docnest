@@ -5,7 +5,25 @@ struct PipelineStep: Codable, Identifiable, Equatable, Sendable {
     var id = UUID()
     var kind: Kind
     var template = "{date}_{original}"
+    var skipExistingText = true
     var title: String { kind == .ocr ? "Make searchable" : "Rename" }
+
+    private enum CodingKeys: String, CodingKey { case id, kind, template, skipExistingText }
+
+    init(id: UUID = UUID(), kind: Kind, template: String = "{date}_{original}", skipExistingText: Bool = true) {
+        self.id = id
+        self.kind = kind
+        self.template = template
+        self.skipExistingText = skipExistingText
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        kind = try values.decode(Kind.self, forKey: .kind)
+        template = try values.decode(String.self, forKey: .template)
+        skipExistingText = try values.decodeIfPresent(Bool.self, forKey: .skipExistingText) ?? true
+    }
 }
 
 struct Destination: Codable, Equatable, Sendable {
@@ -23,7 +41,7 @@ struct Destination: Codable, Equatable, Sendable {
         var stale = false
         let url = try URL(resolvingBookmarkData: bookmark, options: .withoutUI, relativeTo: nil,
                           bookmarkDataIsStale: &stale)
-        guard !stale else { throw PipeError.message("Folder access has expired. Choose the destination again in PdfPipe.") }
+        guard !stale else { throw PipeError.message("Folder access has expired. Choose the destination again in PDF Pipe.") }
         return url
     }
 }
@@ -37,6 +55,25 @@ struct Pipeline: Codable, Identifiable, Equatable, Sendable {
     var needsText: Bool { steps.contains { $0.kind == .rename && $0.template.contains("{text}") } }
     var summary: String {
         (steps.map(\.title) + (destination == nil ? [] : ["Save to \(destination!.name)"])).joined(separator: " → ")
+    }
+
+    /// Saving an editor draft yields one enabled step of each kind in fixed order.
+    /// Existing pipelines stay readable; their last rename template seeds the editor.
+    func configured(ocr: Bool, rename: Bool, template: String, save: Bool, skipExistingText: Bool = true) throws -> Pipeline {
+        var result = self
+        result.steps = []
+        if ocr { result.steps.append(.init(kind: .ocr, skipExistingText: skipExistingText)) }
+        if rename { result.steps.append(.init(kind: .rename, template: template)) }
+        if save {
+            guard result.destination != nil else {
+                throw PipeError.message("Choose a folder for the Save step, or turn Save off.")
+            }
+        } else {
+            result.destination = nil
+            result.unattended = false
+        }
+        try result.validate()
+        return result
     }
 
     func validate() throws {
@@ -70,7 +107,7 @@ struct PipelineConfiguration: Codable, Equatable, Sendable {
     func defaultPipeline() throws -> Pipeline? {
         guard let defaultID else { return nil }
         guard let pipeline = pipelines.first(where: { $0.id == defaultID }), pipeline.unattended else {
-            throw PipeError.message("The default pipeline is unavailable or needs review. Choose a pipeline or update the default in PdfPipe.")
+            throw PipeError.message("The default pipeline is unavailable or needs review. Choose a pipeline or update the default in PDF Pipe.")
         }
         try pipeline.validate()
         return pipeline

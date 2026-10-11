@@ -1,17 +1,19 @@
-# PdfPipe
+# PDF Pipe
 
 Workflow: ESTABLISHED
 Maturity: MVP
 
 ## Product concept
 
-PdfPipe is a small, native iPhone app that receives a document, processes a temporary copy through a saved pipeline, and exports the resulting PDF. It supports interactive review and unattended processing with automatic saving to a configured folder. Originals are never modified.
+PDF Pipe is a small, native iPhone app that receives a document, processes a temporary copy through a saved pipeline, and exports the resulting PDF. It supports interactive review and unattended processing with automatic saving to a configured folder. Originals are never modified.
 
 The app stores pipelines and configuration, not a document library. Document-derived filename generation is a core planned capability. iPad support and Apple Shortcuts integration are deferred.
 
 Selected app icon: [design/app-icon-v1.png](design/app-icon-v1.png), the first version with the curved turquoise pipeline arrow. Use this asset for app integration; v2 is an unselected alternative. The selected PNG is 1024×1024 and opaque; its generation prompt is saved alongside it.
 
 This document is the authoritative product concept and current state. The first MVP is implemented in a self-contained app/share-extension project. Simulator and automated physical-iPhone verification pass; provider/resource feasibility and distribution are not yet established.
+
+The displayed app and share-target name is **PDF Pipe**. Existing bundle identifiers, App Group, project paths, and Xcode target/scheme names stay unchanged to preserve installation and saved configuration.
 
 Platform policy: iPhone on iOS 26 or later. Build with Xcode 27 and XcodeGen. Use `make help`, regenerate with `make generate`, and run `make verify` before code integration. See [README.md](README.md) for usage/limits and [ARCHITECTURE.md](ARCHITECTURE.md) for implementation ownership. Root direct-to-main Git policy applies; preserve unrelated project changes.
 
@@ -20,19 +22,19 @@ Platform policy: iPhone on iOS 26 or later. Build with Xcode 27 and XcodeGen. Us
 - iPhone first; one document per session.
 - Receive PDFs through the iOS share sheet; accept JPEG and PNG and convert each imported image to a PDF. Other input formats are outside the initial scope.
 - Display a document preview and attributes: filename, format, byte size, page count, page dimensions, and text availability.
-- Create, edit, duplicate, and delete named pipelines containing ordered processing steps and an optional final Save action.
+- Create, edit, duplicate, and delete named pipelines with independently enabled OCR, Rename, and Save steps in that fixed order.
 - OCR produces searchable/selectable text in the exported PDF while preserving visible page appearance.
 - Filename templates combine literal text with original basename, processing date, and user-entered text. Document-derived placeholders follow in the extraction milestone.
 - Optionally configure a destination folder per pipeline.
 - Support interactive result review and user-directed sharing/saving, or unattended processing and saving without further input on a successful run.
 - Users explicitly designate one default pipeline for unattended imports. Without a default, show the pipeline chooser. The last-used pipeline never becomes an implicit default.
-- Process on-device, without an account or backend. User-selected output folders may be cloud-backed; exporting there does not constitute cloud processing by PdfPipe.
+- Process on-device, without an account or backend. User-selected output folders may be cloud-backed; exporting there does not constitute cloud processing by PDF Pipe.
 
 ## Pipeline model
 
-A pipeline has a name, ordered processing steps, an optional destination folder, and an execution mode. The two modes are interactive review and unattended execution; their exact settings UI is TBD.
+A pipeline has a name, switches for OCR, Rename, and Save to folder, and an execution mode. All three steps are always visible in the editor. Enabled steps run once each in the fixed order OCR → Rename → Save; there is no reordering or Add step menu. The two modes are interactive review and unattended execution, controlled by the Run unattended toggle.
 
-Initial steps are OCR and template-based renaming. Saving, when configured, is the final action. The later extraction capability supplies document-derived values to filename templates before renaming.
+OCR and template-based renaming are optional. Save to folder is the optional final step; disabling it also clears unattended/default settings. OCR defaults to skipping pages that already contain text, so scanned pages in a mixed PDF still receive recognition. Turning that option off replaces existing text layers with fresh OCR. The later extraction capability supplies document-derived values to filename templates before renaming.
 
 An unattended pipeline requires a configured destination and no per-import manual input. An invalid or unavailable default must lead to a chooser or actionable configuration error, not silent execution of a different pipeline.
 
@@ -42,11 +44,11 @@ Illustrative later pipeline: OCR if needed → extract document date, sender, an
 
 ## User journeys
 
-Interactive: share a document to PdfPipe → choose a pipeline → inspect/process the copy → review the resulting PDF and filename → share, save, or discard.
+Interactive: share a document to PDF Pipe → choose a pipeline → inspect/process the copy → review the resulting PDF and filename → share, save, or discard.
 
-Unattended: share a document to PdfPipe → run the explicitly configured default pipeline → save to its configured folder → clean up temporary files. No further interaction is needed on a successful run.
+Unattended: share a document to PDF Pipe → run the explicitly configured default pipeline → save to its configured folder → clean up temporary files. No further interaction is needed on a successful run.
 
-The standalone app manages pipelines and imports documents from Files using the same engine. Direct app import starts interactively even when an unattended default is configured.
+The standalone app manages pipelines and imports documents from Files using the same engine. Direct app import asks for a pipeline before opening Files, then opens the document with that pipeline selected for review. It starts interactively even when an unattended default is configured. Pipelines can be deleted by swiping left on their home-screen row; long-press duplication and deletion remain available.
 
 MVP interaction details:
 
@@ -57,7 +59,7 @@ MVP interaction details:
 - On filename collisions, create a unique filename rather than overwrite any existing destination file. The source must never be overwritten under any policy.
 - Show destination/processing failures clearly; do not silently redirect output or report a failed save as successful.
 
-A saved destination PDF is an intentionally persistent user-owned output. It is outside PdfPipe's temporary working storage.
+A saved destination PDF is an intentionally persistent user-owned output. It is outside PDF Pipe's temporary working storage.
 
 ## Core follow-on: document-derived renaming
 
@@ -101,15 +103,17 @@ The concept should be validated against these outcomes; detailed checks will be 
 
 ## Verification status (2026-10-11)
 
-- The original MVP passed on iOS 26.0 and 27.0 simulators. Review and device fixes add seven regression tests (27 unit tests and one end-to-end UI test total), covering Inbox ownership/cleanup, long input names, filename preflight, atomic publication, collision races, and failed/canceled writes. Current verification results are recorded in PLAN.md.
+- The original MVP passed on iOS 26.0 and 27.0 simulators. The reviewed device baseline has seven regression tests (27 unit tests and one end-to-end UI test total), covering Inbox ownership/cleanup, long input names, filename preflight, atomic publication, collision races, and failed/canceled writes. Current verification results are recorded in PLAN.md.
 - `make build-device` passes for the app and share extension against the iOS 27 device SDK, without signing/provisioning.
 - Simulator screenshots were visually reviewed. The share-sheet test invokes the actual extension, verifies supplied filename preservation, and checks that extension discard retains the host's export copy.
 - The user configured signing team `QQ2W7FVVXM` for both targets; `project.yml` preserves that setting. Signed installation, all 27 unit tests, and the app/share-extension UI test pass on an iPhone 14 Pro running iOS 27.0.1, including shared App Group configuration. Actual Inbox import/preview passes after excluding the Documents parent from backup instead of modifying the system-managed Inbox. Real provider/resource validation remains pending. See [PLAN.md](PLAN.md) for the outstanding gate.
 
+- Workflow/OCR-option updates pass the iOS 27 simulator gate with 33 unit tests, two UI tests, and optimized unsigned device Release analysis/build. Physical-iPhone verification above applies to the preceding baseline; the updated UI and force-OCR option still need a full device test rerun. The current signed Release build is installed and launch-checked on the iPhone, with the PDF Pipe name and existing settings confirmed.
+
 ## Open decisions
 
 - Intended audience, distribution, and monetization.
-- Physical-device OCR language availability and quality. MVP automatically detects language and skips pages with existing text; mixed text/image pages may retain unrecognized content.
+- Physical-device OCR language availability and quality. MVP automatically detects language and defaults to skipping pages with existing text; mixed text/image pages may retain unrecognized content unless that skip option is disabled.
 - Additional template/date formatting options. MVP uses {original}, {date} (local yyyy-MM-dd), and {text}; creates unique names on collision; rejects unknown tokens and hidden/empty/overlong names.
 - Supported extraction fields/categories, extraction approach, and missing-value fallbacks.
 - Interactive entry point when a default unattended pipeline is configured; no manual-override feature has been separately accepted.

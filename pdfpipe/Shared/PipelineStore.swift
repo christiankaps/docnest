@@ -19,7 +19,7 @@ final class PipelineStore: ObservableObject {
 
     func reload() {
         guard let defaults else {
-            error = "Shared configuration is unavailable. Enable the PdfPipe App Group for both targets when signing the app."
+            error = "Shared configuration is unavailable. Enable the PDF Pipe App Group for both targets when signing the app."
             return
         }
         do {

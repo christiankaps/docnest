@@ -12,7 +12,7 @@ enum DestinationWriter {
     /// Stage on the destination volume, then atomically publish without replacing any file.
     static func save(_ document: URL, to folder: URL, didWriteChunk: () throws -> Void = {}) throws -> URL {
         guard (try folder.resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true else {
-            throw PipeError.message("The destination folder is unavailable. Choose it again in PdfPipe.")
+            throw PipeError.message("The destination folder is unavailable. Choose it again in PDF Pipe.")
         }
         // Open the input before reserving an output path: a missing input must never
         // become a newly created empty output when source and destination coincide.

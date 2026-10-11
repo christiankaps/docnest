@@ -98,6 +98,34 @@ final class SessionFlowTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
     }
 
+    func testDirectImportRetainsChosenPipelineWithoutRunningDefault() async throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try sourcePDF(root: root)
+        let domain = "PdfPipeSelectionTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let store = PipelineStore(defaults: defaults)
+        try store.save(Pipeline(name: "Automatic", destination: try Destination.selected(root), unattended: true), isDefault: true)
+        let selected = Pipeline(name: "Chosen", steps: [.init(kind: .rename, template: "Chosen_{original}")])
+        try store.save(selected, isDefault: false)
+        let model = DocumentSessionModel()
+        model.pipelineID = selected.id
+        model.importFile(source, store: store, autoRun: false)
+        try await waitForIdle(model)
+        XCTAssertNil(model.error)
+        XCTAssertEqual(model.pipelineID, selected.id)
+        XCTAssertFalse(model.processed)
+        XCTAssertNil(model.savedName)
+        XCTAssertEqual(try model.filenamePreview(selected).get(), "Chosen_source.pdf")
+        var finished = false
+        model.onFinished = { finished = true }
+        model.discard()
+        let deadline = Date().addingTimeInterval(5)
+        while !finished && Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertTrue(finished)
+    }
+
     func testProviderImportPreservesSuppliedFilenameAndCopiesInput() async throws {
         let root = try temporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }

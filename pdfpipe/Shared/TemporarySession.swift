@@ -9,7 +9,7 @@ final class TemporarySession: @unchecked Sendable {
     static func root() throws -> URL {
         guard let group = Bundle.main.object(forInfoDictionaryKey: "PdfPipeAppGroup") as? String,
               let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
-            throw PipeError.message("PdfPipe shared storage is unavailable. Check App Group signing for both targets.")
+            throw PipeError.message("PDF Pipe shared storage is unavailable. Check App Group signing for both targets.")
         }
         return container.appendingPathComponent("Library/Caches/Sessions", isDirectory: true)
     }
