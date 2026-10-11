@@ -64,6 +64,6 @@ No credentials, signing identities, or invented team identifiers are included. D
 
 Before distribution, test real-device sharing from Files and other host apps, app-to-extension folder access, iCloud/third-party destinations, revoked permissions, extension memory/termination behavior, cancellation and interrupted-session cleanup. Simulator checks do not establish this physical-device feasibility gate.
 
-Verification on 2026-10-11: the updated `make verify` passes on iOS 27.0 (26 unit tests, one UI test, and unsigned optimized device Release analysis/build). `make test-release` passes all 26 unit tests on iOS 26.0. Physical-device signing and provider/resource checks remain pending.
+Verification on 2026-10-11: the updated `make verify` passes on iOS 27.0 (27 unit tests, one UI test, and unsigned optimized device Release analysis/build). The earlier `make test-release` run passed the then-existing 26 unit tests on iOS 26.0. Signed installation, all 27 unit tests, and the end-to-end app/share-extension UI test pass on an iPhone 14 Pro running iOS 27.0.1. Actual Inbox import/preview and abandoned-session cleanup also pass. Provider/resource checks remain pending; see PLAN.md for the exact coverage.
 
 See [PROJECT.md](PROJECT.md) for product scope and verification status, [ARCHITECTURE.md](ARCHITECTURE.md) for implementation ownership, and [PLAN.md](PLAN.md) for remaining work.

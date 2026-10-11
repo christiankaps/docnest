@@ -35,11 +35,22 @@ final class MVPFlowTests: XCTestCase {
         app.buttons["Share"].tap()
         XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5) || app.buttons["Copy"].waitForExistence(timeout: 5))
         let sharing = XCUIApplication(bundleIdentifier: "com.apple.SharingUIService")
-        let extensionButton = sharing.cells["PdfPipe"].firstMatch
+        var extensionButton = sharing.cells["PdfPipe"].firstMatch
+        let more = sharing.cells.matching(NSPredicate(format: "label == %@ OR label == %@", "More", "Mehr")).firstMatch
+        let targets = sharing.scrollViews.containing(.cell, identifier: "shareCell").firstMatch
+        for _ in 0..<12 {
+            if (extensionButton.exists && extensionButton.isHittable) || (more.exists && more.isHittable) { break }
+            guard targets.exists else { break }
+            targets.swipeLeft()
+        }
         if !extensionButton.waitForExistence(timeout: 5) {
-            let more = sharing.cells.matching(NSPredicate(format: "label == %@ OR label == %@", "More", "Mehr")).firstMatch
             XCTAssertTrue(more.waitForExistence(timeout: 5), sharing.debugDescription)
             more.tap()
+            extensionButton = sharing.cells.containing(.staticText, identifier: "PdfPipe").firstMatch
+            for _ in 0..<12 {
+                if extensionButton.exists && extensionButton.isHittable { break }
+                sharing.swipeUp()
+            }
         }
         XCTAssertTrue(extensionButton.waitForExistence(timeout: 5), sharing.debugDescription)
         let sheet = XCTAttachment(screenshot: app.screenshot())

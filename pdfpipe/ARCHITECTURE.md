@@ -6,7 +6,7 @@
 - `ShareExtension/`: `ShareViewController` embeds the same SwiftUI workbench. It consumes exactly one supported `NSItemProvider` file, runs the explicit unattended default when configured, and completes the host request after automatic saving and cleanup. It never launches the containing app.
 - `Shared/`: compiled into both targets; models, configuration, processing, destination writing, session ownership, and native preview/export adapters.
 - `PdfPipeTests/`: source-integrity, OCR text/appearance/rotation, cancellation, import bounds, templates, configuration, export failures/collisions, and cleanup tests.
-- `PdfPipeUITests/`: simulator app/extension interaction checks.
+- `PdfPipeUITests/`: simulator and physical-iPhone app/extension interaction checks.
 
 ## Ownership and concurrency
 
@@ -24,7 +24,7 @@ Folder selection creates a minimal bookmark while security-scoped access is held
 
 App Group `Library/Caches/Sessions/<UUID>` directories are excluded from backup and protected with complete file protection. A session lifetime lock prevents another app/extension process from cleaning up its active files. A root maintenance lock serializes directory creation and abandoned-session cleanup, including interrupted initialization. Only UUID session directories are managed. Abandoned unlocked sessions are removed on launch/import; metadata is limited to lock files and random identifiers.
 
-Open In deliveries owned by the app are moved immediately from `Documents/Inbox` into a protected session before asynchronous work starts. Inbox storage is excluded from backup; rejected deliveries are deleted, and unclaimed leftovers are removed when the app backgrounds. Launch cleanup only sweeps managed sessions: sweeping Inbox during cold launch could delete a delivery whose URL callback is still pending. External originals and symbolic-link targets are never consumed.
+Open In deliveries owned by the app are moved immediately from `Documents/Inbox` into a protected session before asynchronous work starts. The app-owned Documents parent is excluded from backup because physical iOS forbids changing the system-managed Inbox directory itself. Rejected deliveries are deleted, and unclaimed leftovers are removed when the app backgrounds. Launch cleanup only sweeps managed sessions: sweeping Inbox during cold launch could delete a delivery whose URL callback is still pending. External originals and symbolic-link targets are never consumed. Unit tests inject an isolated Inbox fixture; real-device checks separately cover the Documents backup flag and actual Inbox delivery.
 
 The engine streams a copy of the source, prepares a separate input PDF, and creates per-run output files. Source names remain available even when unsuitable for export; shared pipeline preflight computes and validates the output filename for both the workbench preview and execution before OCR begins. Source files are opened only for reading. Non-OCR PDF processing preserves PDF bytes. OCR renders each visible crop page into a fresh PDF and adds invisible Core Text glyphs using Vision bounding boxes. Existing text pages skip recognition. Editable annotations/forms are rejected for OCR because re-emission cannot preserve their semantics.
 

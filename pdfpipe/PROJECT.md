@@ -11,7 +11,7 @@ The app stores pipelines and configuration, not a document library. Document-der
 
 Selected app icon: [design/app-icon-v1.png](design/app-icon-v1.png), the first version with the curved turquoise pipeline arrow. Use this asset for app integration; v2 is an unselected alternative. The selected PNG is 1024×1024 and opaque; its generation prompt is saved alongside it.
 
-This document is the authoritative product concept and current state. The first MVP is implemented in a self-contained app/share-extension project. Simulator verification passes; physical-device feasibility and distribution are not yet established.
+This document is the authoritative product concept and current state. The first MVP is implemented in a self-contained app/share-extension project. Simulator and automated physical-iPhone verification pass; provider/resource feasibility and distribution are not yet established.
 
 Platform policy: iPhone on iOS 26 or later. Build with Xcode 27 and XcodeGen. Use `make help`, regenerate with `make generate`, and run `make verify` before code integration. See [README.md](README.md) for usage/limits and [ARCHITECTURE.md](ARCHITECTURE.md) for implementation ownership. Root direct-to-main Git policy applies; preserve unrelated project changes.
 
@@ -101,10 +101,10 @@ The concept should be validated against these outcomes; detailed checks will be 
 
 ## Verification status (2026-10-11)
 
-- The original MVP passed on iOS 26.0 and 27.0 simulators. Review fixes add six regression tests (26 unit tests and one end-to-end UI test total), covering Inbox ownership/cleanup, long input names, filename preflight, atomic publication, collision races, and failed/canceled writes. Current verification results are recorded in PLAN.md.
+- The original MVP passed on iOS 26.0 and 27.0 simulators. Review and device fixes add seven regression tests (27 unit tests and one end-to-end UI test total), covering Inbox ownership/cleanup, long input names, filename preflight, atomic publication, collision races, and failed/canceled writes. Current verification results are recorded in PLAN.md.
 - `make build-device` passes for the app and share extension against the iOS 27 device SDK, without signing/provisioning.
 - Simulator screenshots were visually reviewed. The share-sheet test invokes the actual extension, verifies supplied filename preservation, and checks that extension discard retains the host's export copy.
-- The user configured signing team `QQ2W7FVVXM` for both targets; `project.yml` preserves that setting. Signed device installation, App Group access, and real provider/resource validation remain to be verified. See [PLAN.md](PLAN.md) for the outstanding gate.
+- The user configured signing team `QQ2W7FVVXM` for both targets; `project.yml` preserves that setting. Signed installation, all 27 unit tests, and the app/share-extension UI test pass on an iPhone 14 Pro running iOS 27.0.1, including shared App Group configuration. Actual Inbox import/preview passes after excluding the Documents parent from backup instead of modifying the system-managed Inbox. Real provider/resource validation remains pending. See [PLAN.md](PLAN.md) for the outstanding gate.
 
 ## Open decisions
 
@@ -115,7 +115,7 @@ The concept should be validated against these outcomes; detailed checks will be 
 - Interactive entry point when a default unattended pipeline is configured; no manual-override feature has been separately accepted.
 - Physical-device resource/conversion validation. MVP limits inputs to 30 MB/50 pages, images to 40 million pixels, and OCR rasterization to 4 million pixels per page. Encrypted PDFs are rejected on import; annotated/form PDFs are rejected for OCR. Signatures are not validated; signed PDFs are unsupported for OCR.
 - Extension export/access behavior, error presentation, cleanup mechanics, and exact save semantics.
-- App Group provisioning verification for physical-device checks and distribution.
+- Distribution signing and App Group provisioning; development-device App Group access is verified.
 
 ## Scope boundaries
 

@@ -12,8 +12,10 @@ enum InboxDelivery {
     }
 
     static func excludeFromBackup(inbox: URL = directory) throws {
-        guard FileManager.default.fileExists(atPath: inbox.path) else { return }
-        var folder = inbox
+        // iOS permits reading/deleting Inbox deliveries, but not changing Inbox
+        // itself. Exclude the app-owned parent before the system delivers files.
+        var folder = inbox.deletingLastPathComponent()
+        guard FileManager.default.fileExists(atPath: folder.path) else { return }
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         try folder.setResourceValues(values)

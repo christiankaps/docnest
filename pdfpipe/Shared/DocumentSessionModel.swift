@@ -18,7 +18,12 @@ final class DocumentSessionModel: ObservableObject {
     private var task: Task<Void, Never>?
     private var importProgress: Progress?
     private var finished = false
+    private let inboxDirectory: URL
     var onFinished: (() -> Void)?
+
+    init(inboxDirectory: URL = InboxDelivery.directory) {
+        self.inboxDirectory = inboxDirectory
+    }
 
     func createSession() throws -> TemporarySession {
         let root = try TemporarySession.root()
@@ -32,7 +37,7 @@ final class DocumentSessionModel: ObservableObject {
     func importFile(_ url: URL, store: PipelineStore, autoRun: Bool) {
         do {
             let session = try createSession()
-            let source = try InboxDelivery.claim(url, into: session.directory)
+            let source = try InboxDelivery.claim(url, into: session.directory, inbox: inboxDirectory)
             busy = true
             progress = "Making a temporary copy…"
             task = Task {

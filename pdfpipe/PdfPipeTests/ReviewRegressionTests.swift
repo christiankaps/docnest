@@ -24,7 +24,9 @@ final class ReviewRegressionTests: XCTestCase {
     }
 
     func testInboxDeliveryConsumedOnSuccessFailureAndCancellation() async throws {
-        let inbox = InboxDelivery.directory
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inbox = root.appendingPathComponent("Inbox")
         try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
         let domain = "PdfPipeInboxTests-\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
@@ -34,10 +36,10 @@ final class ReviewRegressionTests: XCTestCase {
             defer { try? FileManager.default.removeItem(at: source) }
             if scenario == "failure" { try Data("not a PDF".utf8).write(to: source) }
             else { try writePDF(source) }
-            let model = DocumentSessionModel()
+            let model = DocumentSessionModel(inboxDirectory: inbox)
             model.importFile(source, store: PipelineStore(defaults: defaults), autoRun: false)
             XCTAssertFalse(FileManager.default.fileExists(atPath: source.path), "Claim the app-owned delivery before asynchronous work")
-            XCTAssertEqual(try inbox.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+            XCTAssertEqual(try root.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
             if scenario != "cancel" {
                 try await waitUntil { !model.busy }
                 if scenario == "success" {
@@ -53,6 +55,12 @@ final class ReviewRegressionTests: XCTestCase {
             if let copy { XCTAssertFalse(FileManager.default.fileExists(atPath: copy.path)) }
             XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
         }
+    }
+
+    func testRealDocumentsDirectoryCanBeExcludedWithoutWritingInbox() throws {
+        try InboxDelivery.excludeFromBackup()
+        let documents = InboxDelivery.directory.deletingLastPathComponent()
+        XCTAssertEqual(try documents.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
     }
 
     func testInboxCleanupPreservesExternalOriginalsAndReclaimsInterruptedDelivery() throws {
