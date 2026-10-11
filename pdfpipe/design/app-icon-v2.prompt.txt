@@ -1,0 +1,5 @@
+Tool: built-in image_gen
+Reference: app-icon-v1.png
+Asset: app-icon-v2.png
+
+Edit this PdfPipe app icon to improve geometric alignment and visual balance. Preserve the white folded-corner document, turquoise pipeline arrow, midnight-blue/teal background, restrained dimensional finish, and no text. Make the combined document-and-arrow symbol optically centered in the square with equal left/right outer margins and balanced top/bottom spacing. Replace the drooping offset S-shaped pipe with one straight horizontal turquoise arrow through the exact vertical midpoint of the document; keep the arrow shaft perfectly level, uniform in thickness, with a clean proportional arrowhead centered on the shaft. The entry and exit protrusions should balance optically so the icon does not lean right. Keep the paper silhouette continuous and clearly recognizable with the arrow crossing in front, no detached upper/lower paper pieces or awkward gaps. Use consistent corner radii, aligned edges, and crisp simple geometry that reads at small sizes. Full-bleed opaque square artwork, square canvas corners, no mockup, no border, no added symbols. Output one square icon.

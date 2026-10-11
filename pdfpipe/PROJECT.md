@@ -1,7 +1,7 @@
 # PdfPipe
 
-Workflow: INITIALIZING
-Maturity: CONCEPTION
+Workflow: ESTABLISHED
+Maturity: MVP
 
 ## Product concept
 
@@ -9,7 +9,11 @@ PdfPipe is a small, native iPhone app that receives a document, processes a temp
 
 The app stores pipelines and configuration, not a document library. Document-derived filename generation is a core planned capability. iPad support and Apple Shortcuts integration are deferred.
 
-This document is the authoritative concept. Accepted scope is distinguished below from recommended interaction details and unresolved decisions. No app implementation or platform feasibility is claimed yet.
+Selected app icon: [design/app-icon-v1.png](design/app-icon-v1.png), the first version with the curved turquoise pipeline arrow. Use this asset for app integration; v2 is an unselected alternative. The selected PNG is 1024×1024 and opaque; its generation prompt is saved alongside it.
+
+This document is the authoritative product concept and current state. The first MVP is implemented in a self-contained app/share-extension project. Simulator verification passes; physical-device feasibility and distribution are not yet established.
+
+Platform policy: iPhone on iOS 26 or later. Build with Xcode 27 and XcodeGen. Use `make help`, regenerate with `make generate`, and run `make verify` before code integration. See [README.md](README.md) for usage/limits and [ARCHITECTURE.md](ARCHITECTURE.md) for implementation ownership. Root direct-to-main Git policy applies; preserve unrelated project changes.
 
 ## Accepted first-version scope
 
@@ -42,14 +46,14 @@ Interactive: share a document to PdfPipe → choose a pipeline → inspect/proce
 
 Unattended: share a document to PdfPipe → run the explicitly configured default pipeline → save to its configured folder → clean up temporary files. No further interaction is needed on a successful run.
 
-The standalone app manages pipelines and their configuration. Recommended addition: import from Files directly in the app, using the same processing flow.
+The standalone app manages pipelines and imports documents from Files using the same engine. Direct app import starts interactively even when an unattended default is configured.
 
-Recommended interaction details, not separately accepted scope:
+MVP interaction details:
 
 - Show pipeline steps and the proposed filename before an explicit Run action in interactive mode.
 - Show progress and allow cancellation; allow final filename correction before export.
 - Keep the active result available after an export cancellation.
-- Stop on a failed processing step and allow retry from the session input.
+- Stop on a failed processing step and allow retry from the session input. A destination-write failure keeps the active processed result available for another export.
 - On filename collisions, create a unique filename rather than overwrite any existing destination file. The source must never be overwritten under any policy.
 - Show destination/processing failures clearly; do not silently redirect output or report a failed save as successful.
 
@@ -80,7 +84,7 @@ Unattended execution means no further user input on success. It does not promise
 3. **Core extraction milestone:** deliver document-derived filename templates with review/correction and explicit handling of missing or ambiguous required fields.
 4. **Later capability:** Apple Shortcuts integration. Exact placement relative to extraction and the available actions are TBD; exposing named pipelines as document-processing actions is a proposal.
 
-Before implementation, choose the minimum iOS version. If extension limits conflict with unattended processing, present the evidence and decide a revised workflow; do not silently add persistent job storage or assume the extension can launch the app.
+The minimum iOS version is settled at iOS 26. If extension limits conflict with unattended processing, present the evidence and decide a revised workflow; do not silently add persistent job storage or assume the extension can launch the app.
 
 ## Verification expectations
 
@@ -95,16 +99,23 @@ The concept should be validated against these outcomes; detailed checks will be 
 - Export cancellation is distinct from completion, and temporary cleanup respects active consumers and interrupted sessions.
 - Extension resource/lifecycle limits are understood on real devices. No guaranteed background completion is claimed without evidence.
 
+## Verification status (2026-10-11)
+
+- `make verify` passes on iOS 26.0 and 27.0 simulators: 20 unit tests and one end-to-end UI test. The final reviewed implementation passes the iOS 27 gate.
+- `make build-device` passes for the app and share extension against the iOS 27 device SDK, without signing/provisioning.
+- Simulator screenshots were visually reviewed. The share-sheet test invokes the actual extension, verifies supplied filename preservation, and checks that extension discard retains the host's export copy.
+- Physical-device signing/App Group setup and real provider/resource validation remain required. A connected iPhone is available; signing-team information is pending. See [PLAN.md](PLAN.md) for the outstanding gate.
+
 ## Open decisions
 
-- Minimum iOS version; intended audience, distribution, and monetization.
-- OCR languages and treatment of pages with existing text.
-- Filename template syntax, date formatting, validation, and collision policy.
+- Intended audience, distribution, and monetization.
+- Physical-device OCR language availability and quality. MVP automatically detects language and skips pages with existing text; mixed text/image pages may retain unrecognized content.
+- Additional template/date formatting options. MVP uses {original}, {date} (local yyyy-MM-dd), and {text}; creates unique names on collision; rejects unknown tokens and hidden/empty/overlong names.
 - Supported extraction fields/categories, extraction approach, and missing-value fallbacks.
 - Interactive entry point when a default unattended pipeline is configured; no manual-override feature has been separately accepted.
-- Resource limits, conversion fidelity, and encrypted, signed, or form PDF handling. Transformations may invalidate signatures.
+- Physical-device resource/conversion validation. MVP limits inputs to 30 MB/50 pages, images to 40 million pixels, and OCR rasterization to 4 million pixels per page. Encrypted PDFs are rejected on import; annotated/form PDFs are rejected for OCR. Signatures are not validated; signed PDFs are unsupported for OCR.
 - Extension export/access behavior, error presentation, cleanup mechanics, and exact save semantics.
-- Build tools, verification commands, and PdfPipe-specific integration conventions.
+- Signing team/App Group registration for physical-device checks and distribution.
 
 ## Scope boundaries
 
