@@ -17,8 +17,8 @@ struct ContentView: View {
     @State private var managingLabels = false
     @Environment(\.scenePhase) private var scenePhase
 
-    init(store: LibraryStore = LibraryStore()) {
-        _model = State(initialValue: LibraryModel(store: store))
+    init(store: LibraryStore = LibraryStore(), access: LibraryLockController? = nil, captures: CaptureInbox? = nil) {
+        _model = State(initialValue: LibraryModel(store: store, access: access, captures: captures))
     }
 
     var body: some View {
@@ -44,9 +44,14 @@ struct ContentView: View {
             .tabItem { Label("Inbox", systemImage: "tray") }.tag(1)
             .badge(model.inboxCount)
         }
-        .task { await model.load() }
+        .task { await openLibrary() }
+        .onChange(of: model.access?.isLocked) { _, locked in
+            if locked == false { Task { await openLibrary() } }
+            else { model.duplicate = nil; model.actionError = nil }
+        }
+        .librarySystemTask(model.access, active: importing)
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active && !model.isLoading && model.loadError == nil {
+            if phase == .active && !model.store.accessPolicy.isLocked && !model.isLoading && model.loadError == nil {
                 Task { await model.save { try await model.store.cleanupExpired() } }
             }
         }
@@ -56,7 +61,7 @@ struct ContentView: View {
             case .failure(let error): model.actionError = error.localizedDescription
             }
         }
-        .sheet(isPresented: $settings) { SettingsView() }
+        .sheet(isPresented: $settings) { SettingsView(access: model.access) }
         .sheet(isPresented: $managingLabels) { LabelManagementView(model: model) }
         .libraryError(model)
         .alert("Already in your library", isPresented: Binding(get: { model.duplicate != nil }, set: { if !$0 { model.duplicate = nil } }), presenting: model.duplicate) { document in
@@ -67,6 +72,12 @@ struct ContentView: View {
             }
             Button("Cancel", role: .cancel) { model.duplicate = nil }
         } message: { document in Text(document.filename) }
+    }
+
+    private func openLibrary() async {
+        guard !model.store.accessPolicy.isLocked else { return }
+        await model.load()
+        if model.loadError == nil { await model.drainCaptures() }
     }
 
     @ViewBuilder private func destination(_ route: LibraryRoute) -> some View {
@@ -226,6 +237,7 @@ private struct DocumentListView: View {
                     .disabled(model.isLoading || model.loadError != nil)
             }
         }
+        .librarySystemTask(model.access, active: share != nil)
         .sheet(isPresented: $bulkLabels) { BulkLabelsView(model: model, ids: selection) }
         .sheet(item: $share, onDismiss: {
             if let transfer = pendingTransfer { Task { for url in transfer.urls { await model.store.removeExport(url) } } }
@@ -250,6 +262,7 @@ private struct LibraryUnavailable: View {
 }
 
 private struct SettingsView: View {
+    let access: LibraryLockController?
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
@@ -258,6 +271,15 @@ private struct SettingsView: View {
                     Label("On this iPhone", systemImage: "iphone")
                     Text("Your library is private to DocNest. Imported PDFs are copies; sharing and exporting create separate copies.")
                         .foregroundStyle(.secondary)
+                }
+                if let access {
+                    Section("Privacy") {
+                        Toggle("Face ID & Passcode Lock", isOn: Binding(get: { access.isEnabled }, set: { enabled in
+                            Task { await access.setEnabled(enabled) }
+                        })).disabled(access.isAuthenticating).accessibilityIdentifier("libraryLockToggle")
+                        Text("Lock Library, Inbox, and review when you leave DocNest. Incoming PDF capture can finish without opening your library.").foregroundStyle(.secondary)
+                        if let error = access.authenticationError { Text(error).foregroundStyle(.secondary) }
+                    }
                 }
                 Section("About") { LabeledContent("App", value: "DocNest") }
             }

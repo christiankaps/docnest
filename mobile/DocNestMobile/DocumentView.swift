@@ -114,6 +114,7 @@ struct DocumentView: View {
         .sheet(isPresented: $showDetails) { DocumentDetails(id: id, model: model) }
         .sheet(isPresented: $showLabels) { DocumentLabelsView(model: model, record: record) }
         .libraryError(model)
+        .librarySystemTask(model.access, active: transfer != nil || showExporter)
         .sheet(item: $transfer, onDismiss: cleanupExport) { item in
             ShareSheet(url: item.url)
         }

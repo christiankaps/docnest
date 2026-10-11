@@ -47,13 +47,27 @@ Share/export copies are created under an app-private temporary `DocNestExports/<
 
 The viewer uses PDFKit without saving mutations to originals. Existing-text search runs in the store and returns page indices, match ranges, and snippets; the viewer highlights/navigates to that range. The current UI also provides native list Select mode scoped to visible documents, additive bulk labels, multi-PDF activity sheets, Labels/Delete swipes, Share/Rename/Labels/Delete context menus, and Recently Deleted recovery. Selection is intersected with visible IDs when filters or review state change. Selection hides the tab bar so it cannot overlap the bulk-action toolbar; label sheets use the established label-selection rows outside list edit mode. The current UI supports a label-first Library home, Inbox, label management and assignment, AND/year filtering, date editing, review completion, Settings, PDF details, viewing, import, existing-text search, sharing, and PDF export. OCR and whole-library backups remain later increments.
 
-## Capture and access boundary
+## Library lock and capture boundary
 
-A share extension uses App Groups for a durable handoff to the app. Settle the exact main-app/shared-container layout before extension implementation. Capture may write a new payload without reading or exposing protected library content; authentication governs navigation to existing documents.
+`LibraryLockController` owns the optional, persisted `libraryLockEnabled` preference and one process-local authenticated session. A fresh process is locked when enabled. Enabling and disabling require successful `LAContext` device-owner authentication; `.deviceOwnerAuthentication` lets iOS offer Face ID and device-passcode fallback. Each attempt uses a fresh context with no grace/reuse interval. Backgrounding invalidates pending authentication and rejects stale success callbacks by generation. Transient inactivity covers content but does not relock or cancel authentication; backgrounding relocks immediately, and foregrounding never authenticates implicitly. The app includes the Face ID usage description generated from `project.yml`.
 
-A locked duplicate capture cannot offer an unauthenticated preview or disclose existing metadata. Use a generic capture result and require authentication to open/review existing content. This follows the accepted library-lock boundary rather than introducing a second privacy mode.
+One synchronized `LibraryAccessPolicy` is injected into the actor and UI. Every live-library read/write entry point checks it before new work; cleanup of already prepared export copies remains allowed. A transaction already authorized before backgrounding can finish, but its completion cannot disclose a duplicate while locked. A default store pointed at the live root also starts locked when the persisted preference is enabled; isolated custom roots remain useful for tests. All app UI uses the app-owned store and controller. This is an app access boundary, not PDF encryption or a replacement for iOS sandbox/Data Protection.
 
-Keep original files protected with suitable native file-protection settings. The app-level Face ID gate does not itself replace filesystem protection. Verify cold launch, app resume, share-sheet/file-picker lifecycle, and app-switcher snapshots without reauthenticating on every transient inactive event.
+A UIKit `PrivacyShield` is attached to the app window. Scene deactivation synchronously installs an opaque neutral cover before the next SwiftUI render/snapshot; SwiftUI scene-phase observation also maintains lock state. When fully locked, the window's accessibility elements are restricted to the cover, including above presented private sheets. Underlying SwiftUI navigation, details, and edits remain mounted, so backgrounding does not cancel system tasks. A narrowly registered native activity/file-picker/export task may finish using its already authorized independent copy or incoming input. On active return, the cover protects the app underneath that presentation; when the task ends, the full unlock cover returns. Inactive/background snapshots cover the entire window. Native task registration is explicit and balanced at presentation/dismissal; do not grant this exception to arbitrary app-owned sheets.
+
+`CaptureInbox` accepts only new PDF input and returns an opaque receipt UUID, never document identity, metadata, duplicate status, or a library count. It rejects sources inside the configured live library or capture queue, including symlink aliases. It coordinates/security-scopes the external read, validates through the same PDF validator, and publishes a complete protected capture directory by same-volume rename:
+
+```text
+Library/Application Support/DocNestCapture/
+  Staging/<UUID>/<filename>, capture.json
+  Pending/<UUID>/<filename>, capture.json
+```
+
+The schema-1 manifest contains capture UUID, safe incoming filename, and capture timestamp. The queue is separate from the live library; it requires no catalog access and does not deduplicate while locked. At unlocked opening, it drains through `LibraryStore.importPDF`, preserving capture date, duplicate metadata, naming, and Inbox rules. Remove a committed queue item only after import commits; termination between those steps becomes an exact-content retry, not a second document. Failed/interrupted imports and corrupt manifests retain pending payloads for retry; partially committed batches refresh visible library state. Relocking stops new imports and leaves the rest queued. Locked success/failure notices contain only incoming-capture information. Corrupt committed captures are never silently discarded.
+
+Live originals, organization snapshots, queue payloads/manifests, and export directories use `completeUntilFirstUserAuthentication`. This supports capture and already authorized system tasks after the device's first unlock without claiming access before first unlock. The Face ID gate does not itself encrypt files; stronger file protection must preserve the accepted capture/task behavior and be separately qualified. The share extension in increment 5 will use a durable App Group handoff into this private queue and must not read the live catalog. App Group identifiers, signing, and scanner entry points are not configured in increment 4.
+
+Simulator tests inject authentication only in Debug with a valid UUID-scoped synthetic test root and an isolated preferences suite. Production/Release never contains this bypass. Tests cover lifecycle, stale callbacks, locked store entry points, presented-sheet accessibility, native task completion, cold launch, capture rejection/duplicates/aliases, and interrupted drains. Actual Face ID/passcode behavior, hardware file protection, and app-switcher snapshot capture require physical-iPhone checks; these remain pending in PLAN.md at the user's request.
 
 ## Native capabilities
 
@@ -98,7 +112,7 @@ Define a versioned backup manifest and payload layout in increment 9. Validate p
 | --- | --- | --- |
 | Local persistence and file layout | Resolved in 1; see schema above | Relaunch, interrupted-write recovery, duplicate/name safety, no Files visibility |
 | Resource test corpus and timing targets | Baseline in 1; refine in 6 and 10 | 300 synthetic PDFs; see PLAN.md for measurements; set device targets as processing is added |
-| Share staging and file protection | 4–5 | Locked capture, process interruption, access boundaries, lifecycle tests |
+| Share staging and file protection | Private queue and protection chosen in 4; App Group handoff in 5 | Locked capture, process interruption, access boundaries, lifecycle tests |
 | Date extraction, multilingual parsing, and search indexing | 6 | English/German fixtures, ambiguous dates, page mapping, user-edit precedence |
 | Suggestion matching and history | 7 | Repeatable fixtures, explicit acceptance, no regressions to manual edits |
 | Backup encoding, label-ID matching, review/deletion metadata coverage | 9 | Round-trip, corrupt input, duplicate and metadata-conflict tests |

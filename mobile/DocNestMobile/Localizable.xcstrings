@@ -1103,6 +1103,146 @@
           }
         }
       }
+    },
+    "Authenticate to access your private DocNest library.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authenticate to access your private DocNest library."
+          }
+        }
+      }
+    },
+    "Set an iPhone passcode before enabling the library lock.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set an iPhone passcode before enabling the library lock."
+          }
+        }
+      }
+    },
+    "Authentication didn’t complete. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication didn’t complete. Try again."
+          }
+        }
+      }
+    },
+    "Your library is locked.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your library is locked."
+          }
+        }
+      }
+    },
+    "Unlock Library": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock Library"
+          }
+        }
+      }
+    },
+    "Authenticating…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authenticating…"
+          }
+        }
+      }
+    },
+    "PDF saved. Unlock your library to review it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF saved. Unlock your library to review it."
+          }
+        }
+      }
+    },
+    "The PDF couldn’t be saved. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The PDF couldn’t be saved. Try again."
+          }
+        }
+      }
+    },
+    "Unlock your library to continue.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock your library to continue."
+          }
+        }
+      }
+    },
+    "A pending capture couldn’t be read safely. Its files have been kept for retry.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A pending capture couldn’t be read safely. Its files have been kept for retry."
+          }
+        }
+      }
+    },
+    "Choose an incoming PDF copy outside DocNest’s private storage.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose an incoming PDF copy outside DocNest’s private storage."
+          }
+        }
+      }
+    },
+    "Privacy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy"
+          }
+        }
+      }
+    },
+    "Face ID & Passcode Lock": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Face ID & Passcode Lock"
+          }
+        }
+      }
+    },
+    "Lock Library, Inbox, and review when you leave DocNest. Incoming PDF capture can finish without opening your library.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock Library, Inbox, and review when you leave DocNest. Incoming PDF capture can finish without opening your library."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

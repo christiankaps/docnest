@@ -1,6 +1,7 @@
 #if DEBUG
 import PDFKit
 import UIKit
+import LocalAuthentication
 
 /// Synthetic data only. Release builds contain neither fixture generation nor test launch routing.
 @MainActor
@@ -8,6 +9,19 @@ enum DevelopmentFixtures {
     static var testRoot: URL? {
         guard let token = ProcessInfo.processInfo.environment["DOCNEST_UI_TEST_SESSION"], UUID(uuidString: token) != nil else { return nil }
         return URL.applicationSupportDirectory.appending(path: "UITests/\(token)")
+    }
+
+    static var testDefaults: UserDefaults? {
+        guard testRoot != nil, let token = ProcessInfo.processInfo.environment["DOCNEST_UI_TEST_SESSION"] else { return nil }
+        let defaults = UserDefaults(suiteName: "DocNestMobile.UITests.\(token)")
+        if ProcessInfo.processInfo.environment["DOCNEST_UI_TEST_LOCK_ENABLED"] == "1" { defaults?.set(true, forKey: "libraryLockEnabled") }
+        return defaults
+    }
+
+    static var testAuthenticator: (any LibraryAuthenticating)? {
+        guard testRoot != nil, let outcome = ProcessInfo.processInfo.environment["DOCNEST_UI_TEST_AUTH"],
+              ["success", "failure"].contains(outcome) else { return nil }
+        return FixtureAuthenticator(succeeds: outcome == "success")
     }
 
     static func seed(_ store: LibraryStore) async throws {
@@ -35,5 +49,12 @@ enum DevelopmentFixtures {
             }
         }
     }
+}
+@MainActor
+private final class FixtureAuthenticator: LibraryAuthenticating {
+    let succeeds: Bool
+    init(succeeds: Bool) { self.succeeds = succeeds }
+    func authenticate(reason: String) async throws { if !succeeds { throw LAError(.authenticationFailed) } }
+    func cancel() {}
 }
 #endif

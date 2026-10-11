@@ -65,10 +65,13 @@ struct PDFSearchHit: Identifiable, Sendable {
 }
 
 enum LibraryError: LocalizedError, Equatable {
-    case encryptedPDF, invalidPDF, invalidLibrary, unsupportedVersion, notLoaded, missingDocument, invalidLabel, invalidDate, invalidFilename
+    case encryptedPDF, invalidPDF, invalidLibrary, unsupportedVersion, notLoaded, missingDocument, invalidLabel, invalidDate, invalidFilename, libraryLocked, invalidCapture, invalidCaptureSource
 
     var errorDescription: String? {
         switch self {
+        case .libraryLocked: String(localized: "Unlock your library to continue.")
+        case .invalidCaptureSource: String(localized: "Choose an incoming PDF copy outside DocNest’s private storage.")
+        case .invalidCapture: String(localized: "A pending capture couldn’t be read safely. Its files have been kept for retry.")
         case .invalidFilename: String(localized: "Enter a nonempty document filename.")
         case .invalidLabel: String(localized: "Use a unique, nonempty label name.")
         case .invalidDate: String(localized: "Choose a valid document date.")

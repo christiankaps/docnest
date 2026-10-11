@@ -10,18 +10,23 @@
 		0B4120D2121E33F038AB0C1A /* LibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538357E8BF055A8C5F53143A /* LibraryModel.swift */; };
 		1E60CFB93D65D555EF167289 /* OrganizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E90EFE9005B9D7C31A3171DA /* OrganizationTests.swift */; };
 		2DE0AEAFD0E04A1796D1E640 /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F9661B182B8E2EF35B9C83 /* LibraryStore.swift */; };
+		5C0BB7DFD8E053EC04716BD1 /* PrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01AC175DD882D5BCDB798C77 /* PrivacyTests.swift */; };
 		62BE901FEBF092BFDBFEEF86 /* LibraryOrganization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 085930FE9FE155FC219D2700 /* LibraryOrganization.swift */; };
 		746E3DF201F7C1DAA414F636 /* DocNestMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED4A9F451DEBFE95B55EB6CE /* DocNestMobileApp.swift */; };
 		7D673CD34B7C26FC3AC6100F /* LibraryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C18DC14FCB5FA57DAEAC93FC /* LibraryStoreTests.swift */; };
 		9152EA6C017944CEFCD36900 /* LibraryDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD118ADD739A3681CD788FFA /* LibraryDocument.swift */; };
 		947F3DC7BBB2D68B09C96145 /* LibraryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07037B12926671EE9F615C8E /* LibraryUITests.swift */; };
+		9842ADF8D6FC22DC337A9E9E /* LibraryAccessPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7950658686BC3626CEDFA206 /* LibraryAccessPolicy.swift */; };
 		9A98138A166F6A1D973080A2 /* DevelopmentFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAE74C7EAC7CFC48CC0FF8A /* DevelopmentFixtures.swift */; };
 		9D75D0E788D4F32ECE2E676B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = FF5A9CA554F1DD780FCC60E2 /* Localizable.xcstrings */; };
 		A672C069896B87DF701DDDBF /* OrganizationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98B1C39616A4A523904EEAAB /* OrganizationViews.swift */; };
 		B0E6B2257CF1821CEFBED621 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E798228EF257C707318832C /* ContentView.swift */; };
 		B4309277131018485A72D641 /* DocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103C6A1773AAC622B1D8A56D /* DocumentView.swift */; };
+		BD8236AF644AAFE90ACBCE4E /* PrivacyShield.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACB1D55523986D33CAA9F7DA /* PrivacyShield.swift */; };
 		D88218F64F99431F5D5CFE70 /* ManagementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CDFE87E60035C844A744745 /* ManagementTests.swift */; };
 		D9465CBD2824C1E3197D74FA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9D9B228273DDB072E8117480 /* Assets.xcassets */; };
+		E0EBEDB93FCDF841F481EDBD /* LibraryLockController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 649F9A9E78CD09202F369DAF /* LibraryLockController.swift */; };
+		E3E6A0061E0E052E5EA5049D /* CaptureInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD826F0853048A0D845C4CC7 /* CaptureInbox.swift */; };
 		FFA8AC3F310C2EAACC0C76EF /* ManagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6009F23A93BCE306995065C /* ManagementViews.swift */; };
 /* End PBXBuildFile section */
 
@@ -43,6 +48,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		01AC175DD882D5BCDB798C77 /* PrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyTests.swift; sourceTree = "<group>"; };
 		07037B12926671EE9F615C8E /* LibraryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryUITests.swift; sourceTree = "<group>"; };
 		085930FE9FE155FC219D2700 /* LibraryOrganization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOrganization.swift; sourceTree = "<group>"; };
 		103C6A1773AAC622B1D8A56D /* DocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentView.swift; sourceTree = "<group>"; };
@@ -52,16 +58,20 @@
 		3CDFE87E60035C844A744745 /* ManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagementTests.swift; sourceTree = "<group>"; };
 		538357E8BF055A8C5F53143A /* LibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModel.swift; sourceTree = "<group>"; };
 		56C2EA346A3E09DB133727A2 /* DocNestMobileUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DocNestMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		649F9A9E78CD09202F369DAF /* LibraryLockController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryLockController.swift; sourceTree = "<group>"; };
 		6AA19B93CDAD50F7E3AE89C1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7950658686BC3626CEDFA206 /* LibraryAccessPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryAccessPolicy.swift; sourceTree = "<group>"; };
 		7B93E969C6B0246D1C80FB8C /* DocNestMobileTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DocNestMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		98B1C39616A4A523904EEAAB /* OrganizationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationViews.swift; sourceTree = "<group>"; };
 		9D9B228273DDB072E8117480 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		ACB1D55523986D33CAA9F7DA /* PrivacyShield.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyShield.swift; sourceTree = "<group>"; };
 		BFAE74C7EAC7CFC48CC0FF8A /* DevelopmentFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevelopmentFixtures.swift; sourceTree = "<group>"; };
 		C18DC14FCB5FA57DAEAC93FC /* LibraryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStoreTests.swift; sourceTree = "<group>"; };
 		DD118ADD739A3681CD788FFA /* LibraryDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDocument.swift; sourceTree = "<group>"; };
 		E90EFE9005B9D7C31A3171DA /* OrganizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationTests.swift; sourceTree = "<group>"; };
 		ED4A9F451DEBFE95B55EB6CE /* DocNestMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestMobileApp.swift; sourceTree = "<group>"; };
 		F6009F23A93BCE306995065C /* ManagementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagementViews.swift; sourceTree = "<group>"; };
+		FD826F0853048A0D845C4CC7 /* CaptureInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureInbox.swift; sourceTree = "<group>"; };
 		FF5A9CA554F1DD780FCC60E2 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -97,8 +107,20 @@
 				F6009F23A93BCE306995065C /* ManagementViews.swift */,
 				98B1C39616A4A523904EEAAB /* OrganizationViews.swift */,
 				BC4A16451588C3739CF65612 /* Library */,
+				AEAE563D04D8B96CFFE2D457 /* Privacy */,
 			);
 			path = DocNestMobile;
+			sourceTree = "<group>";
+		};
+		AEAE563D04D8B96CFFE2D457 /* Privacy */ = {
+			isa = PBXGroup;
+			children = (
+				FD826F0853048A0D845C4CC7 /* CaptureInbox.swift */,
+				7950658686BC3626CEDFA206 /* LibraryAccessPolicy.swift */,
+				649F9A9E78CD09202F369DAF /* LibraryLockController.swift */,
+				ACB1D55523986D33CAA9F7DA /* PrivacyShield.swift */,
+			);
+			path = Privacy;
 			sourceTree = "<group>";
 		};
 		B002682DF8052F01095DD6CC /* DocNestMobileTests */ = {
@@ -107,6 +129,7 @@
 				C18DC14FCB5FA57DAEAC93FC /* LibraryStoreTests.swift */,
 				3CDFE87E60035C844A744745 /* ManagementTests.swift */,
 				E90EFE9005B9D7C31A3171DA /* OrganizationTests.swift */,
+				01AC175DD882D5BCDB798C77 /* PrivacyTests.swift */,
 			);
 			path = DocNestMobileTests;
 			sourceTree = "<group>";
@@ -251,6 +274,7 @@
 				7D673CD34B7C26FC3AC6100F /* LibraryStoreTests.swift in Sources */,
 				D88218F64F99431F5D5CFE70 /* ManagementTests.swift in Sources */,
 				1E60CFB93D65D555EF167289 /* OrganizationTests.swift in Sources */,
+				5C0BB7DFD8E053EC04716BD1 /* PrivacyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,16 +282,20 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E3E6A0061E0E052E5EA5049D /* CaptureInbox.swift in Sources */,
 				B0E6B2257CF1821CEFBED621 /* ContentView.swift in Sources */,
 				9A98138A166F6A1D973080A2 /* DevelopmentFixtures.swift in Sources */,
 				746E3DF201F7C1DAA414F636 /* DocNestMobileApp.swift in Sources */,
 				B4309277131018485A72D641 /* DocumentView.swift in Sources */,
+				9842ADF8D6FC22DC337A9E9E /* LibraryAccessPolicy.swift in Sources */,
 				9152EA6C017944CEFCD36900 /* LibraryDocument.swift in Sources */,
+				E0EBEDB93FCDF841F481EDBD /* LibraryLockController.swift in Sources */,
 				0B4120D2121E33F038AB0C1A /* LibraryModel.swift in Sources */,
 				62BE901FEBF092BFDBFEEF86 /* LibraryOrganization.swift in Sources */,
 				2DE0AEAFD0E04A1796D1E640 /* LibraryStore.swift in Sources */,
 				FFA8AC3F310C2EAACC0C76EF /* ManagementViews.swift in Sources */,
 				A672C069896B87DF701DDDBF /* OrganizationViews.swift in Sources */,
+				BD8236AF644AAFE90ACBCE4E /* PrivacyShield.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -28,6 +28,7 @@ targets:
       properties:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSFaceIDUsageDescription: Authenticate to access your private DocNest library.
         UIFileSharingEnabled: false
         LSSupportsOpeningDocumentsInPlace: false
     settings:

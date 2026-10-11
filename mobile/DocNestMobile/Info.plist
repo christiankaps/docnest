@@ -20,6 +20,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<false/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Authenticate to access your private DocNest library.</string>
 	<key>UIFileSharingEnabled</key>
 	<false/>
 </dict>

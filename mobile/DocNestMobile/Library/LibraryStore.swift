@@ -8,6 +8,7 @@ actor LibraryStore {
     typealias Checkpoint = @Sendable (ImportPhase) throws -> Void
 
     let root: URL
+    nonisolated let accessPolicy: LibraryAccessPolicy
     private let exportRoot: URL
     private let checkpoint: Checkpoint
     private let now: @Sendable () -> Date
@@ -20,8 +21,10 @@ actor LibraryStore {
     }
 
     init(root: URL = LibraryStore.defaultRoot, exportRoot: URL = URL.temporaryDirectory.appending(path: "DocNestExports"),
-         checkpoint: @escaping Checkpoint = { _ in }, now: @escaping @Sendable () -> Date = { Date() }) {
+         checkpoint: @escaping Checkpoint = { _ in }, now: @escaping @Sendable () -> Date = { Date() }, accessPolicy: LibraryAccessPolicy? = nil) {
         self.root = root
+        let isLiveRoot = root.resolvingSymlinksInPath().standardizedFileURL.path == Self.defaultRoot.resolvingSymlinksInPath().standardizedFileURL.path
+        self.accessPolicy = accessPolicy ?? LibraryAccessPolicy(locked: isLiveRoot && UserDefaults.standard.bool(forKey: "libraryLockEnabled"))
         self.exportRoot = exportRoot
         self.checkpoint = checkpoint
         self.now = now
@@ -31,6 +34,7 @@ actor LibraryStore {
     private var stagingDirectory: URL { root.appending(path: "Staging") }
 
     func load() throws -> [LibraryDocument] {
+        try accessPolicy.requireUnlocked()
         records = nil
         organization = nil
         try createDirectory(documentsDirectory)
@@ -90,6 +94,7 @@ actor LibraryStore {
     }
 
     func importPDF(from source: URL, importedAt: Date = Date()) throws -> ImportResult {
+        try accessPolicy.requireUnlocked()
         guard var current = records else { throw LibraryError.notLoaded }
         let access = source.startAccessingSecurityScopedResource()
         defer { if access { source.stopAccessingSecurityScopedResource() } }
@@ -135,17 +140,20 @@ actor LibraryStore {
     }
 
     func allDocuments() throws -> [LibraryDocument] {
+        try accessPolicy.requireUnlocked()
         guard let records else { throw LibraryError.notLoaded }
         return records.filter { $0.deletedAt == nil }
     }
 
     func allLabels() throws -> [LibraryLabel] {
+        try accessPolicy.requireUnlocked()
         guard let organization, records != nil else { throw LibraryError.notLoaded }
         return organization.labels.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     @discardableResult
     func createLabel(name: String) throws -> LibraryLabel {
+        try accessPolicy.requireUnlocked()
         guard var next = organization, records != nil else { throw LibraryError.notLoaded }
         let label = LibraryLabel(id: UUID(), starter: nil, customName: try labelName(name, excluding: nil))
         next.labels.append(label)
@@ -154,6 +162,7 @@ actor LibraryStore {
     }
 
     func renameLabel(_ id: UUID, name: String) throws {
+        try accessPolicy.requireUnlocked()
         guard var next = organization, records != nil else { throw LibraryError.notLoaded }
         guard let index = next.labels.firstIndex(where: { $0.id == id }) else { throw LibraryError.invalidLabel }
         next.labels[index].customName = try labelName(name, excluding: id)
@@ -161,6 +170,7 @@ actor LibraryStore {
     }
 
     func deleteLabel(_ id: UUID) throws {
+        try accessPolicy.requireUnlocked()
         guard var next = organization, records != nil else { throw LibraryError.notLoaded }
         next.labels.removeAll { $0.id == id }
         for key in Array(next.documents.keys) { next.documents[key]?.labelIDs.remove(id) }
@@ -168,6 +178,7 @@ actor LibraryStore {
     }
 
     func updateDocument(_ id: UUID, labels: Set<UUID>? = nil, manualDate: DocumentDate? = nil, reviewed: Bool = false) throws {
+        try accessPolicy.requireUnlocked()
         guard var next = organization, let records else { throw LibraryError.notLoaded }
         guard let record = records.first(where: { $0.id == id && $0.deletedAt == nil }) else { throw LibraryError.missingDocument }
         var edit = next.documents[id.uuidString] ?? DocumentOrganization(reviewState: record.reviewState)
@@ -185,11 +196,13 @@ actor LibraryStore {
     }
 
     func recentlyDeleted() throws -> [LibraryDocument] {
+        try accessPolicy.requireUnlocked()
         guard let records else { throw LibraryError.notLoaded }
         return records.filter { $0.deletedAt != nil }.sorted { $0.deletedAt! > $1.deletedAt! }
     }
 
     func renameDocument(_ id: UUID, name: String) throws {
+        try accessPolicy.requireUnlocked()
         guard var next = organization, let records else { throw LibraryError.notLoaded }
         guard let record = records.first(where: { $0.id == id && $0.deletedAt == nil }) else { throw LibraryError.missingDocument }
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw LibraryError.invalidFilename }
@@ -200,6 +213,7 @@ actor LibraryStore {
     }
 
     func addLabels(_ labels: Set<UUID>, to ids: Set<UUID>) throws {
+        try accessPolicy.requireUnlocked()
         guard var next = organization, let records else { throw LibraryError.notLoaded }
         guard labels.isSubset(of: Set(next.labels.map(\.id))), ids.isSubset(of: Set(records.filter { $0.deletedAt == nil }.map(\.id))) else { throw LibraryError.invalidLabel }
         for record in records where ids.contains(record.id) {
@@ -211,6 +225,7 @@ actor LibraryStore {
     }
 
     func deleteDocument(_ id: UUID) throws {
+        try accessPolicy.requireUnlocked()
         guard var next = organization, let record = records?.first(where: { $0.id == id && $0.deletedAt == nil }) else { throw LibraryError.missingDocument }
         var edit = next.documents[id.uuidString] ?? DocumentOrganization(reviewState: record.reviewState)
         edit.deletedAt = now()
@@ -219,6 +234,7 @@ actor LibraryStore {
     }
 
     func recover(_ id: UUID) throws {
+        try accessPolicy.requireUnlocked()
         guard var next = organization, let record = records?.first(where: { $0.id == id && $0.deletedAt != nil }),
               now().timeIntervalSince(record.deletedAt!) < 30 * 86400 else { throw LibraryError.missingDocument }
         next.documents[id.uuidString]?.deletedAt = nil
@@ -227,6 +243,7 @@ actor LibraryStore {
 
     /// Commit durable tombstones first; interrupted or failed removals are retried on the next execution.
     func cleanupExpired() throws {
+        try accessPolicy.requireUnlocked()
         guard var next = organization, let records else { throw LibraryError.notLoaded }
         let expired = records.filter { $0.deletedAt.map { now().timeIntervalSince($0) >= 30 * 86400 } ?? false }
         if !expired.isEmpty {
@@ -248,6 +265,7 @@ actor LibraryStore {
     }
 
     func exportCopies(for ids: Set<UUID>) throws -> [URL] {
+        try accessPolicy.requireUnlocked()
         var copies: [URL] = []
         do {
             for id in ids.sorted(by: { $0.uuidString < $1.uuidString }) { copies.append(try exportCopy(for: id)) }
@@ -302,12 +320,14 @@ actor LibraryStore {
     }
 
     func originalURL(for id: UUID) throws -> URL {
+        try accessPolicy.requireUnlocked()
         guard records?.contains(where: { $0.id == id && $0.deletedAt == nil }) == true else { throw LibraryError.missingDocument }
         return documentsDirectory.appending(path: id.uuidString).appending(path: "original.pdf")
     }
 
     /// Always creates a distinct copy, never a hard link or a URL into the live library.
     func exportCopy(for id: UUID) throws -> URL {
+        try accessPolicy.requireUnlocked()
         guard let record = records?.first(where: { $0.id == id && $0.deletedAt == nil }) else { throw LibraryError.missingDocument }
         let folder = exportRoot.appending(path: UUID().uuidString)
         try createDirectory(folder)
@@ -323,6 +343,7 @@ actor LibraryStore {
     }
 
     func search(document id: UUID, text: String) throws -> [PDFSearchHit] {
+        try accessPolicy.requireUnlocked()
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         guard let pdf = PDFDocument(url: try originalURL(for: id)) else { throw LibraryError.invalidPDF }
         return pdf.findString(text, withOptions: [.caseInsensitive]).compactMap { match in
@@ -344,7 +365,7 @@ actor LibraryStore {
         return calendar
     }
 
-    private static func validatePDF(at url: URL) throws -> Int {
+    static func validatePDF(at url: URL) throws -> Int {
         guard try FileManager.default.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType == .typeRegular else {
             throw LibraryError.invalidPDF
         }

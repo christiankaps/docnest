@@ -55,6 +55,7 @@ private struct DocumentActions: ViewModifier {
             } message: { Text("Recover this document from Recently Deleted for 30 days.") }
             .sheet(isPresented: $labels) { DocumentLabelsView(model: model, record: record) }
             .sheet(isPresented: $rename) { RenameDocumentView(model: model, record: record) }
+            .librarySystemTask(model.access, active: transfer != nil)
             .sheet(item: $transfer, onDismiss: {
                 let exported = copies
                 copies = []

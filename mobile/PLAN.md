@@ -1,6 +1,6 @@
 # Implementation plan
 
-[PROJECT.md](PROJECT.md) defines accepted behavior; [ARCHITECTURE.md](ARCHITECTURE.md) records technical boundaries and engineering decisions. Increments 0–3 are finalized. Increment 4 is next and has not started.
+[PROJECT.md](PROJECT.md) defines accepted behavior; [ARCHITECTURE.md](ARCHITECTURE.md) records technical boundaries and engineering decisions. Increments 0–3 are finalized. Increment 4 is implemented and simulator-verified; physical-iPhone qualification is pending because the user has no device available (2026-10-11). Increment 5 must not start until 4 is finalized.
 
 Implement increments in order. Check an item only after implementation and required verification. Finalize each increment by completing every checkbox, recording its outcome, checks, and remaining limitations here, and committing and pushing its changes to main before starting the next. Commit and push after every increment without waiting for another request. A build alone does not verify product behavior. Add meaningful automated checks to `make verify` as behavior is introduced; perform required device checks before finalization.
 
@@ -63,13 +63,20 @@ Verification: `make verify` passed 21 unit/integration tests and 5 UI tests on t
 
 Resource check: the existing 300-PDF corpus passed; final reload 0.080 s and largest-PDF open/first-page render 0.005 s on the simulator. These remain simulator measurements. Cleanup is opportunistic, not an exact-time background guarantee. Physical-device authentication/camera/file-protection checks remain in their scheduled increments; no later increment was started.
 
-## 4. Library lock and capture boundary
+## 4. Library lock and capture boundary — device verification pending
 
-- [ ] Add optional Face ID authentication with device-passcode fallback for Library, Inbox, and review.
-- [ ] Relock immediately on leaving the app and require authentication on returning to protected content. Let active system share/picker tasks finish and avoid interrupting them on transient inactivity.
-- [ ] Cover protected content in app-switcher snapshots with a neutral DocNest cover when the lock is enabled.
-- [ ] Establish a restricted capture route that can accept new payloads without unlocking or exposing existing documents. Define staging/file-protection choices for the capture increment.
-- [ ] Verify lifecycle and navigation bypass cases, including staged capture input and locked duplicates. Test authentication and snapshots on a physical iPhone. Run `make verify`, record outcome, and finalize this increment.
+- [x] Add optional Face ID authentication with device-passcode fallback for Library, Inbox, and review.
+- [x] Relock immediately on leaving the app and require authentication on returning to protected content. Let active system share/picker tasks finish and avoid interrupting them on transient inactivity.
+- [x] Cover protected content in app-switcher snapshots with a neutral DocNest cover when the lock is enabled.
+- [x] Establish a restricted capture route that can accept new payloads without unlocking or exposing existing documents. Define staging/file-protection choices for the capture increment.
+- [x] Verify lifecycle and navigation bypass cases, including staged capture input and locked duplicates. Run `make verify` and record the simulator outcome.
+- [ ] Test real authentication, file protection, and app-switcher snapshots on a physical iPhone, then finalize this increment.
+
+Outcome, 2026-10-11: implemented optional device-owner authentication with Face ID/passcode fallback, a synchronized store access gate, immediate background relocking, generation-based rejection of stale authentication callbacks, and a neutral UIKit window cover above private sheets with accessibility restricted to the cover. Native share/picker/export tasks remain mounted and may finish above covered app content. The cover scrolls for accessibility text sizes. A separate private capture queue accepts validated incoming copies without reading the catalog or disclosing duplicate metadata; unlocked draining uses the shared import pipeline and safely retries interrupted work. Private-library and capture-queue source URLs, including symlink aliases, are rejected. File protection and the future App Group handoff boundary are documented in ARCHITECTURE.md.
+
+Verification: the complete `make verify` suite passed 29 unit/integration tests and 8 UI tests on the iOS 27.0 iPhone 18 Pro simulator. Coverage includes enabling/disabling and cold launch, authentication failure/cancellation and stale completion barriers, every protected store entry point, locked duplicate capture, encrypted/corrupt inputs, metadata preservation, failed/interrupted draining, relocking during a batch, private-source alias rejection, presented Details accessibility, native share/picker completion after backgrounding, and reachable retry/unlock controls at the largest accessibility text size. The existing library/organization/recovery workflows and 300-PDF resource corpus pass. A read-only code/diff review and `git diff --check` were performed; the retained large-text screenshot was inspected. Xcode initially stalled after test completion; the equivalent full gate completed with verbose diagnostic collection disabled and a fresh result bundle through the existing XCODEBUILD override. No permanent verification policy was changed.
+
+Pending: the user explicitly reported no physical iPhone available and requested device verification remain pending. Real Face ID/passcode behavior, hardware file protection, and app-switcher snapshot timing remain unverified; the manual checklist is in README.md. A Release build for this increment has not been run. Increment 4 is not finalized, and increment 5 has not started.
 
 ## 5. Camera and incoming shared PDFs
 

@@ -4,6 +4,8 @@ import Observation
 @MainActor @Observable
 final class LibraryModel {
     let store: LibraryStore
+    let access: LibraryLockController?
+    private let captures: CaptureInbox?
     var labels: [LibraryLabel] = []
     var deletedDocuments: [LibraryDocument] = []
     var isSaving = false
@@ -14,7 +16,11 @@ final class LibraryModel {
     var actionError: String?
     var duplicate: LibraryDocument?
 
-    init(store: LibraryStore = LibraryStore()) { self.store = store }
+    init(store: LibraryStore = LibraryStore(), access: LibraryLockController? = nil, captures: CaptureInbox? = nil) {
+        self.store = store
+        self.access = access
+        self.captures = captures
+    }
 
     func load() async {
         isLoading = true
@@ -33,13 +39,50 @@ final class LibraryModel {
         isImporting = true
         defer { isImporting = false }
         do {
-            let result = try await store.importPDF(from: source)
-            documents = try await store.allDocuments()
-            deletedDocuments = try await store.recentlyDeleted()
-            if result.isDuplicate { duplicate = result.document }
+            if let captures {
+                _ = try await captures.acceptPDF(from: source)
+                if store.accessPolicy.isLocked {
+                    access?.captureNotice = String(localized: "PDF saved. Unlock your library to review it.")
+                } else {
+                    await drainCaptures()
+                    if store.accessPolicy.isLocked { access?.captureNotice = String(localized: "PDF saved. Unlock your library to review it.") }
+                }
+            } else {
+                let result = try await store.importPDF(from: source)
+                try await refresh()
+                if !store.accessPolicy.isLocked && result.isDuplicate { duplicate = result.document }
+            }
         } catch {
-            actionError = error.localizedDescription
+            if store.accessPolicy.isLocked {
+                access?.captureNotice = (error as? LibraryError)?.errorDescription ?? String(localized: "The PDF couldn’t be saved. Try again.")
+            } else { actionError = error.localizedDescription }
         }
+    }
+
+    func drainCaptures() async {
+        guard let captures, !store.accessPolicy.isLocked else { return }
+        do {
+            let results = try await captures.drain(into: store)
+            guard !store.accessPolicy.isLocked else { return }
+            try await refresh()
+            duplicate = results.last(where: { $0.isDuplicate })?.document
+        } catch {
+            // Background relocking leaves the remaining queue intact; retry after the next unlock.
+            if !store.accessPolicy.isLocked {
+                try? await refresh()
+                actionError = error.localizedDescription
+            }
+        }
+    }
+
+    private func refresh() async throws {
+        let current = try await store.allDocuments()
+        let currentLabels = try await store.allLabels()
+        let deleted = try await store.recentlyDeleted()
+        guard !store.accessPolicy.isLocked else { return }
+        documents = current
+        labels = currentLabels
+        deletedDocuments = deleted
     }
 
     func document(_ id: UUID) -> LibraryDocument? { documents.first { $0.id == id } }

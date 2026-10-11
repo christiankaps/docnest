@@ -25,6 +25,6 @@ test-unit:
 	$(XCODEBUILD) -destination '$(DESTINATION)' -parallel-testing-enabled NO -only-testing:DocNestMobileTests test
 
 test-ui:
-	$(XCODEBUILD) -destination '$(DESTINATION)' -parallel-testing-enabled NO -only-testing:$(UI_TESTS) test
+	$(XCODEBUILD) -destination '$(DESTINATION)' -parallel-testing-enabled NO $(foreach test,$(UI_TESTS),-only-testing:$(test)) test
 
 verify: test

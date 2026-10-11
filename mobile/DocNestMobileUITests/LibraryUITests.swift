@@ -132,6 +132,115 @@ final class LibraryUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts.matching(identifier: "Taxes").count, 2)
     }
 
+    private func lockedTestApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchEnvironment["DOCNEST_UI_TEST_SESSION"] = UUID().uuidString
+        app.launchEnvironment["DOCNEST_UI_TEST_SEED"] = "1"
+        app.launchEnvironment["DOCNEST_UI_TEST_AUTH"] = "success"
+        app.launch()
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 15))
+        app.buttons["Settings"].tap()
+        let toggle = app.switches["libraryLockToggle"]
+        if toggle.switches.firstMatch.exists { toggle.switches.firstMatch.tap() } else { toggle.tap() }
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '1'"), object: app.switches["libraryLockToggle"])
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed, app.debugDescription)
+        app.navigationBars["Settings"].buttons["Done"].tap()
+        return app
+    }
+
+    func testLockProtectsPresentedDetailsBackgroundAndColdLaunch() {
+        let app = lockedTestApp()
+        app.buttons["allDocuments"].tap()
+        app.staticTexts["Invoice"].tap()
+        app.buttons["documentDetails"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Invoice.pdf")).firstMatch.waitForExistence(timeout: 5))
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+        app.activate()
+        XCTAssertTrue(app.buttons["unlockLibrary"].waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertFalse(app.staticTexts["Invoice.pdf"].exists)
+        XCTAssertFalse(app.buttons["Edit Labels"].exists)
+        capture(app, name: "Neutral locked cover above Details")
+        app.buttons["unlockLibrary"].tap()
+        XCTAssertTrue(app.buttons["Edit Labels"].waitForExistence(timeout: 5), app.debugDescription)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["unlockLibrary"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["allDocuments"].exists)
+        XCTAssertFalse(app.tabBars.buttons["Inbox"].exists)
+        capture(app, name: "Cold-launch locked library")
+        app.buttons["unlockLibrary"].tap()
+        XCTAssertTrue(app.buttons["allDocuments"].waitForExistence(timeout: 10))
+        app.buttons["Settings"].tap()
+        let toggle = app.switches["libraryLockToggle"]
+        if toggle.switches.firstMatch.exists { toggle.switches.firstMatch.tap() } else { toggle.tap() }
+        let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '0'"), object: app.switches["libraryLockToggle"])
+        XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 5), .completed)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["allDocuments"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["unlockLibrary"].exists)
+    }
+
+    func testLockLetsNativeShareAndPickerFinishAfterBackground() {
+        let app = lockedTestApp()
+        app.buttons["allDocuments"].tap()
+        app.staticTexts["Invoice"].tap()
+        app.buttons["sharePDF"].tap()
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5))
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+        app.activate()
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertFalse(app.buttons["documentDetails"].exists)
+        capture(app, name: "Native share continues above locked content")
+        XCTAssertTrue(app.buttons["header.closeButton"].waitForExistence(timeout: 5))
+        app.buttons["header.closeButton"].tap()
+        XCTAssertTrue(app.buttons["unlockLibrary"].waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["unlockLibrary"].tap()
+        XCTAssertTrue(app.buttons["documentDetails"].waitForExistence(timeout: 5))
+        app.navigationBars.buttons["Documents"].tap()
+        app.navigationBars.buttons["Library"].tap()
+        app.buttons["importPDF"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+        app.activate()
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5), app.debugDescription)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["unlockLibrary"].waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertFalse(app.buttons["allDocuments"].exists)
+        app.buttons["unlockLibrary"].tap()
+        XCTAssertTrue(app.buttons["allDocuments"].waitForExistence(timeout: 5))
+    }
+
+    func testLargeTextLockedAuthenticationFailureKeepsRetryReachable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launchEnvironment["DOCNEST_UI_TEST_SESSION"] = UUID().uuidString
+        app.launchEnvironment["DOCNEST_UI_TEST_SEED"] = "1"
+        app.launchEnvironment["DOCNEST_UI_TEST_AUTH"] = "failure"
+        app.launchEnvironment["DOCNEST_UI_TEST_LOCK_ENABLED"] = "1"
+        app.launch()
+        XCTAssertTrue(app.buttons["unlockLibrary"].waitForExistence(timeout: 10))
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["unlockLibrary"].isHittable)
+        app.buttons["unlockLibrary"].tap()
+        XCTAssertTrue(app.staticTexts["Authentication didn’t complete. Try again."].waitForExistence(timeout: 5))
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["unlockLibrary"].isHittable, app.debugDescription)
+        XCTAssertFalse(app.buttons["allDocuments"].exists)
+        capture(app, name: "Large-text locked authentication retry")
+        app.terminate()
+        app.launchEnvironment["DOCNEST_UI_TEST_AUTH"] = "success"
+        app.launch()
+        XCTAssertTrue(app.buttons["unlockLibrary"].waitForExistence(timeout: 10))
+        app.swipeUp()
+        app.buttons["unlockLibrary"].tap()
+        XCTAssertTrue(app.buttons["allDocuments"].waitForExistence(timeout: 10))
+    }
+
     private func capture(_ app: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
