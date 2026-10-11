@@ -22,7 +22,8 @@ The Makefile now includes Debug/device/Release builds, standalone Release analys
 
 ## Remaining physical-device feasibility gate
 
-- [ ] Configure the user's signing team and shared App Group for both targets. A connected iPhone is available, but the team information is still pending.
+- [x] Preserve the user's signing team `QQ2W7FVVXM` for both targets in `project.yml` and the generated project.
+- [ ] Verify signed installation and shared App Group access on the connected iPhone.
 - [ ] Verify import/OCR/export from Files and other host apps on the real iPhone.
 - [ ] Verify persisted folder access across app/extension, iCloud and third-party providers, revoked access, and successful/error/canceled saves.
 - [ ] Exercise realistic extension memory limits, device locking/termination, and next-launch cleanup. No distribution or background-completion claim before this gate.

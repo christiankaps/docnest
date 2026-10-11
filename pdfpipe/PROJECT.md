@@ -104,7 +104,7 @@ The concept should be validated against these outcomes; detailed checks will be 
 - The original MVP passed on iOS 26.0 and 27.0 simulators. Review fixes add six regression tests (26 unit tests and one end-to-end UI test total), covering Inbox ownership/cleanup, long input names, filename preflight, atomic publication, collision races, and failed/canceled writes. Current verification results are recorded in PLAN.md.
 - `make build-device` passes for the app and share extension against the iOS 27 device SDK, without signing/provisioning.
 - Simulator screenshots were visually reviewed. The share-sheet test invokes the actual extension, verifies supplied filename preservation, and checks that extension discard retains the host's export copy.
-- Physical-device signing/App Group setup and real provider/resource validation remain required. A connected iPhone is available; signing-team information is pending. See [PLAN.md](PLAN.md) for the outstanding gate.
+- The user configured signing team `QQ2W7FVVXM` for both targets; `project.yml` preserves that setting. Signed device installation, App Group access, and real provider/resource validation remain to be verified. See [PLAN.md](PLAN.md) for the outstanding gate.
 
 ## Open decisions
 
@@ -115,7 +115,7 @@ The concept should be validated against these outcomes; detailed checks will be 
 - Interactive entry point when a default unattended pipeline is configured; no manual-override feature has been separately accepted.
 - Physical-device resource/conversion validation. MVP limits inputs to 30 MB/50 pages, images to 40 million pixels, and OCR rasterization to 4 million pixels per page. Encrypted PDFs are rejected on import; annotated/form PDFs are rejected for OCR. Signatures are not validated; signed PDFs are unsupported for OCR.
 - Extension export/access behavior, error presentation, cleanup mechanics, and exact save semantics.
-- Signing team/App Group registration for physical-device checks and distribution.
+- App Group provisioning verification for physical-device checks and distribution.
 
 ## Scope boundaries
 

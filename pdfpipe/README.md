@@ -58,7 +58,7 @@ The integration gate is `make verify`. It regenerates the project, builds/runs a
 
 ## Device setup and remaining feasibility gate
 
-Open `PdfPipe.xcodeproj` and choose the user's Apple Developer team for both PdfPipe and PdfPipeShare. Configure/register a shared App Group matching the `APP_GROUP_IDENTIFIER` setting in `project.yml` (default `group.com.kaps.pdfpipe`), then regenerate. The two targets must share the same group; the app shows a configuration error rather than silently creating isolated settings if group storage is unavailable.
+Both PdfPipe and PdfPipeShare use the user-selected Apple Developer team `QQ2W7FVVXM`, recorded in `project.yml`. Changes to signing settings should be recorded there before regenerating. Verify provisioning for the shared App Group matching `APP_GROUP_IDENTIFIER` (default `group.com.kaps.pdfpipe`). The two targets must share the same group; the app shows a configuration error rather than silently creating isolated settings if group storage is unavailable.
 
 No credentials, signing identities, or invented team identifiers are included. Do not enable automatic account/provisioning changes without the release owner's authorization.
 

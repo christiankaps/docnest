@@ -282,9 +282,11 @@
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					1A84E6CC8BC5E27A47BD7AE1 = {
+						DevelopmentTeam = QQ2W7FVVXM;
 						ProvisioningStyle = Automatic;
 					};
 					2F79E9552606C1C3635D094A = {
+						DevelopmentTeam = QQ2W7FVVXM;
 						ProvisioningStyle = Automatic;
 					};
 					37937EC78945353DF2170C5D = {
@@ -421,6 +423,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/PdfPipeShare.entitlements;
+				DEVELOPMENT_TEAM = QQ2W7FVVXM;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -439,6 +442,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = PdfPipe/PdfPipe.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = QQ2W7FVVXM;
 				INFOPLIST_FILE = PdfPipe/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -488,6 +492,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = PdfPipe/PdfPipe.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = QQ2W7FVVXM;
 				INFOPLIST_FILE = PdfPipe/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -577,6 +582,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/PdfPipeShare.entitlements;
+				DEVELOPMENT_TEAM = QQ2W7FVVXM;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
