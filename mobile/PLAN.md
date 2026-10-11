@@ -1,6 +1,6 @@
 # Implementation plan
 
-[PROJECT.md](PROJECT.md) defines accepted behavior; [ARCHITECTURE.md](ARCHITECTURE.md) records technical boundaries and engineering decisions. Increments 0 and 1 are finalized. Increment 2 is next and has not started.
+[PROJECT.md](PROJECT.md) defines accepted behavior; [ARCHITECTURE.md](ARCHITECTURE.md) records technical boundaries and engineering decisions. Increments 0–2 are finalized. Increment 3 is next and has not started.
 
 Implement increments in order. Check an item only after implementation and required verification. Finalize each increment by completing every checkbox, recording its outcome, checks, and remaining limitations here, and committing and pushing its changes to main before starting the next. Commit and push after every increment without waiting for another request. A build alone does not verify product behavior. Add meaningful automated checks to `make verify` as behavior is introduced; perform required device checks before finalization.
 
@@ -32,14 +32,22 @@ Resource baseline: 300 synthetic PDFs (250 text PDFs with 1/2/10 pages, 50 raste
 
 Limitations: signing and physical-device checks are not configured in this increment. Hardware file protection, camera, and authentication need their scheduled device verification. Native system picker presentation is UI-tested; library import/export content safety is covered by service tests. No later increment was started.
 
-## 2. Labels, dates, and inbox review
+## 2. Labels, dates, and inbox review — finalized
 
-- [ ] Add stable label IDs and the editable English starter set, ready for localization. Support creation, renaming, deletion, and multiple labels per document; deleting a label must not delete documents.
-- [ ] Build the label-first Library home with Inbox count, Years, and Import action. Add Scan when capture exists in increment 5.
-- [ ] Implement manual labeling, editable document dates, and Done. Reviewed documents remain in the library even without labels.
-- [ ] Derive virtual years from document dates; allow one selected year, replace it when another is chosen, and support clearing it. Combine all selected labels and the year with AND.
-- [ ] Sort newest document date first; keep import time out of sorting/filtering. Date changes update the virtual year without changing filenames.
-- [ ] Verify starter identity, label combinations, date/year changes, review persistence, and Done without labels. Run `make verify`, record outcome, and finalize this increment.
+- [x] Extend versioned metadata without losing existing documents, IDs, filenames, or original bytes. Make metadata edits and label deletion atomic and recoverable after interruption.
+- [x] Add stable label IDs and the editable English starter set, ready for localization. Seed it once; preserve renamed/deleted starter labels across relaunch. Support creation, renaming, deletion, and multiple labels per document; deleting a label must not delete documents.
+- [x] Build the label-first Library home with Inbox count, Years, and Import action. Add Scan when capture exists in increment 5.
+- [x] Implement manual labeling, editable document dates, and Done. Reviewed documents remain in the library even without labels. Record manual date provenance for future OCR precedence; Done alone does not confirm a fallback date.
+- [x] Derive virtual years from document dates; allow one selected year, replace it when another is chosen, and support clearing it. Combine all selected labels and the year with AND.
+- [x] Sort newest document date first; keep import time out of sorting/filtering. Date changes update the virtual year without changing filenames.
+- [x] Resolve navigation by stable document ID so edits immediately update open views, filters, year sections, and Inbox counts.
+- [x] Verify existing-library compatibility, failed/interrupted metadata writes, starter customization persistence, label deletion safety, AND combinations, date/year changes, review persistence, and Done without labels. Run `make verify`, record outcome, and finalize this increment.
+
+Outcome, 2026-10-11: implemented a label-first Library home with document/Inbox counts and Years, editable localization-ready starter/custom labels, multi-label assignment, AND/year filters, manual document dates, and Done review completion. Original PDFs and increment-1 import records remain unchanged; a versioned atomic organization snapshot owns edits and label assignments. Stable-ID navigation resolves live metadata so changes immediately update Details, lists, years, and Inbox. Starter customizations survive relaunch, including deleting the entire set. Manual date confirmation is independent of Done and preserves filenames.
+
+Verification: `make verify` passed 16 unit tests and 4 UI tests on the iOS 27.0 iPhone 18 Pro simulator. New coverage includes increment-1 library compatibility, metadata write failure and simulated interruption, corrupt/future organization data, starter identity and customization persistence, deletion of assigned labels, multi-label AND/year filters, date-based sorting, duplicate preservation after editing, immediate model refresh, Done without labels, and native create/rename/delete, date editing, filtering, and review/relaunch flows. A focused review/filter UI rerun passed after fixing synthetic import dates to make year checks independent of the simulator clock. `make build CONFIGURATION=Release` passed. Inspected screenshots of Library, multiple-label selection, date editing, live Details, year selection, and filtered results. The existing 300-PDF resource check passed (reload 0.099 s; largest PDF open/render 0.013 s on the simulator).
+
+Limitations: OCR date extraction and label suggestions remain increments 6–7; dates use a flagged fallback until manually confirmed. Physical-device camera/authentication checks remain in their scheduled increments. No later increment was started.
 
 ## 3. Document management and local recovery
 

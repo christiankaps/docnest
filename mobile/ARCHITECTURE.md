@@ -1,6 +1,6 @@
 # Mobile technical design
 
-This document captures implementation boundaries and platform choices for [PROJECT.md](PROJECT.md). The local PDF library is implemented; later capabilities remain planned as tracked in [PLAN.md](PLAN.md).
+This document captures implementation boundaries and platform choices for [PROJECT.md](PROJECT.md). The local PDF library, labels, dates, and Inbox review are implemented; later capabilities remain planned as tracked in [PLAN.md](PLAN.md).
 
 ## Local architecture
 
@@ -15,7 +15,7 @@ Use a small native application with one authoritative metadata model and private
 - Imports, scans, and restores reuse document validation, exact-content duplicate detection, identity, and naming rules. App-private storage allows filenames to remain user-facing metadata while identifiers govern storage.
 - Reject encrypted or unreadable PDFs clearly. Reject malformed backups safely. Check available resources and provide useful failure/retry states rather than silently skipping data or partially reporting success.
 
-### Implemented local format (schema 1)
+### Implemented local format
 
 `LibraryStore` is an actor that serializes imports, reads, exports, and existing-text searches off the UI actor. The authoritative library lives at `Library/Application Support/DocNestLibrary` inside the app sandbox:
 
@@ -24,17 +24,24 @@ DocNestLibrary/
   Documents/<UUID>/original.pdf
   Documents/<UUID>/metadata.json
   Staging/<UUID>/...
+  organization.json
 ```
 
-Each metadata record contains schema version, stable UUID, display filename, SHA-256 content hash, byte/page counts, calendar document date (year/month/day), date provenance, import timestamp, review state, and independent processing state. Schema 1 uses `importFallback`, `inbox`/`reviewed`, and `notStarted`; later increments introduce editing and processing. JSON timestamps use Foundation Codable's seconds since 2001-01-01 UTC. Calendar dates use the local Gregorian capture date and do not change year when the timezone changes. No separate database or rebuildable catalog is needed for hundreds of records.
+Each metadata record contains schema version, stable UUID, display filename, SHA-256 content hash, byte/page counts, calendar document date (year/month/day), date provenance, import timestamp, review state, and independent processing state. The immutable schema-1 import record uses `importFallback`, `inbox`/`reviewed`, and `notStarted`. User edits are overlaid from the organization snapshot; processing remains a later increment. JSON timestamps use Foundation Codable's seconds since 2001-01-01 UTC. Calendar dates use the local Gregorian capture date and do not change year when the timezone changes. No separate database or rebuildable catalog is needed for hundreds of records.
 
 Import acquires temporary security-scoped access and coordinates a read of the source. It copies bytes into Staging, requires a regular file (rejecting copied symbolic links), rejects encryption (even an empty-password PDF), verifies readable pages, hashes in 1 MiB chunks, and checks duplicates before resolving names. Case-insensitive, Unicode-normalized filename comparisons avoid ambiguous collisions; control characters/path separators are sanitized. Original spelling is otherwise retained, including extension case. The numbered name is durable metadata and the title omits only the extension.
 
 After writing metadata atomically, a same-volume directory rename publishes the complete document. Startup removes unpublished Staging transactions and loads only complete published records. A published import survives termination before UI acknowledgement; reimport detects the same content. Unexpected/missing/corrupt records fail closed with files preserved and a Retry action; startup never resets a damaged library. Newer schemas are rejected before decoding their fields. File-protection attributes use `completeUntilFirstUserAuthentication`; the later library-lock increment must review the capture/access policy.
 
+The version-1 `organization.json` snapshot stores the label catalog and per-document assignments, optional manual calendar date, and review state, keyed by stable document UUID. All organization mutations use one atomic, protected file replacement; in-memory state is updated only after the write succeeds. Label deletion removes its assignments in the same replacement. PDF bytes and import metadata are never rewritten. A terminated write exposes either the previous snapshot or the complete new snapshot; unpublished temporary files are not authoritative. Corrupt snapshots, unknown versions, invalid dates, and dangling assignments fail closed.
+
+On first opening a library without an organization snapshot (including increment-1 libraries), seed the ten starter labels once. Existing snapshots, including an intentionally empty label catalog, are never reseeded. Starter UUIDs and enum keys are stable; default names come from the English string catalog, and optional user names override localization. Custom labels use random UUIDs. Names are trimmed and must be nonempty, free of control characters, and unique under case-insensitive Unicode-normalized comparison at creation/rename. Translation does not change identity.
+
+Saving a date records `manual` provenance, even if the chosen date equals the fallback. Done changes only review state and never confirms a fallback date. Document dates govern sorting and virtual years; a filter holds multiple ordinary label IDs and at most one year, all combined with AND. Navigation holds document UUIDs and resolves current metadata through the observable model, so edits update the viewer details, lists, filter results, years, and Inbox counts immediately. Deleting an active filter label clears that label from the filter.
+
 Share/export copies are created under an app-private temporary `DocNestExports/<UUID>/<filename>` directory. The system receives these copies, never live-library URLs. Sharing uses a native activity sheet; export uses SwiftUI's file exporter with a file transfer representation and explicit suggested filename. Copies are removed after completion/cancellation or next library load. The app's generated Info.plist explicitly disables file sharing and opening documents in place. Its source is `project.yml`; there is no document-provider extension or cloud entitlement.
 
-The viewer uses PDFKit without saving mutations to originals. Existing-text search runs in the store and returns page indices, match ranges, and snippets; the viewer highlights/navigates to that range. The current UI supports Library/Inbox lists, Settings, PDF details, viewing, import, search, sharing, and PDF export. Labeling, date editing, review completion, OCR, and whole-library backups remain later increments.
+The viewer uses PDFKit without saving mutations to originals. Existing-text search runs in the store and returns page indices, match ranges, and snippets; the viewer highlights/navigates to that range. The current UI supports a label-first Library home, Inbox, label management and assignment, AND/year filtering, date editing, review completion, Settings, PDF details, viewing, import, existing-text search, sharing, and PDF export. OCR and whole-library backups remain later increments.
 
 ## Capture and access boundary
 

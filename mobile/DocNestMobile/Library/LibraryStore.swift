@@ -4,12 +4,13 @@ import PDFKit
 
 /// Owns all library writes. Each import publishes one complete directory using a same-volume rename.
 actor LibraryStore {
-    enum ImportPhase: Sendable { case copied, validated, metadataWritten }
+    enum ImportPhase: Sendable { case copied, validated, metadataWritten, organizationWillWrite }
     typealias Checkpoint = @Sendable (ImportPhase) throws -> Void
 
     let root: URL
     private let exportRoot: URL
     private let checkpoint: Checkpoint
+    private var organization: LibraryOrganization?
     private var records: [LibraryDocument]?
     private let files = FileManager.default
 
@@ -29,6 +30,7 @@ actor LibraryStore {
 
     func load() throws -> [LibraryDocument] {
         records = nil
+        organization = nil
         try createDirectory(documentsDirectory)
         try createDirectory(stagingDirectory)
         var loaded: [LibraryDocument] = []
@@ -62,7 +64,24 @@ actor LibraryStore {
             try files.removeItem(at: abandoned)
         }
         if files.fileExists(atPath: exportRoot.path) { try files.removeItem(at: exportRoot) }
-        records = Self.sorted(loaded)
+        let organizationURL = root.appending(path: "organization.json")
+        let saved: LibraryOrganization
+        if files.fileExists(atPath: organizationURL.path) {
+            do {
+                let data = try Data(contentsOf: organizationURL)
+                struct Header: Decodable { let schemaVersion: Int }
+                guard try JSONDecoder().decode(Header.self, from: data).schemaVersion == 1 else { throw LibraryError.unsupportedVersion }
+                saved = try JSONDecoder().decode(LibraryOrganization.self, from: data)
+                try validate(saved, documents: loaded)
+            } catch let error as LibraryError { throw error }
+            catch { throw LibraryError.invalidLibrary }
+        } else {
+            // Increment-1 libraries have no organization file. Never reseed an existing snapshot.
+            saved = LibraryOrganization()
+            try writeOrganization(saved)
+        }
+        organization = saved
+        records = Self.sorted(loaded.map { saved.applying(to: $0) })
         return records!
     }
 
@@ -110,6 +129,90 @@ actor LibraryStore {
     func allDocuments() throws -> [LibraryDocument] {
         guard let records else { throw LibraryError.notLoaded }
         return records
+    }
+
+    func allLabels() throws -> [LibraryLabel] {
+        guard let organization, records != nil else { throw LibraryError.notLoaded }
+        return organization.labels.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    @discardableResult
+    func createLabel(name: String) throws -> LibraryLabel {
+        guard var next = organization, records != nil else { throw LibraryError.notLoaded }
+        let label = LibraryLabel(id: UUID(), starter: nil, customName: try labelName(name, excluding: nil))
+        next.labels.append(label)
+        try commit(next)
+        return label
+    }
+
+    func renameLabel(_ id: UUID, name: String) throws {
+        guard var next = organization, records != nil else { throw LibraryError.notLoaded }
+        guard let index = next.labels.firstIndex(where: { $0.id == id }) else { throw LibraryError.invalidLabel }
+        next.labels[index].customName = try labelName(name, excluding: id)
+        try commit(next)
+    }
+
+    func deleteLabel(_ id: UUID) throws {
+        guard var next = organization, records != nil else { throw LibraryError.notLoaded }
+        next.labels.removeAll { $0.id == id }
+        for key in Array(next.documents.keys) { next.documents[key]?.labelIDs.remove(id) }
+        try commit(next)
+    }
+
+    func updateDocument(_ id: UUID, labels: Set<UUID>? = nil, manualDate: DocumentDate? = nil, reviewed: Bool = false) throws {
+        guard var next = organization, let records else { throw LibraryError.notLoaded }
+        guard let record = records.first(where: { $0.id == id }) else { throw LibraryError.missingDocument }
+        var edit = next.documents[id.uuidString] ?? DocumentOrganization(reviewState: record.reviewState)
+        if let labels {
+            guard labels.isSubset(of: Set(next.labels.map(\.id))) else { throw LibraryError.invalidLabel }
+            edit.labelIDs = labels
+        }
+        if let manualDate {
+            guard manualDate.isValid else { throw LibraryError.invalidDate }
+            edit.manualDate = manualDate
+        }
+        if reviewed { edit.reviewState = .reviewed }
+        next.documents[id.uuidString] = edit
+        try commit(next)
+    }
+
+    private func labelName(_ name: String, excluding id: UUID?) throws -> String {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, clean.rangeOfCharacter(from: .controlCharacters) == nil,
+              organization?.labels.contains(where: { $0.id != id && Self.nameKey($0.name) == Self.nameKey(clean) }) == false else {
+            throw LibraryError.invalidLabel
+        }
+        return clean
+    }
+
+    private func validate(_ snapshot: LibraryOrganization, documents: [LibraryDocument]) throws {
+        let ids = Set(snapshot.labels.map(\.id))
+        guard ids.count == snapshot.labels.count,
+              snapshot.labels.allSatisfy({ label in
+                  (label.starter == nil ? label.customName != nil : label.id == label.starter?.id)
+                  && !label.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                  && label.name.rangeOfCharacter(from: .controlCharacters) == nil
+              }) else { throw LibraryError.invalidLibrary }
+        let documentIDs = Set(documents.map { $0.id.uuidString })
+        for (id, edit) in snapshot.documents {
+            guard documentIDs.contains(id), edit.labelIDs.isSubset(of: ids), edit.manualDate?.isValid != false else {
+                throw LibraryError.invalidLibrary
+            }
+        }
+    }
+
+    private func writeOrganization(_ next: LibraryOrganization) throws {
+        try checkpoint(.organizationWillWrite)
+        try JSONEncoder().encode(next).write(to: root.appending(path: "organization.json"),
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+
+    private func commit(_ next: LibraryOrganization) throws {
+        guard let records else { throw LibraryError.notLoaded }
+        try validate(next, documents: records)
+        try writeOrganization(next)
+        organization = next
+        self.records = Self.sorted(records.map { next.applying(to: $0) })
     }
 
     func originalURL(for id: UUID) throws -> URL {

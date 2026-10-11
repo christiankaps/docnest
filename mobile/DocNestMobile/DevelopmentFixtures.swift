@@ -17,10 +17,12 @@ enum DevelopmentFixtures {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let source = folder.appending(path: "Invoice.pdf")
+        // Keep year-filter UI checks reproducible independently of the simulator clock.
+        let importedAt = Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 12))!
         try pdf(text: "Synthetic invoice ALPHA-123", pages: 2).write(to: source)
-        _ = try await store.importPDF(from: source)
+        _ = try await store.importPDF(from: source, importedAt: importedAt)
         try pdf(text: "Synthetic receipt BETA-456", pages: 1).write(to: source)
-        _ = try await store.importPDF(from: source)
+        _ = try await store.importPDF(from: source, importedAt: importedAt)
     }
 
     static func pdf(text: String, pages: Int, image: UIImage? = nil) -> Data {

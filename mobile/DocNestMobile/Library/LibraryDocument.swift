@@ -5,7 +5,7 @@ struct DocumentDate: Codable, Hashable, Sendable {
     let month: Int
     let day: Int
 
-    init(_ date: Date, calendar: Calendar = .current) {
+    init(_ date: Date, calendar: Calendar = Calendar(identifier: .gregorian)) {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
         year = parts.year!
         month = parts.month!
@@ -25,7 +25,7 @@ struct DocumentDate: Codable, Hashable, Sendable {
 }
 
 struct LibraryDocument: Codable, Identifiable, Hashable, Sendable {
-    enum DateSource: String, Codable, Sendable { case importFallback }
+    enum DateSource: String, Codable, Sendable { case importFallback, manual }
     enum ReviewState: String, Codable, Sendable { case inbox, reviewed }
     enum ProcessingState: String, Codable, Sendable { case notStarted }
 
@@ -35,11 +35,18 @@ struct LibraryDocument: Codable, Identifiable, Hashable, Sendable {
     let contentHash: String
     let byteCount: Int64
     let pageCount: Int
-    let documentDate: DocumentDate
-    let dateSource: DateSource
+    var documentDate: DocumentDate
+    var dateSource: DateSource
     let importedAt: Date
-    let reviewState: ReviewState
+    var reviewState: ReviewState
     let processingState: ProcessingState
+
+    // Assignments live in organization.json, never in original import metadata.
+    var labelIDs: Set<UUID> = []
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, id, filename, contentHash, byteCount, pageCount, documentDate,
+             dateSource, importedAt, reviewState, processingState
+    }
 
     var title: String { (filename as NSString).deletingPathExtension }
 }
@@ -57,10 +64,12 @@ struct PDFSearchHit: Identifiable, Sendable {
 }
 
 enum LibraryError: LocalizedError, Equatable {
-    case encryptedPDF, invalidPDF, invalidLibrary, unsupportedVersion, notLoaded, missingDocument
+    case encryptedPDF, invalidPDF, invalidLibrary, unsupportedVersion, notLoaded, missingDocument, invalidLabel, invalidDate
 
     var errorDescription: String? {
         switch self {
+        case .invalidLabel: String(localized: "Use a unique, nonempty label name.")
+        case .invalidDate: String(localized: "Choose a valid document date.")
         case .encryptedPDF: String(localized: "Encrypted PDFs aren’t supported. Import an unencrypted copy.")
         case .invalidPDF: String(localized: "This file isn’t a readable PDF. Choose another copy.")
         case .invalidLibrary: String(localized: "The library couldn’t be read safely. Your saved files have been left in place.")

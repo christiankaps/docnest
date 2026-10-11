@@ -1,13 +1,19 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+private enum LibraryRoute: Hashable {
+    case documents(LibraryFilter)
+    case document(UUID)
+}
+
 struct ContentView: View {
     @State private var model: LibraryModel
     @State private var selectedTab = 0
-    @State private var libraryPath: [LibraryDocument] = []
-    @State private var inboxPath: [LibraryDocument] = []
+    @State private var libraryPath: [LibraryRoute] = []
+    @State private var inboxPath: [LibraryRoute] = []
     @State private var importing = false
     @State private var settings = false
+    @State private var managingLabels = false
 
     init(store: LibraryStore = LibraryStore()) {
         _model = State(initialValue: LibraryModel(store: store))
@@ -16,7 +22,7 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack(path: $libraryPath) {
-                documentList(inboxOnly: false)
+                libraryContent
                     .navigationTitle("Library")
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
@@ -24,15 +30,17 @@ struct ContentView: View {
                         }
                         ToolbarItem(placement: .topBarTrailing) { importButton }
                     }
+                    .navigationDestination(for: LibraryRoute.self, destination: destination)
             }
             .tabItem { Label("Library", systemImage: "books.vertical") }.tag(0)
             NavigationStack(path: $inboxPath) {
-                documentList(inboxOnly: true)
+                DocumentListView(model: model, inboxOnly: true)
                     .navigationTitle("Inbox")
                     .toolbar { ToolbarItem(placement: .topBarTrailing) { importButton } }
+                    .navigationDestination(for: LibraryRoute.self, destination: destination)
             }
             .tabItem { Label("Inbox", systemImage: "tray") }.tag(1)
-            .badge(model.documents.filter { $0.reviewState == .inbox }.count)
+            .badge(model.inboxCount)
         }
         .task { await model.load() }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf]) { result in
@@ -42,17 +50,23 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $settings) { SettingsView() }
-        .alert("Couldn’t import PDF", isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
-            Button("OK", role: .cancel) { model.actionError = nil }
-        } message: { Text(model.actionError ?? "") }
+        .sheet(isPresented: $managingLabels) { LabelManagementView(model: model) }
+        .libraryError(model)
         .alert("Already in your library", isPresented: Binding(get: { model.duplicate != nil }, set: { if !$0 { model.duplicate = nil } }), presenting: model.duplicate) { document in
             Button("Open Document") {
                 selectedTab = 0
-                libraryPath.append(document)
+                libraryPath.append(.document(document.id))
                 model.duplicate = nil
             }
             Button("Cancel", role: .cancel) { model.duplicate = nil }
         } message: { document in Text(document.filename) }
+    }
+
+    @ViewBuilder private func destination(_ route: LibraryRoute) -> some View {
+        switch route {
+        case .documents(let filter): DocumentListView(model: model, initialFilter: filter).navigationTitle("Documents")
+        case .document(let id): DocumentView(id: id, model: model)
+        }
     }
 
     private var importButton: some View {
@@ -61,50 +75,127 @@ struct ContentView: View {
             .accessibilityIdentifier("importPDF")
     }
 
-    @ViewBuilder private func documentList(inboxOnly: Bool) -> some View {
-        Group {
-            if model.isLoading {
-                ProgressView("Opening library…")
-            } else if let error = model.loadError {
-                ContentUnavailableView {
-                    Label("Library unavailable", systemImage: "exclamationmark.triangle")
-                } description: { Text(error) } actions: {
-                    Button("Retry") { Task { await model.load() } }
+    @ViewBuilder private var libraryContent: some View {
+        if model.isLoading { ProgressView("Opening library…") }
+        else if let error = model.loadError { LibraryUnavailable(model: model, error: error) }
+        else {
+            List {
+                Section {
+                    NavigationLink(value: LibraryRoute.documents(LibraryFilter())) {
+                        Label { LabeledContent("All Documents", value: model.documents.count.formatted()) } icon: { Image(systemName: "doc.text") }
+                    }.accessibilityIdentifier("allDocuments")
+                    Button { selectedTab = 1 } label: {
+                        Label { LabeledContent("Inbox", value: model.inboxCount.formatted()) } icon: { Image(systemName: "tray") }
+                    }.accessibilityIdentifier("inboxSummary")
                 }
-            } else {
-                let documents = model.documents.filter { !inboxOnly || $0.reviewState == .inbox }
-                if documents.isEmpty {
-                    ContentUnavailableView {
-                        Label(inboxOnly ? "Inbox is empty" : "Your paperwork, together", systemImage: inboxOnly ? "tray" : "doc.text")
-                    } description: {
-                        Text("Import a PDF to keep a private copy on this iPhone.")
-                    } actions: { importButton }
-                } else {
-                    List(documents) { document in
-                        NavigationLink(value: document) {
+                if model.documents.isEmpty {
+                    Section {
+                        Text("Your paperwork, together").font(.headline)
+                        Text("Import a PDF to keep a private copy on this iPhone.").foregroundStyle(.secondary)
+                    }
+                }
+                Section {
+                    ForEach(model.labels) { label in
+                        NavigationLink(value: LibraryRoute.documents(LibraryFilter(labelIDs: [label.id]))) {
+                            Label { LabeledContent(label.name, value: model.documents.filter { $0.labelIDs.contains(label.id) }.count.formatted()) } icon: { Image(systemName: "tag") }
+                        }.accessibilityIdentifier("browseLabel-\(label.id)")
+                    }
+                } header: {
+                    HStack {
+                        Text("Labels")
+                        Spacer()
+                        Button("Manage") { managingLabels = true }.accessibilityIdentifier("manageLabels")
+                    }
+                }
+                Section("Years") {
+                    ForEach(model.years, id: \.self) { year in
+                        NavigationLink(value: LibraryRoute.documents(LibraryFilter(year: year))) {
+                            Text(String(year))
+                        }
+                    }
+                    if model.years.isEmpty { Text("Years appear as you add documents.").foregroundStyle(.secondary) }
+                }
+            }
+            .overlay(alignment: .bottom) { if model.isImporting { ProgressView("Importing PDF…").padding().background(.regularMaterial) } }
+        }
+    }
+}
+
+private struct DocumentListView: View {
+    let model: LibraryModel
+    var inboxOnly = false
+    @State private var filter: LibraryFilter
+    @State private var filtering = false
+
+    init(model: LibraryModel, inboxOnly: Bool = false, initialFilter: LibraryFilter = LibraryFilter()) {
+        self.model = model
+        self.inboxOnly = inboxOnly
+        _filter = State(initialValue: initialFilter)
+    }
+
+    private var documents: [LibraryDocument] {
+        model.documents.filter { (!inboxOnly || $0.reviewState == .inbox) && filter.includes($0) }
+    }
+
+    var body: some View {
+        Group {
+            if model.isLoading { ProgressView("Opening library…") }
+            else if let error = model.loadError { LibraryUnavailable(model: model, error: error) }
+            else {
+                List {
+                    if !filter.labelIDs.isEmpty || filter.year != nil {
+                        Section {
+                            let names = model.labels.filter { filter.labelIDs.contains($0.id) }.map(\.name)
+                            Text((names + (filter.year.map { [String($0)] } ?? [])).joined(separator: " · "))
+                                .font(.subheadline).accessibilityIdentifier("activeFilters")
+                            Button("Clear Filters") { filter = LibraryFilter() }
+                        } footer: { Text("Documents must match every selected label and year.") }
+                    }
+                    ForEach(documents) { document in
+                        NavigationLink(value: LibraryRoute.document(document.id)) {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(document.title).font(.headline).lineLimit(2)
+                                let names = model.labels(for: document).map(\.name)
+                                if !names.isEmpty { Text(names.joined(separator: " · ")).font(.subheadline).foregroundStyle(.secondary) }
                                 HStack {
                                     Text(document.documentDate.displayDate, format: .dateTime.year().month().day())
-                                    Image(systemName: "exclamationmark.circle")
-                                        .accessibilityLabel("Date needs review")
-                                }
-                                .font(.subheadline).foregroundStyle(.secondary)
-                            }
-                            .padding(.vertical, 3)
-                        }
+                                    if document.dateSource == .importFallback {
+                                        Image(systemName: "exclamationmark.circle").accessibilityLabel("Date needs review")
+                                    }
+                                }.font(.subheadline).foregroundStyle(.secondary)
+                            }.padding(.vertical, 3)
+                        }.accessibilityIdentifier("document-\(document.id)")
+                    }
+                }
+                .overlay {
+                    if documents.isEmpty && filter == LibraryFilter() {
+                        ContentUnavailableView(inboxOnly ? "Inbox is empty" : "No documents", systemImage: inboxOnly ? "tray" : "doc.text")
+                    } else if documents.isEmpty {
+                        ContentUnavailableView("No matching documents", systemImage: "line.3.horizontal.decrease")
+                            .allowsHitTesting(false)
                     }
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            if model.isImporting {
-                HStack { ProgressView(); Text("Importing PDF…") }
-                    .padding().frame(maxWidth: .infinity).background(.regularMaterial)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Filter", systemImage: "line.3.horizontal.decrease") { filtering = true }
+                    .disabled(model.isLoading || model.loadError != nil)
             }
         }
-        .navigationDestination(for: LibraryDocument.self) { document in
-            DocumentView(record: document, store: model.store)
+        .sheet(isPresented: $filtering) { LibraryFilterView(model: model, filter: $filter) }
+        .onChange(of: model.labels) { _, labels in filter.labelIDs.formIntersection(Set(labels.map(\.id))) }
+    }
+}
+
+private struct LibraryUnavailable: View {
+    let model: LibraryModel
+    let error: String
+    var body: some View {
+        ContentUnavailableView {
+            Label("Library unavailable", systemImage: "exclamationmark.triangle")
+        } description: { Text(error) } actions: {
+            Button("Retry") { Task { await model.load() } }
         }
     }
 }

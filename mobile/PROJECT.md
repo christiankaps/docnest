@@ -8,7 +8,7 @@
 
 A free, native iPhone app for individuals managing hundreds of personal documents. The primary workflows are capturing PDFs, finding them through labels, and sharing them. The experience should be modern, intuitive, and consistent with standard iOS interactions.
 
-Current implementation: a private local PDF library with safe file import, duplicate detection and numbered filenames, Library/Inbox lists, PDF viewing and existing-text search, details, sharing, and PDF export. The local icon and English string catalog remain self-contained. Increments 0 and 1 are finalized; implementation and verification evidence are recorded in PLAN.md. The remaining capabilities below describe the target product.
+Current implementation: a private local PDF library with safe file import, duplicate detection and numbered filenames, a label-first Library home, editable starter/custom labels and multiple assignments, AND/year filtering, manual document dates, Inbox review, PDF viewing and existing-text search, details, sharing, and PDF export. The local icon and English string catalog remain self-contained. Increments 0–2 are finalized; implementation and verification evidence are recorded in PLAN.md. The remaining capabilities below describe the target product.
 
 The initial delivery is local-only. The project is independent of the desktop app and is not a companion app. Everything required to build it stays inside this folder; reused resources are copied locally.
 
@@ -70,7 +70,7 @@ Cloud synchronization, storage switching, Foundation Models, Siri/Shortcuts, wid
 ## Labels, years, and search
 
 - Documents may have multiple labels. Labels organize views rather than imposing filesystem folders.
-- Editable starter set: Invoices, Banking, Insurance, Taxes, Health, Home, Work, Vehicles, Contracts, Receipts. Users may add, rename, or remove labels. Removing a label never deletes its documents.
+- Editable starter set: Invoices, Banking, Insurance, Taxes, Health, Home, Work, Vehicles, Contracts, Receipts. Users may add, rename, or remove labels. Initialize the starter set once; renamed or deleted starter labels stay changed across relaunch. Removing a label never deletes its documents.
 - All selected ordinary labels combine using AND.
 - Derive a virtual year label from each document date. At most one year may be selected; choosing another replaces it, and clearing it removes the year restriction.
 - The selected year, every selected ordinary label, and search text combine using AND.
@@ -81,7 +81,7 @@ Cloud synchronization, storage switching, Foundation Models, Siri/Shortcuts, wid
 
 - Each document has an editable document date distinct from its import date and filesystem dates.
 - Infer the document date from content, preferring issue/invoice date over payment due date. Flag uncertain results for review. If no reliable date is found, suggest the import date and flag it.
-- Date edits update the virtual year but never rename the file. Late results respect manual edits and review status.
+- Saving a document date marks it as manually confirmed, even when unchanged. Date edits update the virtual year but never rename the file. Done alone does not confirm a fallback date. Late results respect manual edits and review status.
 - Preserve imported filenames unless a name collision requires a suffix.
 - Scan names use the local capture date and literal suffix `DocsNest_Scanner`: `YYYY-MM-DD_DocsNest_Scanner.pdf`. The spelling and suffix are fixed filename text, not an organizational label. OCR-derived document dates have no effect on this name.
 - For a distinct document with a colliding filename, append the next available `_2`, `_3`, etc. before `.pdf`. The suffix is permanent and visible in both filename and library title. Sharing/export uses the same name.

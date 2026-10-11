@@ -3,12 +3,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct DocumentView: View {
-    let record: LibraryDocument
-    let store: LibraryStore
+    let id: UUID
+    let model: LibraryModel
+    private var store: LibraryStore { model.store }
     @State private var pdf: PDFDocument?
     @State private var openError: String?
     @State private var actionError: String?
     @State private var showDetails = false
+    @State private var showLabels = false
     @State private var showSearch = false
     @State private var query = ""
     @State private var completedQuery: String?
@@ -27,6 +29,11 @@ struct DocumentView: View {
     }
 
     var body: some View {
+        if let record = model.document(id) { documentBody(record) }
+        else { ContentUnavailableView("Document unavailable", systemImage: "doc.badge.ellipsis") }
+    }
+
+    private func documentBody(_ record: LibraryDocument) -> some View {
         VStack(spacing: 0) {
             if showSearch {
                 HStack {
@@ -66,10 +73,18 @@ struct DocumentView: View {
                 Button("Share", systemImage: "square.and.arrow.up") { prepareCopy(export: false) }
                     .disabled(preparingCopy || pdf == nil).accessibilityIdentifier("sharePDF")
                 Spacer()
+                Button("Labels", systemImage: "tag") { showLabels = true }.accessibilityIdentifier("documentLabels")
+                Spacer()
                 Button("Search", systemImage: "magnifyingglass") { showSearch.toggle() }
                     .disabled(pdf == nil).accessibilityIdentifier("searchPDF")
                 Spacer()
                 Button("Details", systemImage: "info.circle") { showDetails = true }.accessibilityIdentifier("documentDetails")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                if record.reviewState == .inbox {
+                    Button("Done") { Task { await model.save { try await store.updateDocument(id, reviewed: true) } } }
+                        .disabled(model.isSaving).accessibilityIdentifier("finishReview")
+                }
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu("More", systemImage: "ellipsis") {
@@ -85,7 +100,9 @@ struct DocumentView: View {
             } catch { openError = error.localizedDescription }
         }
         .onChange(of: query) { _, _ in hits = []; selectedHit = nil; completedQuery = nil }
-        .sheet(isPresented: $showDetails) { DocumentDetails(record: record) }
+        .sheet(isPresented: $showDetails) { DocumentDetails(id: id, model: model) }
+        .sheet(isPresented: $showLabels) { DocumentLabelsView(model: model, record: record) }
+        .libraryError(model)
         .sheet(item: $transfer, onDismiss: cleanupExport) { item in
             ShareSheet(url: item.url)
         }
@@ -105,7 +122,7 @@ struct DocumentView: View {
         searching = true
         Task {
             do {
-                let results = try await store.search(document: record.id, text: requested)
+                let results = try await store.search(document: id, text: requested)
                 if query == requested { hits = results; selectedHit = results.first; completedQuery = requested }
             } catch { actionError = error.localizedDescription }
             searching = false
@@ -117,7 +134,7 @@ struct DocumentView: View {
         Task {
             defer { preparingCopy = false }
             do {
-                let url = try await store.exportCopy(for: record.id)
+                let url = try await store.exportCopy(for: id)
                 exportURL = url
                 if export { showExporter = true }
                 else { transfer = Transfer(url: url) }
@@ -132,26 +149,41 @@ struct DocumentView: View {
 }
 
 private struct DocumentDetails: View {
-    let record: LibraryDocument
+    let id: UUID
+    let model: LibraryModel
+    @State private var editingDate = false
+    @State private var editingLabels = false
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Document") {
-                    LabeledContent("Filename", value: record.filename)
-                    LabeledContent("Document date", value: record.documentDate.displayDate.formatted(date: .abbreviated, time: .omitted))
-                    Label("Date needs review", systemImage: "exclamationmark.circle")
-                    Text("Using the import date until the document date is reviewed.").foregroundStyle(.secondary)
-                    LabeledContent("Pages", value: record.pageCount.formatted())
-                    LabeledContent("Size", value: ByteCountFormatter.string(fromByteCount: record.byteCount, countStyle: .file))
+            if let record = model.document(id) {
+                Form {
+                    Section("Document") {
+                        LabeledContent("Filename", value: record.filename)
+                        LabeledContent("Document date", value: record.documentDate.displayDate.formatted(date: .abbreviated, time: .omitted))
+                            .accessibilityIdentifier("documentDateValue")
+                        if record.dateSource == .importFallback {
+                            Label("Date needs review", systemImage: "exclamationmark.circle")
+                            Text("Using the import date until the document date is reviewed.").foregroundStyle(.secondary)
+                        }
+                        Button("Edit Date") { editingDate = true }
+                        LabeledContent("Pages", value: record.pageCount.formatted())
+                        LabeledContent("Size", value: ByteCountFormatter.string(fromByteCount: record.byteCount, countStyle: .file))
+                    }
+                    Section("Labels") {
+                        ForEach(model.labels(for: record)) { Text($0.name) }
+                        Button("Edit Labels") { editingLabels = true }
+                    }
+                    Section("Import") {
+                        LabeledContent("Imported", value: record.importedAt.formatted(date: .abbreviated, time: .shortened))
+                        LabeledContent("Review", value: record.reviewState == .inbox ? String(localized: "In Inbox") : String(localized: "Reviewed"))
+                    }
                 }
-                Section("Import") {
-                    LabeledContent("Imported", value: record.importedAt.formatted(date: .abbreviated, time: .shortened))
-                    LabeledContent("Review", value: String(localized: "In Inbox"))
-                }
+                .navigationTitle("Details")
+                .toolbar { Button("Done") { dismiss() } }
+                .sheet(isPresented: $editingDate) { DocumentDateView(model: model, record: record) }
+                .sheet(isPresented: $editingLabels) { DocumentLabelsView(model: model, record: record) }
             }
-            .navigationTitle("Details")
-            .toolbar { Button("Done") { dismiss() } }
         }
     }
 }

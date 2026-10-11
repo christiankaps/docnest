@@ -11,6 +11,26 @@
         }
       }
     },
+    "All Documents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All Documents"
+          }
+        }
+      }
+    },
+    "All Years": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All Years"
+          }
+        }
+      }
+    },
     "Already in your library": {
       "localizations": {
         "en": {
@@ -31,12 +51,62 @@
         }
       }
     },
+    "Banking": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Banking"
+          }
+        }
+      }
+    },
     "Cancel": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        }
+      }
+    },
+    "Choose a valid document date.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a valid document date."
+          }
+        }
+      }
+    },
+    "Choose the date on the document. Saving confirms this date; the filename stays the same.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the date on the document. Saving confirms this date; the filename stays the same."
+          }
+        }
+      }
+    },
+    "Clear Filters": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Filters"
+          }
+        }
+      }
+    },
+    "Contracts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contracts"
           }
         }
       }
@@ -81,6 +151,36 @@
         }
       }
     },
+    "Delete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        }
+      }
+    },
+    "Delete Label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Label"
+          }
+        }
+      }
+    },
+    "Delete Label?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Label?"
+          }
+        }
+      }
+    },
     "Details": {
       "localizations": {
         "en": {
@@ -104,6 +204,16 @@
         }
       }
     },
+    "Document Date": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Document Date"
+          }
+        }
+      }
+    },
     "Document date": {
       "localizations": {
         "en": {
@@ -114,12 +224,62 @@
         }
       }
     },
+    "Document unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Document unavailable"
+          }
+        }
+      }
+    },
+    "Documents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Documents"
+          }
+        }
+      }
+    },
+    "Documents must match every selected label and year.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Documents must match every selected label and year."
+          }
+        }
+      }
+    },
     "Done": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Done"
+          }
+        }
+      }
+    },
+    "Edit Date": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Date"
+          }
+        }
+      }
+    },
+    "Edit Labels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Labels"
           }
         }
       }
@@ -154,12 +314,42 @@
         }
       }
     },
+    "Filter": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter"
+          }
+        }
+      }
+    },
     "Find": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Find"
+          }
+        }
+      }
+    },
+    "Health": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Health"
+          }
+        }
+      }
+    },
+    "Home": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home"
           }
         }
       }
@@ -244,6 +434,46 @@
         }
       }
     },
+    "Insurance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Insurance"
+          }
+        }
+      }
+    },
+    "Invoices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invoices"
+          }
+        }
+      }
+    },
+    "Label name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Label name"
+          }
+        }
+      }
+    },
+    "Labels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Labels"
+          }
+        }
+      }
+    },
     "Library": {
       "localizations": {
         "en": {
@@ -264,6 +494,26 @@
         }
       }
     },
+    "Manage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage"
+          }
+        }
+      }
+    },
+    "Manage Labels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage Labels"
+          }
+        }
+      }
+    },
     "More": {
       "localizations": {
         "en": {
@@ -274,12 +524,52 @@
         }
       }
     },
+    "New Label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Label"
+          }
+        }
+      }
+    },
+    "No documents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No documents"
+          }
+        }
+      }
+    },
     "No matches": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "No matches"
+          }
+        }
+      }
+    },
+    "No matching documents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching documents"
+          }
+        }
+      }
+    },
+    "Not selected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not selected"
           }
         }
       }
@@ -374,6 +664,46 @@
         }
       }
     },
+    "Receipts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Receipts"
+          }
+        }
+      }
+    },
+    "Remove “%@” from all documents? Your documents will stay in the library.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove “%@” from all documents? Your documents will stay in the library."
+          }
+        }
+      }
+    },
+    "Rename": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename"
+          }
+        }
+      }
+    },
+    "Rename Label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Label"
+          }
+        }
+      }
+    },
     "Retry": {
       "localizations": {
         "en": {
@@ -390,6 +720,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Review"
+          }
+        }
+      }
+    },
+    "Reviewed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reviewed"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
           }
         }
       }
@@ -420,6 +770,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Searching…"
+          }
+        }
+      }
+    },
+    "Selected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected"
           }
         }
       }
@@ -464,6 +824,16 @@
         }
       }
     },
+    "Taxes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taxes"
+          }
+        }
+      }
+    },
     "The library couldn’t be read safely. Your saved files have been left in place.": {
       "localizations": {
         "en": {
@@ -504,12 +874,72 @@
         }
       }
     },
+    "Use a unique, nonempty label name.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use a unique, nonempty label name."
+          }
+        }
+      }
+    },
     "Using the import date until the document date is reviewed.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Using the import date until the document date is reviewed."
+          }
+        }
+      }
+    },
+    "Vehicles": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vehicles"
+          }
+        }
+      }
+    },
+    "Work": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Work"
+          }
+        }
+      }
+    },
+    "Year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Year"
+          }
+        }
+      }
+    },
+    "Years": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Years"
+          }
+        }
+      }
+    },
+    "Years appear as you add documents.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Years appear as you add documents."
           }
         }
       }
