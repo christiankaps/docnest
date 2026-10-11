@@ -1,71 +1,113 @@
 # Implementation plan
 
-Implement increments sequentially; the full accepted first-version scope is in [PROJECT.md](PROJECT.md). Check an item only after its implementation and required verification are complete. An increment is finalized only when all its items, including verification, are checked and its outcome is recorded. Do not start the next increment before the previous one is finalized.
+[PROJECT.md](PROJECT.md) defines accepted behavior; [ARCHITECTURE.md](ARCHITECTURE.md) records technical boundaries and engineering decisions. Only increment 0 is implemented.
 
-## 0. Hello World foundation — complete
+Implement increments in order. Check an item only after implementation and required verification. Finalize each increment by completing every checkbox and recording its outcome, checks, and remaining limitations here before starting the next. A build alone does not verify product behavior. Add meaningful automated checks to `make verify` as behavior is introduced; perform required device checks before finalization.
+
+## 0. Hello World foundation — finalized
 
 - [x] Create an independent iPhone-only SwiftUI app targeting iOS 27.
 - [x] Copy the master app icon locally and prepare its iOS asset.
 - [x] Add an English string catalog and reproducible local build commands.
-- [x] Verify a simulator build and launch the Hello World screen.
+- [x] Verify a simulator build and launch the Hello World screen; record the outcome.
 
-Verified on 2026-10-10: `make verify` succeeded with Xcode 27; the final app's device family is iPhone only. Installed and launched on the iOS 27 iPhone 18 Pro simulator and visually confirmed the DocNest title and Hello World screen. Physical-device signing is not yet configured. Xcode emitted its standard App Intents metadata-skip warning because this starter app has no App Intents dependency.
+Outcome, 2026-10-10: `make verify` succeeded with Xcode 27. The app is iPhone-only. Installed and launched on the iOS 27 iPhone 18 Pro simulator; visually confirmed the DocNest title and Hello World screen. Physical-device signing is not configured. The starter has no App Intents dependency, so Xcode emitted its standard metadata-skip warning.
 
-## 1. Local library and label-first browsing
+## 1. Private local PDF library
 
-- [ ] Define document identity, original PDF storage, filename, document date, import date, review state, and labels with stable IDs.
-- [ ] Establish atomic writes and a persistence schema before accepting real documents.
-- [ ] Add editable localized starter labels, label-first home, Years, inbox count, and text-only document lists sorted by document date.
-- [ ] Implement AND filtering and PDF viewing; year labels derive from document dates.
-- [ ] Include an easily discoverable native share-sheet action in the document viewer so users can share the original PDF as a core workflow.
-- [ ] Use familiar iOS navigation, controls, and gestures; review discoverability and ease of finding, opening, and sharing a document throughout implementation.
-- [ ] Verify persistence after relaunch, multi-label filtering, year changes, and filename stability.
+- [ ] Choose and document local persistence, versioned schema, and private file layout. Model stable document IDs, filenames, document/import dates, date provenance, review state, and independent processing state. Keep cloud infrastructure out of this increment.
+- [ ] Implement recoverable file/metadata writes and startup recovery; keep the library absent from Files and unavailable for external in-place editing.
+- [ ] Import PDF copies through the system picker. Validate inputs, reject encrypted/corrupt PDFs clearly, leave sources untouched, and avoid partial visible entries on failure.
+- [ ] Detect identical PDF content before creating another document; preserve existing metadata and offer the existing document. For distinct name collisions, permanently append `_2`, `_3`, etc. before `.pdf`, consistently in the filename and title. Never overwrite or renumber an existing document.
+- [ ] Establish Library/Inbox tabs and Settings entry, basic title/date lists without thumbnails, an initial flagged document-date fallback, and import time in details only.
+- [ ] Add PDFKit viewing, existing-text in-document search, visible Share/Details, and single-document original-PDF sharing/export using independent copies and the stored filename.
+- [ ] Establish a synthetic resource corpus for hundreds of PDFs and record representative file sizes/page counts and initial load/open timings.
+- [ ] Verify relaunch persistence, interrupted writes/imports, resource failure, duplicate/name safety, source/export independence, and private storage. Run `make verify`, record evidence and outcome, and finalize this increment.
 
-## 2. PDF capture and inbox review
+## 2. Labels, dates, and inbox review
 
-- [ ] Add PDF file import and a share extension for receiving PDFs from email and other apps.
-- [ ] Route both entry points through one safe import pipeline; preserve original bytes and filenames and detect identical PDFs.
-- [ ] Stage share-extension imports safely using a project-local App Group configuration; configure signing identities when needed.
-- [ ] Add review, manual label assignment, editable dates/titles, and Done without requiring labels.
-- [ ] Verify duplicate handling, interrupted imports, share handoff, and retained documents after Done.
+- [ ] Add stable label IDs and the editable English starter set, ready for localization. Support creation, renaming, deletion, and multiple labels per document; deleting a label must not delete documents.
+- [ ] Build the label-first Library home with Inbox count, Years, and Import action. Add Scan when capture exists in increment 5.
+- [ ] Implement manual labeling, editable document dates, and Done. Reviewed documents remain in the library even without labels.
+- [ ] Derive virtual years from document dates; allow one selected year, replace it when another is chosen, and support clearing it. Combine all selected labels and the year with AND.
+- [ ] Sort newest document date first; keep import time out of sorting/filtering. Date changes update the virtual year without changing filenames.
+- [ ] Verify starter identity, label combinations, date/year changes, review persistence, and Done without labels. Run `make verify`, record outcome, and finalize this increment.
 
-## 3. Camera scanning
+## 3. Document management and local recovery
 
-- [ ] Add multi-page scanning with edge detection and crop adjustment using platform capabilities.
-- [ ] Save one PDF through the common import pipeline.
-- [ ] Generate initial date-first filenames; keep them stable after later date corrections.
-- [ ] Verify scan cancellation and multi-page import on a physical iPhone.
+- [ ] Add explicit rename using the shared collision policy; preserve document identity and original PDF bytes.
+- [ ] Add native Select mode for bulk original-PDF sharing and additive label assignment. Preserve existing labels and make the selection scope clear.
+- [ ] Add Labels/Delete swipe actions and Share/Rename/Labels/Delete context menus.
+- [ ] Implement Recently Deleted, recovery, and 30-day cleanup that resumes when execution is possible. Exclude deleted documents from active browsing/search and retain their metadata for recovery.
+- [ ] Verify rename collisions, multi-item filenames/sharing, bulk-label preservation, deletion/recovery, and retention with a controllable clock. Run `make verify`, record outcome, and finalize this increment.
 
-## 4. On-device processing and search
+## 4. Library lock and capture boundary
 
-- [ ] Extract existing PDF text and run on-device OCR where needed, with resumable background work.
-- [ ] Infer issue dates, distinguish due dates, and flag uncertain or fallback dates for review.
-- [ ] Suggest scan descriptions and labels using document text and previous accepted labeling choices; never apply ordinary labels without acceptance.
-- [ ] Add full-text search respecting AND label/year filters.
-- [ ] Evaluate extraction and suggestions on representative synthetic personal paperwork. Test hundreds of documents and define measurable responsiveness targets.
+- [ ] Add optional Face ID authentication with device-passcode fallback for Library, Inbox, and review.
+- [ ] Relock immediately on leaving the app and require authentication on returning to protected content. Let active system share/picker tasks finish and avoid interrupting them on transient inactivity.
+- [ ] Cover protected content in app-switcher snapshots with a neutral DocNest cover when the lock is enabled.
+- [ ] Establish a restricted capture route that can accept new payloads without unlocking or exposing existing documents. Define staging/file-protection choices for the capture increment.
+- [ ] Verify lifecycle and navigation bypass cases, including staged capture input and locked duplicates. Test authentication and snapshots on a physical iPhone. Run `make verify`, record outcome, and finalize this increment.
 
-## 5. Document management and local recovery
+## 5. Camera and incoming shared PDFs
 
-- [ ] Add rename, export, Recently Deleted, restore, and 30-day cleanup; verify original-PDF sharing implemented with the viewer.
-- [ ] Define a versioned backup containing PDFs, labels, document dates, and review metadata.
-- [ ] Add full-library export and safe restore: merge documents, skip identical PDFs, combine labels, and keep existing names.
-- [ ] Verify round-trip backups, corrupt backup rejection, duplicate metadata merges, and recovery. Test cleanup with a controllable clock.
+- [ ] Add the share extension and durable App Group handoff; document signing/configuration locally. Reuse the library's validation, deduplication, naming, and review rules.
+- [ ] Add native multipage document scanning with edge detection and crop adjustment; save one PDF to the Inbox.
+- [ ] Name scans `YYYY-MM-DD_DocsNest_Scanner.pdf` using local capture date and the fixed suffix, with numbered collisions. Never derive scan names from OCR or later document-date changes.
+- [ ] Add Library Scan and the localized Home Screen Scan Document quick action for cold launch and running-app activation.
+- [ ] Allow scanner and incoming-share capture without authentication. Save safely without unlocking the library or disclosing existing content, including duplicate results; authenticate before review.
+- [ ] Verify shared encrypted/corrupt inputs, interruption/relaunch recovery, same-day scans, cancellation, and locked/unlocked routing. Test Mail sharing and multipage scanning on a physical iPhone. Run `make verify`, record outcome, and finalize this increment.
 
-## 6. iCloud and storage selection
+## 6. On-device OCR, document dates, and search
 
-- [ ] Choose the persistence/sync approach and define conflict handling before implementing synchronization.
-- [ ] Add explicit Local only/iCloud first-launch choice, sync status, and offline downloaded documents.
-- [ ] Support verified switching in Settings; download everything before switching to local-only and retain cloud copies until explicit deletion.
-- [ ] Verify with two devices/accounts as appropriate: relaunch, offline edits, conflicts, account availability, interrupted transfers, and restoration on a new device.
+- [ ] Extract PDF text and run on-device OCR where needed for English, German, and mixed-language documents. Store derived results by page without rewriting originals.
+- [ ] Persist bounded processing/retry work, show Processing, and resume after interruption. Keep capture/view/share/manual edits usable. OCR failure leaves valid PDFs usable and offers Retry OCR.
+- [ ] Infer issue/invoice dates ahead of due dates, flag uncertain/fallback dates, and respect manually edited dates. Late completion/retry must preserve identity, manual metadata, and Done status.
+- [ ] Add library full-text search combined with all selected labels and the selected year using AND.
+- [ ] Add scanned-document search snippets that navigate to corresponding PDF pages. Defer precise OCR word highlighting.
+- [ ] Verify multilingual/ambiguous dates, page mapping, failure/retry, late-result precedence, and filename stability. Measure processing/search responsiveness against the corpus and define measurable targets for final qualification. Run `make verify`, record outcome, and finalize this increment.
 
-## 7. Privacy, accessibility, and release readiness
+## 7. Smart label suggestions
 
-- [ ] Add optional Face ID lock with passcode fallback; define how locked share imports and app-switcher previews behave.
-- [ ] Check VoiceOver, Dynamic Type, dark appearance, English strings, and localization readiness of starter labels.
-- [ ] Complete focused automated regression tests and device checks for the full first-version scope.
-- [ ] Document signing, iCloud/App Group entitlements, backup format, reproducible builds, and release steps locally.
-- [ ] Verify no external processing, no parent-folder dependencies, and no private data in fixtures. Prepare free distribution; publishing requires explicit authorization.
+- [ ] Implement a single local text/history-based suggestion pipeline using document text and previously accepted labeling choices. Keep Foundation Models and cloud services out of the initial implementation.
+- [ ] Make suggestions easy to accept individually; never auto-apply ordinary labels. Keep manual labeling available and do not infer value-label amounts.
+- [ ] Preserve manual choices and Done when suggestions arrive late; make new suggestions available without reopening the Inbox item automatically.
+- [ ] Evaluate repeatable synthetic English/German paperwork and recurring issuers; record suggestion usefulness and limitations. Verify acceptance and late-result behavior. Run `make verify`, record outcome, and finalize this increment.
 
-## Working gate
+## 8. Value labels and statistics
 
-Current gate: `make verify` (simulator build). Add targeted tests as behavior is implemented and include them in the gate. Do not claim later milestones complete based on a Hello World build.
+- [ ] Extend/version persistence with optional normalized label units (up to 12 characters) and one optional decimal per document-label assignment. Keep starter units empty and prohibit values on virtual years.
+- [ ] Implement locale-aware negative/positive entry and display, canonical decimal storage/arithmetic, up to 30 total digits and 6 fractional places, and invalid/nonfinite/scientific-notation rejection. Distinguish missing from zero.
+- [ ] Add connected label/value chips and a visible + value segment; open a native Save/Cancel/Clear sheet. Keep document opening and label removal separate; support negative entry accessibly.
+- [ ] Preserve the label when clearing a value; remove values with assignments/labels. Confirm unit changes with existing values without conversion; confirm unit clearing with the affected count before deleting values. Cancellation must preserve all data.
+- [ ] For exactly one unit-enabled label in the active filter, show a compact statistics summary opening a sheet: document/valued/missing counts, sum, average, minimum, maximum, and median. Other labels, year, and search narrow the scope.
+- [ ] Always calculate filtered statistics; also show selected-visible statistics when more than one visible document is selected. Exclude missing values and deleted documents; show unavailable aggregates when no values exist. Never mix labels/units or block interaction.
+- [ ] Verify numeric boundaries/precision, locale entry, zero/missing, confirmation cancellation, statistics scopes, and persistence through rename/deletion/recovery. Run `make verify`, record outcome, and finalize this increment.
+
+## 9. Whole-library backup and restore
+
+- [ ] Define/document a versioned backup manifest and payload format, label identity matching, and explicit Recently Deleted coverage. Include PDFs, filenames, dates, labels, units, values, and review state.
+- [ ] Export a separate whole-library backup and restore into an empty or existing library. Validate before mutation and preserve the last valid library on corruption, interruption, resource failure, or unsupported encrypted payloads.
+- [ ] Reuse exact-content deduplication and filename collision handling. Skip identical PDF payloads, combine labels, and retain existing names.
+- [ ] Fill missing values from backup; treat zero as present. Keep/report differing current values, document dates, and units, and allow explicit selection of the backup version. Resolve unit conflicts before applying related values without conversion or summing amounts.
+- [ ] Keep conflict reports actionable; make incomplete/failed restores clear without silently dropping data or unresolved conflicts.
+- [ ] Verify full round-trip, fresh-device restore, merge/idempotence, renamed/colliding files, unit/value/date conflicts, and malformed/interrupted input. Run `make verify`, record outcome, and finalize this increment.
+
+## 10. Local delivery qualification
+
+- [ ] Verify the full capture → review → label/year/search retrieval → share workflow with hundreds of representative personal PDFs, including value labels, recovery, and backups; meet the recorded responsiveness/resource targets.
+- [ ] Check VoiceOver, Dynamic Type, dark appearance, accessible touch targets, English strings, localized starter identity, and discoverability of primary actions.
+- [ ] Complete regression and physical-device checks for scanner, quick action, share extension, authentication, lifecycle, privacy, and recovery.
+- [ ] Verify no external document processing, Files-visible library, parent-folder build dependency, or private data in fixtures.
+- [ ] Document reproducible builds, signing, entitlements, backup compatibility, test evidence, and known limitations. Prepare free distribution; publishing remains a separately authorized action.
+- [ ] Run the complete `make verify` gate, record final acceptance and outcome, and finalize local delivery before beginning a later phase.
+
+## Deferred work — outside local delivery
+
+Start only after increment 10 is finalized. Define detailed checkbox increments and acceptance criteria before implementing these capabilities; finalize each before starting its successor.
+
+- [ ] Evaluate private iCloud synchronization for both metadata and PDFs, including schema, account behavior, offline edits, deletion, conflicts, and new-iPhone recovery. Verify with two devices before finalizing this phase.
+- [ ] Add explicit Local only/iCloud setup, sync status, and automatic download of all PDFs with truthful offline availability, progress, resumable transfers, and storage-failure handling. Verify and finalize before storage switching.
+- [ ] Add verified Settings storage switching: copy/verify before completion, download everything before local-only, retain cloud copies until explicit deletion, and resolve rejoining-cloud conflicts. Verify interrupted switching and preserve dates/labels/values/review state; record finalization.
+
+Foundation Models remains a separate optional evaluation after local delivery: adopt only on demonstrated improvement over the local suggestion baseline, with processing entirely on-device. Siri/Shortcuts, widgets, Spotlight, and precise OCR highlighting have no implementation commitment.

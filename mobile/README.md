@@ -13,7 +13,7 @@ make verify
 
 `project.yml` is the project configuration source. After changing it, run `make generate` with XcodeGen installed. The generated Xcode project is included so ordinary builds do not require XcodeGen. Build output stays in `.build/`.
 
-See [PROJECT.md](PROJECT.md) for accepted product requirements and [PLAN.md](PLAN.md) for implementation milestones.
+The planned initial delivery uses a local-only, app-private library. See [PROJECT.md](PROJECT.md) for the consolidated product concept, [ARCHITECTURE.md](ARCHITECTURE.md) for technical boundaries and open engineering decisions, and [PLAN.md](PLAN.md) for sequential implementation and verification. Only the Hello World increment is complete.
 
 ## Icon
 

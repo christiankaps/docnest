@@ -1,94 +1,144 @@
-# Mobile App Concept
+# DocNest Mobile
 
 **Workflow:** ESTABLISHED
+
 **Maturity:** MVP
 
-## Confirmed scope
+## Purpose and current state
 
-- DocNest Mobile is an independent mobile app project.
-- This folder must be self-contained, with no dependencies on or file references to its containing folder.
-- Existing resources such as the DocNest app icon may be reused by copying them into this project.
-- The initial concept is established; implementation starts with a Hello World app and proceeds through PLAN.md milestones.
+A free, native iPhone app for individuals managing hundreds of personal documents. The primary workflows are capturing PDFs, finding them through labels, and sharing them. The experience should be modern, intuitive, and consistent with standard iOS interactions.
 
-## Purpose and audience
+Current implementation: a SwiftUI Hello World screen, local app icon, and English string catalog. Only increment 0 is complete; the capabilities below describe the target product, not implemented functionality.
 
-- Problem and intended outcome: Easily retrieve a needed document on a phone and store received PDFs for later retrieval.
-- Target users: Individuals organizing personal paperwork. The initial version focuses on personal document management.
-- Experience: Modern, intuitive, and native to iOS. Use familiar platform navigation, controls, gestures, and system interactions; keep common document tasks easy to discover and complete.
-- Primary use cases:
-  - Open the app and quickly find a stored document.
-  - Send a PDF received by email (for example, an invoice) directly to the app for storage.
-  - Scan paper documents with the iPhone camera and import them into the document library. Camera import is an important feature for the initial version.
-- Capacity target: Comfortably handle hundreds of documents. Focus on private personal paperwork rather than large business archives.
+The initial delivery is local-only. The project is independent of the desktop app and is not a companion app. Everything required to build it stays inside this folder; reused resources are copied locally.
 
-## Platform and delivery
+## Sources of truth
 
-- Language: Implement the initial app in English only. Prepare interface strings and the label starter set for future localization; keep starter-label identities independent of their translated display names.
-- Product relationship: A companion app for DocNest on macOS is not currently planned.
-- Mobile platforms: iPhone only for the initial version.
-- Minimum OS: iOS 27, the current major release as of 2026-10-10. Earlier iOS versions are outside the initial support scope.
-- Pricing: The first version is free.
+| Subject | Source |
+| --- | --- |
+| Product scope and accepted behavior | This document |
+| Technical boundaries, SDK choices, and unresolved engineering details | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Sequential implementation and verification | [PLAN.md](PLAN.md) |
+| Build/run instructions | [README.md](README.md), `project.yml`, `Makefile` |
+| Agent operation | [AGENTS.md](AGENTS.md) |
+
+Earlier exploratory mockups are illustrative; this specification governs where their navigation or behavior differs.
+
+## Platform, language, and scope
+
+- iPhone only, minimum iOS 27; build with Xcode 27 or later.
+- English interface initially. Prepare interface strings and starter labels for localization; starter-label identity must not depend on translated names.
+- Recognize English and German documents, including mixed-language documents. Document language is independent of interface language.
+- Local-only, app-private storage. No storage-mode chooser during initial setup.
+- No document processing by cloud or external AI services.
+- No support for encrypted PDFs, including password entry or password storage.
+
+Cloud synchronization, storage switching, Foundation Models, Siri/Shortcuts, widgets, Spotlight document indexing, and precise OCR word highlighting are deferred. iPad, Android, a desktop companion role, PDF editing/markup, and external live-library editing are outside the initial scope. Similar-looking scans are not deduplicated by appearance; duplicate detection is based on identical PDF content.
+
+## Navigation and document presentation
+
+- Two tabs: Library and Inbox. Settings opens from the Library toolbar.
+- Library is label-first, with a visible Inbox count, a separate Years section, and quick Scan and Import PDF actions.
+- Lists contain title, labels, and document date, without thumbnails. Default sorting is newest document date first.
+- Import date is stored and visible in details only; it is not a sorting or filtering criterion.
+- Use a native PDFKit document screen with visible Share and Details actions and in-document search.
+- Native swipe actions provide Labels and Delete. A long-press menu provides Share, Rename, Labels, and Delete; expose actions as their underlying functionality becomes available.
+- Native Select mode supports sharing several PDFs and assigning labels to several documents. Assignment adds labels without removing existing ones.
+- Use native controls, readable text, Dynamic Type, VoiceOver, dark appearance, and accessible touch targets throughout.
 
 ## Capture and inbox
 
-- Camera scanning: Support multiple pages saved as one PDF, automatic edge detection, and crop adjustment before saving. Scans use the same OCR, inbox, and label-suggestion workflow as imported PDFs.
-- Label assignment is part of the import-review workflow.
-- Import behavior: Run OCR on import and provide smart label suggestions that are easy to accept. Suggestions use document text and the user's previous labeling choices to improve relevance over time. Users assign labels manually or accept suggestions; suggestions do not apply labels automatically. All suggestion processing runs on the iPhone; the technical mechanism is TBD.
-- Processing and privacy: OCR and smart label suggestions run entirely on the iPhone. Do not send document content to external processing or AI services. The optional iCloud storage mode remains supported.
-- Import review: Save imported PDFs to an inbox for later review and label assignment; labeling is not required during capture.
-- Duplicate imports: Detect an identical PDF on import and offer to open the existing document instead of creating a duplicate, preserving its labels. Detection of visually similar scans is not yet specified.
-- Inbox lifecycle: Show documents awaiting review. A Done action marks a document reviewed and removes it from the inbox while retaining it in the library. Reviewed documents may have no labels.
+- Import PDF copies using the system document picker or by sharing from Mail and other apps.
+- Scan multiple pages into one PDF using native edge detection and crop adjustment. Camera capture is core initial functionality.
+- Provide a Home Screen app-icon long-press action named Scan Document that opens the scanner on a cold launch or while the app is running.
+- All capture routes use the same validation, naming, duplicate handling, and inbox rules.
+- Reject encrypted PDFs with a clear explanation requesting an unencrypted copy. Leave source files untouched and create no partial library entry. Unreadable/corrupt inputs and failed writes must likewise fail clearly without destroying existing data.
+- Detect identical PDF content before creating another document. Preserve existing metadata and offer to open the existing document when access is unlocked. Locked capture must not disclose or open existing library content.
+- Save captures to the Inbox without requiring labels. The Inbox contains documents awaiting review, not a separate storage location.
+- Done removes a document from the Inbox while retaining it in the library. A reviewed document may have no labels.
 
-## Organization and retrieval
+## Processing and suggestions
 
-- Retrieval priority: Labels are the primary way to browse and find documents. Full-text search is also supported as a secondary retrieval method.
-- Search and filters: Full-text search respects the currently selected labels. Results must match the search text and every selected label.
-- Home screen: Make labels the main view, with a clearly visible Inbox count and quick actions for camera scanning and PDF import.
-- Document lists: Show the document title, labels, and document date without thumbnails. Sort by document date, newest first, by default.
-- Virtual year labels: Automatically derive and assign a virtual year label from the document date's year. Show them in a separate Years section. Year and ordinary label filters combine using AND; for example, 2026 + Invoices shows invoices dated in 2026.
-- Labels: Provide an editable starter set: Invoices, Banking, Insurance, Taxes, Health, Home, Work, Vehicles, Contracts, and Receipts. Users can rename, remove, or add labels.
-- Organization: Multiple labels per document are a core requirement. Labels organize document views rather than imposing a folder hierarchy. Label filters use AND: a document must have every selected label to appear in results.
+- Extract existing PDF text and use on-device OCR where needed. Capture, viewing, sharing, and manual labeling remain usable while processing is pending.
+- Show Processing in the Inbox, persist pending work, and resume interrupted work later. Do not promise immediate completion while the app is closed.
+- OCR failure does not invalidate a usable PDF. Keep viewing, sharing, and manual labeling available, show the failed state, and offer Retry OCR.
+- Processing completion/retries never duplicate documents, overwrite manual edits, or reset Done status. New suggestions remain available for explicit acceptance.
+- Initial smart label suggestions use document text and previous labeling choices. Users label manually or easily accept suggestions; ordinary labels are never applied automatically.
+- Foundation Models is a future enhancement only if comparative testing demonstrates meaningful benefit. No cloud fallback.
+- OCR never generates or changes scan filenames. Value-label amounts are entered manually, not inferred by OCR.
+
+## Labels, years, and search
+
+- Documents may have multiple labels. Labels organize views rather than imposing filesystem folders.
+- Editable starter set: Invoices, Banking, Insurance, Taxes, Health, Home, Work, Vehicles, Contracts, Receipts. Users may add, rename, or remove labels. Removing a label never deletes its documents.
+- All selected ordinary labels combine using AND.
+- Derive a virtual year label from each document date. At most one year may be selected; choosing another replaces it, and clearing it removes the year restriction.
+- The selected year, every selected ordinary label, and search text combine using AND.
+- Full-text search is secondary to labels and stays inside DocNest; do not index document titles/content in Spotlight.
+- Search in image-only scanned PDFs shows matching OCR snippets and navigates to the corresponding page. Preserve the original PDF; precise OCR word highlighting is deferred.
 
 ## Dates and filenames
 
-- Import date: Store it and show it in document details. It has no role in sorting or filtering. It may supply the suggested document date when OCR finds no reliable date.
-- Document naming: Preserve the original filename for imported PDFs. Camera scan names start with the document date in YYYY-MM-DD format followed by an underscore and a descriptive name, for example `2026-10-10_Invoice`. Use the extracted document date, falling back to the suggested import date when no reliable date is found. Suggest the description from OCR, use `Scan` as the fallback, and allow editing during inbox review. Users can rename documents.
-- Filename stability: After initial naming, changing the document date does not rename the file. Preserve its existing filename unless the user explicitly renames it.
-- Document date: Each document has a document date distinct from file creation and import dates. Extract it from PDF content using OCR where possible. Prefer the document's issue date (for example, invoice date) over a payment due date; flag uncertain choices for review. If OCR finds no reliable date, suggest the import date and flag it for review. Allow users to edit the date during inbox review; changing it automatically updates the virtual year label.
+- Each document has an editable document date distinct from its import date and filesystem dates.
+- Infer the document date from content, preferring issue/invoice date over payment due date. Flag uncertain results for review. If no reliable date is found, suggest the import date and flag it.
+- Date edits update the virtual year but never rename the file. Late results respect manual edits and review status.
+- Preserve imported filenames unless a name collision requires a suffix.
+- Scan names use the local capture date and literal suffix `DocsNest_Scanner`: `YYYY-MM-DD_DocsNest_Scanner.pdf`. The spelling and suffix are fixed filename text, not an organizational label. OCR-derived document dates have no effect on this name.
+- For a distinct document with a colliding filename, append the next available `_2`, `_3`, etc. before `.pdf`. The suffix is permanent and visible in both filename and library title. Sharing/export uses the same name.
+- Apply collision handling to imports, scans, manual renames, and restore. Preserve the first document's name and never renumber existing documents. Identical-PDF detection takes precedence over creating a numbered duplicate.
+- Use stable internal document IDs independently of filenames. Users can explicitly rename documents within the app.
 
-## Document actions and recovery
+## Value labels
 
-- Initial document actions: Rename documents, share/export the original PDF, and delete documents.
-- Sharing priority: Sharing documents is a primary workflow, alongside finding and importing them. Provide an easily discoverable Share action using the native iOS share sheet to send the original PDF to other apps or people.
-- Library export: Support exporting the entire library, including PDFs and labels, for backup and moving data. Export format is TBD.
-- Library restore: Restore library exports, preserving document names and labels, including on a new iPhone using local-only storage. Merge into an existing library, skip identical PDFs, and retain existing documents. For duplicate PDFs, combine existing and backed-up labels while keeping the current document name.
-- Deletion: Keep deleted documents in Recently Deleted for 30 days before permanent removal, with recovery available during that period.
+A label with an optional short unit, such as `€`, `USD`, `kg`, or `h`, enables one optional manual numeric value per document-label assignment. Multiple value labels on a document hold independent values. Starter labels have no preset units; virtual year labels cannot have values.
 
-## Storage and app access
+- Normalize unit whitespace and allow up to 12 characters.
+- Support decimal values, including negatives, with up to 30 total digits and 6 fractional places. Use canonical decimal storage and decimal arithmetic; parse/display according to numeric locale. Reject invalid/nonfinite numbers and scientific notation.
+- Missing is distinct from zero. Clearing a value retains its label; removing an assignment removes its value. Deleting a label removes assignments/values without deleting documents.
+- A unit change with existing values requires confirmation explaining that numbers stay unchanged and no conversion occurs.
+- Clearing a unit is different: after confirmation showing the affected document count, delete its existing values.
+- Show a connected label/value chip, such as `Invoices | 84.20 €`. A missing value has a visible + value segment.
+- Tapping the value segment opens a native editing sheet with label, unit, value, Save, Cancel, and Clear where applicable. Keep label removal and document opening as separate actions.
+- Show statistics only when exactly one unit-enabled label is in the active filter context. Other labels, the selected year, and search may narrow the scope.
+- Name the active label/unit and show document count, valued count, missing count, sum, average, minimum, maximum, and median. Missing values are excluded from numeric aggregates; zero is included. With no valued documents, aggregates are unavailable rather than zero.
+- Always show filtered-document statistics. Also show selected-visible-document statistics when more than one visible document is selected. Never aggregate across different labels or units.
+- Use a compact list summary that opens a sheet with all statistics. Calculation must not block selection or document opening.
+- Preserve values through renaming, soft deletion/recovery, and backup/restore. Future cloud operations must preserve them too.
 
-- App access: Offer an optional Face ID lock with the iPhone passcode as fallback.
-- Storage options: Support local-only storage and an iCloud option. Local-only mode keeps the library on that device. iCloud mode automatically syncs documents across the user's iPhones and restores access on a new iPhone. Downloaded documents remain available offline.
-- Storage setup: Ask users to choose Local only or iCloud at first launch, with a short explanation of each option.
-- Storage switching: Allow changing mode later in Settings. Copy the library to the selected mode and verify the transfer before completing the switch. Download all documents before switching from iCloud to local-only. Retain the existing iCloud copy until the user explicitly chooses to delete it.
+## Private storage and library lock
 
-## First-version scope and acceptance
+- Store the live library privately; it must not be visible in Files or exposed for external in-place editing. All library changes go through DocNest.
+- Imports are copies. Sharing, PDF export, and library backup create separate copies. Changes to sources or exported files never modify the library.
+- Do not implement external rename/replacement/deletion reconciliation, folder watching, or a Files provider.
+- Offer an optional Face ID library lock with iPhone passcode fallback. Protect library/inbox browsing and review.
+- Camera scanning and incoming shared-PDF capture do not require authentication. They may save to the Inbox without exposing existing documents or unlocking the library.
+- Relock immediately when leaving the app, without a grace period. Allow system share-sheet/file-picker tasks to finish; returning to protected content after leaving requires authentication. Transient inactivity alone must not interrupt the task.
+- When the library lock is enabled, cover document content in app-switcher previews with a neutral DocNest cover.
 
-All confirmed capabilities above belong to the first-version concept. Acceptance must cover PDF and camera capture, inbox review, on-device processing, multi-label and year retrieval, document-date handling, local and iCloud storage, recovery, and backup/restore for a library of hundreds of documents. Measurable performance targets remain TBD.
+## Sharing, deletion, and backup
 
-Outside the initial scope: iPad and Android, earlier iOS versions, additional interface languages, a desktop companion role, and external document-processing services.
+- Sharing is a primary workflow. Use the native share sheet to share original PDF contents, with individual and multiple-document support. Also support standalone PDF export.
+- Keep deleted documents in Recently Deleted for 30 days, with recovery during that period. Exclude them from active browsing/search/statistics. Cleanup must resume safely when execution is available.
+- Export the whole library as a versioned backup containing PDFs and durable metadata, including filenames, dates, labels, units, values, and review state. The exact format and treatment of Recently Deleted content are engineering details to settle in the backup increment.
+- Restore on a new device or merge into an existing library. Preserve existing documents; skip identical PDF payloads, combine their labels, and keep their current names.
+- Fill missing document-label values from backup. Zero counts as present. If values differ, keep the current value, report the conflict, and allow explicit use of the backup value. Never add conflicting amounts together.
+- Keep current document dates and units when the backup differs; report conflicts and allow explicit selection of the backup version. Resolve unit conflicts before applying affected values; changing a unit never performs conversion.
+- Preserve the last valid library on failed, corrupt, or interrupted import/restore operations. Do not silently discard unresolved metadata conflicts.
 
-## Open technical decisions
+## Deferred scope
 
-- On-device suggestion and date-extraction mechanisms.
-- Persistence, iCloud synchronization, and conflict handling.
-- Backup format and metadata coverage.
-- Handling visually similar scans beyond identical-PDF detection.
-- Project-local build, tests, integration conventions, and measurable performance checks.
+These do not block local delivery and require their own finalized increments later:
 
-## Working conventions
+- Private iCloud synchronization across the user's iPhones and access on a new iPhone. Keep the library out of Files.
+- Local/iCloud choice when cloud support exists. Automatically download all PDFs, report progress, and track actual offline availability.
+- Verified storage-mode switching in Settings. Copy and verify before completing; download all documents before switching to local-only. Retain cloud copies until explicit deletion. Define conflicts when rejoining a retained cloud library.
+- Foundation Models, only after demonstrated improvement over the initial suggestion baseline, entirely on-device.
+- Siri/Shortcuts, widgets, Spotlight document indexing, and precise OCR word highlighting remain outside the initial delivery; no implementation commitment is made here.
 
-Current implementation: iPhone-only SwiftUI Hello World app, local app icon, and English string catalog. Product features remain planned; see [PLAN.md](PLAN.md).
+## Acceptance and working conventions
 
-Build with Xcode 27 or later. `project.yml` is authoritative for Xcode project generation using XcodeGen; the generated project is included. Use `make help` and `make verify` from this folder. The current gate builds for the iOS Simulator; add behavior tests as implementation grows. See [README.md](README.md) for running and signing.
+The local delivery must support the specified capture → review → label/year retrieval → share workflow, value labels, privacy, and recovery for hundreds of personal PDFs. Define representative page/file-size fixtures and measurable responsiveness targets during implementation; no unverified performance promise is made.
 
-Keep accepted product decisions in this file. Use Git for coherent verified changes, preserve unrelated work, and integrate directly on main without feature branches or pull requests. Do not publish without explicit authorization.
+Use `make help` and `make verify` from this folder. The current gate is a simulator build; add relevant tests as behavior is introduced. Physical-device checks are required for camera and authentication behavior. Details and per-increment acceptance are in PLAN.md.
+
+Use Git for coherent verified changes, preserve unrelated work, and integrate directly on main without feature branches or pull requests. Prefix mobile commits with `[mobile]`. Publishing requires explicit authorization. Keep INBOX.md user-owned; DECISIONS.md and LESSONS.md are temporary queues, not additional product specifications.
