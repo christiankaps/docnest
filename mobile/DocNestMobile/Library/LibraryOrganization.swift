@@ -46,12 +46,15 @@ struct LibraryLabel: Codable, Identifiable, Hashable, Sendable {
 struct DocumentOrganization: Codable, Sendable {
     var labelIDs: Set<UUID> = []
     var manualDate: DocumentDate?
+    var filename: String?
+    var deletedAt: Date?
     var reviewState: LibraryDocument.ReviewState = .inbox
 }
 
 /// One atomic snapshot keeps label deletion and all its assignments consistent.
 struct LibraryOrganization: Codable, Sendable {
-    var schemaVersion = 1
+    var schemaVersion = 2
+    var purgedIDs: Set<UUID>?
     var labels: [LibraryLabel] = StarterLabel.allCases.map { LibraryLabel(id: $0.id, starter: $0, customName: nil) }
     var documents: [String: DocumentOrganization] = [:]
 
@@ -59,6 +62,8 @@ struct LibraryOrganization: Codable, Sendable {
         guard let edit = documents[document.id.uuidString] else { return document }
         var result = document
         result.labelIDs = edit.labelIDs
+        result.filename = edit.filename ?? document.filename
+        result.deletedAt = edit.deletedAt
         result.reviewState = edit.reviewState
         if let date = edit.manualDate { result.documentDate = date; result.dateSource = .manual }
         return result

@@ -4,12 +4,13 @@ import PDFKit
 
 /// Owns all library writes. Each import publishes one complete directory using a same-volume rename.
 actor LibraryStore {
-    enum ImportPhase: Sendable { case copied, validated, metadataWritten, organizationWillWrite }
+    enum ImportPhase: Sendable { case copied, validated, metadataWritten, organizationWillWrite, cleanupWillRemove }
     typealias Checkpoint = @Sendable (ImportPhase) throws -> Void
 
     let root: URL
     private let exportRoot: URL
     private let checkpoint: Checkpoint
+    private let now: @Sendable () -> Date
     private var organization: LibraryOrganization?
     private var records: [LibraryDocument]?
     private let files = FileManager.default
@@ -19,10 +20,11 @@ actor LibraryStore {
     }
 
     init(root: URL = LibraryStore.defaultRoot, exportRoot: URL = URL.temporaryDirectory.appending(path: "DocNestExports"),
-         checkpoint: @escaping Checkpoint = { _ in }) {
+         checkpoint: @escaping Checkpoint = { _ in }, now: @escaping @Sendable () -> Date = { Date() }) {
         self.root = root
         self.exportRoot = exportRoot
         self.checkpoint = checkpoint
+        self.now = now
     }
 
     private var documentsDirectory: URL { root.appending(path: "Documents") }
@@ -33,9 +35,24 @@ actor LibraryStore {
         organization = nil
         try createDirectory(documentsDirectory)
         try createDirectory(stagingDirectory)
+        let organizationURL = root.appending(path: "organization.json")
+        var saved: LibraryOrganization
+        if files.fileExists(atPath: organizationURL.path) {
+            do {
+                let data = try Data(contentsOf: organizationURL)
+                struct Header: Decodable { let schemaVersion: Int }
+                guard [1, 2].contains(try JSONDecoder().decode(Header.self, from: data).schemaVersion) else { throw LibraryError.unsupportedVersion }
+                saved = try JSONDecoder().decode(LibraryOrganization.self, from: data)
+                saved.schemaVersion = 2
+            } catch let error as LibraryError { throw error }
+            catch { throw LibraryError.invalidLibrary }
+        } else {
+            saved = LibraryOrganization()
+        }
         var loaded: [LibraryDocument] = []
         for folder in try files.contentsOfDirectory(at: documentsDirectory, includingPropertiesForKeys: nil) {
             guard UUID(uuidString: folder.lastPathComponent) != nil else { throw LibraryError.invalidLibrary }
+            if saved.purgedIDs?.contains(UUID(uuidString: folder.lastPathComponent)!) == true { continue }
             let record: LibraryDocument
             do {
                 let data = try Data(contentsOf: folder.appending(path: "metadata.json"))
@@ -49,7 +66,7 @@ actor LibraryStore {
                   record.contentHash.count == 64,
                   record.filename == Self.safeFilename(record.filename),
                   files.fileExists(atPath: folder.appending(path: "original.pdf").path),
-                  !loaded.contains(where: { $0.id == record.id || Self.nameKey($0.filename) == Self.nameKey(record.filename) }) else {
+                  !loaded.contains(where: { $0.id == record.id }) else {
                 throw LibraryError.invalidLibrary
             }
             let attributes = try files.attributesOfItem(atPath: folder.appending(path: "original.pdf").path)
@@ -64,25 +81,12 @@ actor LibraryStore {
             try files.removeItem(at: abandoned)
         }
         if files.fileExists(atPath: exportRoot.path) { try files.removeItem(at: exportRoot) }
-        let organizationURL = root.appending(path: "organization.json")
-        let saved: LibraryOrganization
-        if files.fileExists(atPath: organizationURL.path) {
-            do {
-                let data = try Data(contentsOf: organizationURL)
-                struct Header: Decodable { let schemaVersion: Int }
-                guard try JSONDecoder().decode(Header.self, from: data).schemaVersion == 1 else { throw LibraryError.unsupportedVersion }
-                saved = try JSONDecoder().decode(LibraryOrganization.self, from: data)
-                try validate(saved, documents: loaded)
-            } catch let error as LibraryError { throw error }
-            catch { throw LibraryError.invalidLibrary }
-        } else {
-            // Increment-1 libraries have no organization file. Never reseed an existing snapshot.
-            saved = LibraryOrganization()
-            try writeOrganization(saved)
-        }
+        try validate(saved, documents: loaded)
+        if !files.fileExists(atPath: organizationURL.path) { try writeOrganization(saved) }
         organization = saved
         records = Self.sorted(loaded.map { saved.applying(to: $0) })
-        return records!
+        try cleanupExpired()
+        return try allDocuments()
     }
 
     func importPDF(from source: URL, importedAt: Date = Date()) throws -> ImportResult {
@@ -105,7 +109,11 @@ actor LibraryStore {
         let pageCount = try Self.validatePDF(at: pdfURL)
         try files.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: pdfURL.path)
         let hash = try Self.hash(at: pdfURL)
-        if let existing = current.first(where: { $0.contentHash == hash }) {
+        if var existing = current.first(where: { $0.contentHash == hash }) {
+            if existing.deletedAt != nil {
+                try recover(existing.id)
+                existing = records!.first { $0.id == existing.id }!
+            }
             return ImportResult(document: existing, isDuplicate: true)
         }
         try checkpoint(.validated)
@@ -128,7 +136,7 @@ actor LibraryStore {
 
     func allDocuments() throws -> [LibraryDocument] {
         guard let records else { throw LibraryError.notLoaded }
-        return records
+        return records.filter { $0.deletedAt == nil }
     }
 
     func allLabels() throws -> [LibraryLabel] {
@@ -161,7 +169,7 @@ actor LibraryStore {
 
     func updateDocument(_ id: UUID, labels: Set<UUID>? = nil, manualDate: DocumentDate? = nil, reviewed: Bool = false) throws {
         guard var next = organization, let records else { throw LibraryError.notLoaded }
-        guard let record = records.first(where: { $0.id == id }) else { throw LibraryError.missingDocument }
+        guard let record = records.first(where: { $0.id == id && $0.deletedAt == nil }) else { throw LibraryError.missingDocument }
         var edit = next.documents[id.uuidString] ?? DocumentOrganization(reviewState: record.reviewState)
         if let labels {
             guard labels.isSubset(of: Set(next.labels.map(\.id))) else { throw LibraryError.invalidLabel }
@@ -174,6 +182,80 @@ actor LibraryStore {
         if reviewed { edit.reviewState = .reviewed }
         next.documents[id.uuidString] = edit
         try commit(next)
+    }
+
+    func recentlyDeleted() throws -> [LibraryDocument] {
+        guard let records else { throw LibraryError.notLoaded }
+        return records.filter { $0.deletedAt != nil }.sorted { $0.deletedAt! > $1.deletedAt! }
+    }
+
+    func renameDocument(_ id: UUID, name: String) throws {
+        guard var next = organization, let records else { throw LibraryError.notLoaded }
+        guard let record = records.first(where: { $0.id == id && $0.deletedAt == nil }) else { throw LibraryError.missingDocument }
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw LibraryError.invalidFilename }
+        var edit = next.documents[id.uuidString] ?? DocumentOrganization(reviewState: record.reviewState)
+        edit.filename = Self.availableFilename(name, occupied: Set(records.filter { $0.id != id }.map { Self.nameKey($0.filename) }))
+        next.documents[id.uuidString] = edit
+        try commit(next)
+    }
+
+    func addLabels(_ labels: Set<UUID>, to ids: Set<UUID>) throws {
+        guard var next = organization, let records else { throw LibraryError.notLoaded }
+        guard labels.isSubset(of: Set(next.labels.map(\.id))), ids.isSubset(of: Set(records.filter { $0.deletedAt == nil }.map(\.id))) else { throw LibraryError.invalidLabel }
+        for record in records where ids.contains(record.id) {
+            var edit = next.documents[record.id.uuidString] ?? DocumentOrganization(reviewState: record.reviewState)
+            edit.labelIDs.formUnion(labels)
+            next.documents[record.id.uuidString] = edit
+        }
+        try commit(next)
+    }
+
+    func deleteDocument(_ id: UUID) throws {
+        guard var next = organization, let record = records?.first(where: { $0.id == id && $0.deletedAt == nil }) else { throw LibraryError.missingDocument }
+        var edit = next.documents[id.uuidString] ?? DocumentOrganization(reviewState: record.reviewState)
+        edit.deletedAt = now()
+        next.documents[id.uuidString] = edit
+        try commit(next)
+    }
+
+    func recover(_ id: UUID) throws {
+        guard var next = organization, let record = records?.first(where: { $0.id == id && $0.deletedAt != nil }),
+              now().timeIntervalSince(record.deletedAt!) < 30 * 86400 else { throw LibraryError.missingDocument }
+        next.documents[id.uuidString]?.deletedAt = nil
+        try commit(next)
+    }
+
+    /// Commit durable tombstones first; interrupted or failed removals are retried on the next execution.
+    func cleanupExpired() throws {
+        guard var next = organization, let records else { throw LibraryError.notLoaded }
+        let expired = records.filter { $0.deletedAt.map { now().timeIntervalSince($0) >= 30 * 86400 } ?? false }
+        if !expired.isEmpty {
+            next.purgedIDs = (next.purgedIDs ?? []).union(expired.map(\.id))
+            for record in expired { next.documents.removeValue(forKey: record.id.uuidString) }
+            let remaining = records.filter { !(next.purgedIDs ?? []).contains($0.id) }
+            try validate(next, documents: remaining)
+            try writeOrganization(next)
+            organization = next
+            self.records = remaining
+        }
+        for id in next.purgedIDs ?? [] {
+            let folder = documentsDirectory.appending(path: id.uuidString)
+            if files.fileExists(atPath: folder.path) {
+                try checkpoint(.cleanupWillRemove)
+                try files.removeItem(at: folder)
+            }
+        }
+    }
+
+    func exportCopies(for ids: Set<UUID>) throws -> [URL] {
+        var copies: [URL] = []
+        do {
+            for id in ids.sorted(by: { $0.uuidString < $1.uuidString }) { copies.append(try exportCopy(for: id)) }
+            return copies
+        } catch {
+            for url in copies { removeExport(url) }
+            throw error
+        }
     }
 
     private func labelName(_ name: String, excluding id: UUID?) throws -> String {
@@ -193,9 +275,13 @@ actor LibraryStore {
                   && !label.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                   && label.name.rangeOfCharacter(from: .controlCharacters) == nil
               }) else { throw LibraryError.invalidLibrary }
+        guard (snapshot.purgedIDs ?? []).isDisjoint(with: Set(documents.map(\.id))) else { throw LibraryError.invalidLibrary }
+        let effective = documents.map { snapshot.applying(to: $0) }
+        guard Set(effective.map { Self.nameKey($0.filename) }).count == effective.count else { throw LibraryError.invalidLibrary }
         let documentIDs = Set(documents.map { $0.id.uuidString })
         for (id, edit) in snapshot.documents {
-            guard documentIDs.contains(id), edit.labelIDs.isSubset(of: ids), edit.manualDate?.isValid != false else {
+            guard documentIDs.contains(id), edit.labelIDs.isSubset(of: ids), edit.manualDate?.isValid != false, edit.deletedAt?.timeIntervalSinceReferenceDate.isFinite != false,
+                  edit.filename.map({ $0 == Self.safeFilename($0) }) != false else {
                 throw LibraryError.invalidLibrary
             }
         }
@@ -216,13 +302,13 @@ actor LibraryStore {
     }
 
     func originalURL(for id: UUID) throws -> URL {
-        guard records?.contains(where: { $0.id == id }) == true else { throw LibraryError.missingDocument }
+        guard records?.contains(where: { $0.id == id && $0.deletedAt == nil }) == true else { throw LibraryError.missingDocument }
         return documentsDirectory.appending(path: id.uuidString).appending(path: "original.pdf")
     }
 
     /// Always creates a distinct copy, never a hard link or a URL into the live library.
     func exportCopy(for id: UUID) throws -> URL {
-        guard let record = records?.first(where: { $0.id == id }) else { throw LibraryError.missingDocument }
+        guard let record = records?.first(where: { $0.id == id && $0.deletedAt == nil }) else { throw LibraryError.missingDocument }
         let folder = exportRoot.appending(path: UUID().uuidString)
         try createDirectory(folder)
         let destination = folder.appending(path: record.filename)
@@ -232,7 +318,7 @@ actor LibraryStore {
     }
 
     func removeExport(_ url: URL) {
-        guard url.deletingLastPathComponent().deletingLastPathComponent() == exportRoot else { return }
+        guard url.deletingLastPathComponent().deletingLastPathComponent().standardizedFileURL.path == exportRoot.standardizedFileURL.path else { return }
         try? files.removeItem(at: url.deletingLastPathComponent())
     }
 

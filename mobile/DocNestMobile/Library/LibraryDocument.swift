@@ -31,7 +31,7 @@ struct LibraryDocument: Codable, Identifiable, Hashable, Sendable {
 
     let schemaVersion: Int
     let id: UUID
-    let filename: String
+    var filename: String
     let contentHash: String
     let byteCount: Int64
     let pageCount: Int
@@ -43,6 +43,7 @@ struct LibraryDocument: Codable, Identifiable, Hashable, Sendable {
 
     // Assignments live in organization.json, never in original import metadata.
     var labelIDs: Set<UUID> = []
+    var deletedAt: Date?
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, id, filename, contentHash, byteCount, pageCount, documentDate,
              dateSource, importedAt, reviewState, processingState
@@ -64,10 +65,11 @@ struct PDFSearchHit: Identifiable, Sendable {
 }
 
 enum LibraryError: LocalizedError, Equatable {
-    case encryptedPDF, invalidPDF, invalidLibrary, unsupportedVersion, notLoaded, missingDocument, invalidLabel, invalidDate
+    case encryptedPDF, invalidPDF, invalidLibrary, unsupportedVersion, notLoaded, missingDocument, invalidLabel, invalidDate, invalidFilename
 
     var errorDescription: String? {
         switch self {
+        case .invalidFilename: String(localized: "Enter a nonempty document filename.")
         case .invalidLabel: String(localized: "Use a unique, nonempty label name.")
         case .invalidDate: String(localized: "Choose a valid document date.")
         case .encryptedPDF: String(localized: "Encrypted PDFs aren’t supported. Import an unencrypted copy.")

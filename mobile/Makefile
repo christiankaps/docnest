@@ -2,6 +2,7 @@
 
 DESTINATION ?= platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0
 CONFIGURATION ?= Debug
+UI_TESTS ?= DocNestMobileUITests
 XCODEBUILD = xcodebuild -project DocNestMobile.xcodeproj -scheme DocNestMobile -configuration $(CONFIGURATION) -derivedDataPath .build CODE_SIGNING_ALLOWED=NO
 
 help:
@@ -24,6 +25,6 @@ test-unit:
 	$(XCODEBUILD) -destination '$(DESTINATION)' -parallel-testing-enabled NO -only-testing:DocNestMobileTests test
 
 test-ui:
-	$(XCODEBUILD) -destination '$(DESTINATION)' -parallel-testing-enabled NO -only-testing:DocNestMobileUITests test
+	$(XCODEBUILD) -destination '$(DESTINATION)' -parallel-testing-enabled NO -only-testing:$(UI_TESTS) test
 
 verify: test

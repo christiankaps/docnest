@@ -10,6 +10,9 @@ struct DocumentView: View {
     @State private var openError: String?
     @State private var actionError: String?
     @State private var showDetails = false
+    @State private var renaming = false
+    @State private var deleting = false
+    @Environment(\.dismiss) private var dismiss
     @State private var showLabels = false
     @State private var showSearch = false
     @State private var query = ""
@@ -88,10 +91,18 @@ struct DocumentView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu("More", systemImage: "ellipsis") {
+                    Button("Rename", systemImage: "pencil") { renaming = true }
+                    Button("Delete", systemImage: "trash", role: .destructive) { deleting = true }
                     Button("Export PDF", systemImage: "folder") { prepareCopy(export: true) }.disabled(preparingCopy || pdf == nil)
                 }
             }
         }
+        .sheet(isPresented: $renaming) { RenameDocumentView(model: model, record: record) }
+        .confirmationDialog("Delete Document?", isPresented: $deleting, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                Task { if await model.save({ try await store.deleteDocument(id) }) { dismiss() } }
+            }
+        } message: { Text("Recover this document from Recently Deleted for 30 days.") }
         .task {
             do {
                 let url = try await store.originalURL(for: record.id)

@@ -963,6 +963,146 @@
           }
         }
       }
+    },
+    "Recently Deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recently Deleted"
+          }
+        }
+      }
+    },
+    "Select": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select"
+          }
+        }
+      }
+    },
+    "Add Labels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Labels"
+          }
+        }
+      }
+    },
+    "%lld selected in this list": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld selected in this list"
+          }
+        }
+      }
+    },
+    "Delete Document?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Document?"
+          }
+        }
+      }
+    },
+    "Recover this document from Recently Deleted for 30 days.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recover this document from Recently Deleted for 30 days."
+          }
+        }
+      }
+    },
+    "Rename Document": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Document"
+          }
+        }
+      }
+    },
+    "If this name is already used, a numbered suffix will be added.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If this name is already used, a numbered suffix will be added."
+          }
+        }
+      }
+    },
+    "Add labels to %lld selected documents. Existing labels stay assigned.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add labels to %lld selected documents. Existing labels stay assigned."
+          }
+        }
+      }
+    },
+    "Deleted %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted %@"
+          }
+        }
+      }
+    },
+    "Recover": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recover"
+          }
+        }
+      }
+    },
+    "Documents are kept for 30 days. Expired documents are removed when DocNest can run.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Documents are kept for 30 days. Expired documents are removed when DocNest can run."
+          }
+        }
+      }
+    },
+    "No deleted documents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No deleted documents"
+          }
+        }
+      }
+    },
+    "Enter a nonempty document filename.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a nonempty document filename."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

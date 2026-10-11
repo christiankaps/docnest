@@ -1,6 +1,6 @@
 # Implementation plan
 
-[PROJECT.md](PROJECT.md) defines accepted behavior; [ARCHITECTURE.md](ARCHITECTURE.md) records technical boundaries and engineering decisions. Increments 0–2 are finalized. Increment 3 is next and has not started.
+[PROJECT.md](PROJECT.md) defines accepted behavior; [ARCHITECTURE.md](ARCHITECTURE.md) records technical boundaries and engineering decisions. Increments 0–3 are finalized. Increment 4 is next and has not started.
 
 Implement increments in order. Check an item only after implementation and required verification. Finalize each increment by completing every checkbox, recording its outcome, checks, and remaining limitations here, and committing and pushing its changes to main before starting the next. Commit and push after every increment without waiting for another request. A build alone does not verify product behavior. Add meaningful automated checks to `make verify` as behavior is introduced; perform required device checks before finalization.
 
@@ -49,13 +49,19 @@ Verification: `make verify` passed 16 unit tests and 4 UI tests on the iOS 27.0 
 
 Limitations: OCR date extraction and label suggestions remain increments 6–7; dates use a flagged fallback until manually confirmed. Physical-device camera/authentication checks remain in their scheduled increments. No later increment was started.
 
-## 3. Document management and local recovery
+## 3. Document management and local recovery — finalized
 
-- [ ] Add explicit rename using the shared collision policy; preserve document identity and original PDF bytes.
-- [ ] Add native Select mode for bulk original-PDF sharing and additive label assignment. Preserve existing labels and make the selection scope clear.
-- [ ] Add Labels/Delete swipe actions and Share/Rename/Labels/Delete context menus.
-- [ ] Implement Recently Deleted, recovery, and 30-day cleanup that resumes when execution is possible. Exclude deleted documents from active browsing/search and retain their metadata for recovery.
-- [ ] Verify rename collisions, multi-item filenames/sharing, bulk-label preservation, deletion/recovery, and retention with a controllable clock. Run `make verify`, record outcome, and finalize this increment.
+- [x] Add explicit rename using the shared collision policy; preserve document identity and original PDF bytes.
+- [x] Add native Select mode for bulk original-PDF sharing and additive label assignment. Preserve existing labels and make the selection scope clear.
+- [x] Add Labels/Delete swipe actions and Share/Rename/Labels/Delete context menus.
+- [x] Implement Recently Deleted, recovery, and 30-day cleanup that resumes when execution is possible. Exclude deleted documents from active browsing/search and retain their metadata for recovery.
+- [x] Verify rename collisions, multi-item filenames/sharing, bulk-label preservation, deletion/recovery, and retention with a controllable clock. Run `make verify`, record outcome, and finalize this increment.
+
+Outcome, 2026-10-11: implemented filename-only rename using the shared collision allocator, native list Select mode with multi-PDF sharing and atomic additive labels, Labels/Delete swipe actions, Share/Rename/Labels/Delete context menus, viewer rename/delete, and Recently Deleted recovery. Organization schema 2 reads earlier snapshots and retains filename overrides, deletion timestamps, and durable cleanup tombstones. Originals and immutable import metadata remain unchanged through rename/deletion/recovery. Retained names stay reserved; an identical reimport recovers the existing document without resetting metadata or Done. Cleanup runs at startup and foreground activation after 30 elapsed days, commits expiry before file removal, and safely retries failed or interrupted removals. Recently Deleted is grouped with All Documents and Inbox; Select hides the tab bar to keep bulk actions reachable while automatic visibility preserves the viewer toolbar.
+
+Verification: `make verify` passed 21 unit/integration tests and 5 UI tests on the iOS 27.0 iPhone 18 Pro simulator. New tests cover rename collisions and reused import names, original bytes/identity, multi-item exported names/copies/cleanup, additive assignment preservation, schema-1 organization upgrade, failed rename/deletion/recovery/bulk metadata writes, deleted-document access exclusion, relaunch/recovery, deleted duplicate capture, retained-name reservation, the exact 30-day boundary with an injectable clock, failed final removal, and interrupted partial removal recovery. The UI flow checks rename, two-item selection/labeling/sharing, relaunch, confirmed deletion, recovery, and retained labels. Existing viewer/date/review/export workflows pass; the exporter test checks presentation/cancellation on both observed native location/filename layouts, with copy filenames and bytes independently verified in store tests. `make build CONFIGURATION=Release` passed. Inspected retained selection, two-document share-sheet, and Recently Deleted screenshots; completed a read-only diff review and `git diff --check`.
+
+Resource check: the existing 300-PDF corpus passed; final reload 0.080 s and largest-PDF open/first-page render 0.005 s on the simulator. These remain simulator measurements. Cleanup is opportunistic, not an exact-time background guarantee. Physical-device authentication/camera/file-protection checks remain in their scheduled increments; no later increment was started.
 
 ## 4. Library lock and capture boundary
 

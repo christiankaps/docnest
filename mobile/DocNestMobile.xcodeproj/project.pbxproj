@@ -20,7 +20,9 @@
 		A672C069896B87DF701DDDBF /* OrganizationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98B1C39616A4A523904EEAAB /* OrganizationViews.swift */; };
 		B0E6B2257CF1821CEFBED621 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E798228EF257C707318832C /* ContentView.swift */; };
 		B4309277131018485A72D641 /* DocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103C6A1773AAC622B1D8A56D /* DocumentView.swift */; };
+		D88218F64F99431F5D5CFE70 /* ManagementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CDFE87E60035C844A744745 /* ManagementTests.swift */; };
 		D9465CBD2824C1E3197D74FA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9D9B228273DDB072E8117480 /* Assets.xcassets */; };
+		FFA8AC3F310C2EAACC0C76EF /* ManagementViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6009F23A93BCE306995065C /* ManagementViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -47,6 +49,7 @@
 		2E798228EF257C707318832C /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		2FAC56798BE18385C464E458 /* DocNestMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DocNestMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		38F9661B182B8E2EF35B9C83 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
+		3CDFE87E60035C844A744745 /* ManagementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagementTests.swift; sourceTree = "<group>"; };
 		538357E8BF055A8C5F53143A /* LibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModel.swift; sourceTree = "<group>"; };
 		56C2EA346A3E09DB133727A2 /* DocNestMobileUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DocNestMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6AA19B93CDAD50F7E3AE89C1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -58,6 +61,7 @@
 		DD118ADD739A3681CD788FFA /* LibraryDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDocument.swift; sourceTree = "<group>"; };
 		E90EFE9005B9D7C31A3171DA /* OrganizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizationTests.swift; sourceTree = "<group>"; };
 		ED4A9F451DEBFE95B55EB6CE /* DocNestMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestMobileApp.swift; sourceTree = "<group>"; };
+		F6009F23A93BCE306995065C /* ManagementViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagementViews.swift; sourceTree = "<group>"; };
 		FF5A9CA554F1DD780FCC60E2 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -90,6 +94,7 @@
 				103C6A1773AAC622B1D8A56D /* DocumentView.swift */,
 				6AA19B93CDAD50F7E3AE89C1 /* Info.plist */,
 				FF5A9CA554F1DD780FCC60E2 /* Localizable.xcstrings */,
+				F6009F23A93BCE306995065C /* ManagementViews.swift */,
 				98B1C39616A4A523904EEAAB /* OrganizationViews.swift */,
 				BC4A16451588C3739CF65612 /* Library */,
 			);
@@ -100,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				C18DC14FCB5FA57DAEAC93FC /* LibraryStoreTests.swift */,
+				3CDFE87E60035C844A744745 /* ManagementTests.swift */,
 				E90EFE9005B9D7C31A3171DA /* OrganizationTests.swift */,
 			);
 			path = DocNestMobileTests;
@@ -243,6 +249,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7D673CD34B7C26FC3AC6100F /* LibraryStoreTests.swift in Sources */,
+				D88218F64F99431F5D5CFE70 /* ManagementTests.swift in Sources */,
 				1E60CFB93D65D555EF167289 /* OrganizationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -259,6 +266,7 @@
 				0B4120D2121E33F038AB0C1A /* LibraryModel.swift in Sources */,
 				62BE901FEBF092BFDBFEEF86 /* LibraryOrganization.swift in Sources */,
 				2DE0AEAFD0E04A1796D1E640 /* LibraryStore.swift in Sources */,
+				FFA8AC3F310C2EAACC0C76EF /* ManagementViews.swift in Sources */,
 				A672C069896B87DF701DDDBF /* OrganizationViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 private enum LibraryRoute: Hashable {
     case documents(LibraryFilter)
     case document(UUID)
+    case recentlyDeleted
 }
 
 struct ContentView: View {
@@ -14,6 +15,7 @@ struct ContentView: View {
     @State private var importing = false
     @State private var settings = false
     @State private var managingLabels = false
+    @Environment(\.scenePhase) private var scenePhase
 
     init(store: LibraryStore = LibraryStore()) {
         _model = State(initialValue: LibraryModel(store: store))
@@ -43,6 +45,11 @@ struct ContentView: View {
             .badge(model.inboxCount)
         }
         .task { await model.load() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && !model.isLoading && model.loadError == nil {
+                Task { await model.save { try await model.store.cleanupExpired() } }
+            }
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf]) { result in
             switch result {
             case .success(let url): Task { await model.importPDF(url) }
@@ -66,6 +73,7 @@ struct ContentView: View {
         switch route {
         case .documents(let filter): DocumentListView(model: model, initialFilter: filter).navigationTitle("Documents")
         case .document(let id): DocumentView(id: id, model: model)
+        case .recentlyDeleted: RecentlyDeletedView(model: model)
         }
     }
 
@@ -87,6 +95,9 @@ struct ContentView: View {
                     Button { selectedTab = 1 } label: {
                         Label { LabeledContent("Inbox", value: model.inboxCount.formatted()) } icon: { Image(systemName: "tray") }
                     }.accessibilityIdentifier("inboxSummary")
+                    NavigationLink(value: LibraryRoute.recentlyDeleted) {
+                        Label { LabeledContent("Recently Deleted", value: model.deletedDocuments.count.formatted()) } icon: { Image(systemName: "trash") }
+                    }.accessibilityIdentifier("recentlyDeleted")
                 }
                 if model.documents.isEmpty {
                     Section {
@@ -126,6 +137,12 @@ private struct DocumentListView: View {
     var inboxOnly = false
     @State private var filter: LibraryFilter
     @State private var filtering = false
+    @State private var selection: Set<UUID> = []
+    @State private var editMode: EditMode = .inactive
+    @State private var bulkLabels = false
+    @State private var share: DocumentTransfer?
+    @State private var preparingShare = false
+    @State private var pendingTransfer: DocumentTransfer?
 
     init(model: LibraryModel, inboxOnly: Bool = false, initialFilter: LibraryFilter = LibraryFilter()) {
         self.model = model
@@ -142,7 +159,7 @@ private struct DocumentListView: View {
             if model.isLoading { ProgressView("Opening library…") }
             else if let error = model.loadError { LibraryUnavailable(model: model, error: error) }
             else {
-                List {
+                List(selection: $selection) {
                     if !filter.labelIDs.isEmpty || filter.year != nil {
                         Section {
                             let names = model.labels.filter { filter.labelIDs.contains($0.id) }.map(\.name)
@@ -164,7 +181,9 @@ private struct DocumentListView: View {
                                     }
                                 }.font(.subheadline).foregroundStyle(.secondary)
                             }.padding(.vertical, 3)
-                        }.accessibilityIdentifier("document-\(document.id)")
+                        }.tag(document.id)
+                        .documentActions(model: model, record: document)
+                        .accessibilityIdentifier("document-\(document.id)")
                     }
                 }
                 .overlay {
@@ -177,12 +196,42 @@ private struct DocumentListView: View {
                 }
             }
         }
+        .environment(\.editMode, $editMode)
+        .toolbar(editMode.isEditing ? .hidden : .automatic, for: .tabBar)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(editMode.isEditing ? "Done" : "Select") {
+                    editMode = editMode.isEditing ? .inactive : .active
+                    selection = []
+                }.disabled(model.isLoading || model.loadError != nil)
+            }
+            ToolbarItemGroup(placement: .bottomBar) {
+                if editMode.isEditing {
+                    Text("\(selection.count) selected in this list").font(.caption)
+                    Spacer()
+                    Button("Share", systemImage: "square.and.arrow.up") {
+                        let ids = selection
+                        preparingShare = true
+                        Task {
+                            defer { preparingShare = false }
+                            do { share = DocumentTransfer(urls: try await model.store.exportCopies(for: ids)) }
+                            catch { model.actionError = error.localizedDescription }
+                        }
+                    }.disabled(selection.isEmpty || preparingShare)
+                    Button("Add Labels", systemImage: "tag") { bulkLabels = true }.disabled(selection.isEmpty)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Filter", systemImage: "line.3.horizontal.decrease") { filtering = true }
                     .disabled(model.isLoading || model.loadError != nil)
             }
         }
+        .sheet(isPresented: $bulkLabels) { BulkLabelsView(model: model, ids: selection) }
+        .sheet(item: $share, onDismiss: {
+            if let transfer = pendingTransfer { Task { for url in transfer.urls { await model.store.removeExport(url) } } }
+            pendingTransfer = nil
+        }) { transfer in MultiPDFShareSheet(urls: transfer.urls).onAppear { pendingTransfer = transfer } }
+        .onChange(of: documents.map(\.id)) { _, ids in selection.formIntersection(Set(ids)) }
         .sheet(isPresented: $filtering) { LibraryFilterView(model: model, filter: $filter) }
         .onChange(of: model.labels) { _, labels in filter.labelIDs.formIntersection(Set(labels.map(\.id))) }
     }

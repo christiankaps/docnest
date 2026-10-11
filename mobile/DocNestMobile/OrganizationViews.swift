@@ -202,7 +202,7 @@ struct DocumentDateView: View {
     }
 }
 
-private struct LabelSelectionRow: View {
+struct LabelSelectionRow: View {
     let name: String
     @Binding var selected: Bool
     var body: some View {

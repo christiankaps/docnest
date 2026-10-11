@@ -5,6 +5,7 @@ import Observation
 final class LibraryModel {
     let store: LibraryStore
     var labels: [LibraryLabel] = []
+    var deletedDocuments: [LibraryDocument] = []
     var isSaving = false
     var documents: [LibraryDocument] = []
     var isLoading = true
@@ -18,7 +19,11 @@ final class LibraryModel {
     func load() async {
         isLoading = true
         loadError = nil
-        do { documents = try await store.load(); labels = try await store.allLabels() }
+        do {
+            documents = try await store.load()
+            labels = try await store.allLabels()
+            deletedDocuments = try await store.recentlyDeleted()
+        }
         catch { loadError = error.localizedDescription }
         isLoading = false
     }
@@ -30,6 +35,7 @@ final class LibraryModel {
         do {
             let result = try await store.importPDF(from: source)
             documents = try await store.allDocuments()
+            deletedDocuments = try await store.recentlyDeleted()
             if result.isDuplicate { duplicate = result.document }
         } catch {
             actionError = error.localizedDescription
@@ -50,8 +56,15 @@ final class LibraryModel {
             try await action()
             documents = try await store.allDocuments()
             labels = try await store.allLabels()
+            deletedDocuments = try await store.recentlyDeleted()
             return true
-        } catch { actionError = error.localizedDescription; return false }
+        } catch {
+            // Cleanup can commit expiry before physical removal fails. Reflect the durable state.
+            if let current = try? await store.allDocuments() { documents = current }
+            if let deleted = try? await store.recentlyDeleted() { deletedDocuments = deleted }
+            actionError = error.localizedDescription
+            return false
+        }
     }
 
 }
