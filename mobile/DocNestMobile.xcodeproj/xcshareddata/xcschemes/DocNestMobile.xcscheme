@@ -39,6 +39,28 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "60243590E62BB8E6FF558278"
+               BuildableName = "DocNestMobileTests.xctest"
+               BlueprintName = "DocNestMobileTests"
+               ReferencedContainer = "container:DocNestMobile.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "EDEB8F3B06265D6B50B23205"
+               BuildableName = "DocNestMobileUITests.xctest"
+               BlueprintName = "DocNestMobileUITests"
+               ReferencedContainer = "container:DocNestMobile.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

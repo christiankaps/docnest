@@ -4,7 +4,7 @@ Read [PROJECT.md](PROJECT.md) for this project's state and accepted concept deci
 
 Prefix commit messages for changes in this subproject with `[mobile]`.
 
-Write implementation plans as checkbox lists. Check items only after implementation and required verification. Finalize each increment by completing all its items and recording the outcome before starting the next increment.
+Write implementation plans as checkbox lists. Check items only after implementation and required verification. Finalize each increment by completing all its items, recording the outcome, and committing and pushing its changes to main before starting the next increment. Commit and push after every increment without waiting for another request.
 
 Record accepted product decisions in PROJECT.md, technical decisions in ARCHITECTURE.md, and implementation progress in PLAN.md; keep unresolved choices explicit. Resolve small reversible details independently and ask about consequential product decisions before implementation. Use `make help` for commands and `make verify` before integration. Edit project.yml and regenerate rather than editing the generated Xcode project.
 

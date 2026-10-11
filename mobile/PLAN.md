@@ -1,8 +1,8 @@
 # Implementation plan
 
-[PROJECT.md](PROJECT.md) defines accepted behavior; [ARCHITECTURE.md](ARCHITECTURE.md) records technical boundaries and engineering decisions. Only increment 0 is implemented.
+[PROJECT.md](PROJECT.md) defines accepted behavior; [ARCHITECTURE.md](ARCHITECTURE.md) records technical boundaries and engineering decisions. Increments 0 and 1 are finalized. Increment 2 is next and has not started.
 
-Implement increments in order. Check an item only after implementation and required verification. Finalize each increment by completing every checkbox and recording its outcome, checks, and remaining limitations here before starting the next. A build alone does not verify product behavior. Add meaningful automated checks to `make verify` as behavior is introduced; perform required device checks before finalization.
+Implement increments in order. Check an item only after implementation and required verification. Finalize each increment by completing every checkbox, recording its outcome, checks, and remaining limitations here, and committing and pushing its changes to main before starting the next. Commit and push after every increment without waiting for another request. A build alone does not verify product behavior. Add meaningful automated checks to `make verify` as behavior is introduced; perform required device checks before finalization.
 
 ## 0. Hello World foundation — finalized
 
@@ -13,16 +13,24 @@ Implement increments in order. Check an item only after implementation and requi
 
 Outcome, 2026-10-10: `make verify` succeeded with Xcode 27. The app is iPhone-only. Installed and launched on the iOS 27 iPhone 18 Pro simulator; visually confirmed the DocNest title and Hello World screen. Physical-device signing is not configured. The starter has no App Intents dependency, so Xcode emitted its standard metadata-skip warning.
 
-## 1. Private local PDF library
+## 1. Private local PDF library — finalized
 
-- [ ] Choose and document local persistence, versioned schema, and private file layout. Model stable document IDs, filenames, document/import dates, date provenance, review state, and independent processing state. Keep cloud infrastructure out of this increment.
-- [ ] Implement recoverable file/metadata writes and startup recovery; keep the library absent from Files and unavailable for external in-place editing.
-- [ ] Import PDF copies through the system picker. Validate inputs, reject encrypted/corrupt PDFs clearly, leave sources untouched, and avoid partial visible entries on failure.
-- [ ] Detect identical PDF content before creating another document; preserve existing metadata and offer the existing document. For distinct name collisions, permanently append `_2`, `_3`, etc. before `.pdf`, consistently in the filename and title. Never overwrite or renumber an existing document.
-- [ ] Establish Library/Inbox tabs and Settings entry, basic title/date lists without thumbnails, an initial flagged document-date fallback, and import time in details only.
-- [ ] Add PDFKit viewing, existing-text in-document search, visible Share/Details, and single-document original-PDF sharing/export using independent copies and the stored filename.
-- [ ] Establish a synthetic resource corpus for hundreds of PDFs and record representative file sizes/page counts and initial load/open timings.
-- [ ] Verify relaunch persistence, interrupted writes/imports, resource failure, duplicate/name safety, source/export independence, and private storage. Run `make verify`, record evidence and outcome, and finalize this increment.
+- [x] Choose and document local persistence, versioned schema, and private file layout. Model stable document IDs, filenames, document/import dates, date provenance, review state, and independent processing state. Keep cloud infrastructure out of this increment.
+- [x] Implement recoverable file/metadata writes and startup recovery; keep the library absent from Files and unavailable for external in-place editing.
+- [x] Import PDF copies through the system picker. Validate inputs, reject encrypted/corrupt PDFs clearly, leave sources untouched, and avoid partial visible entries on failure.
+- [x] Detect identical PDF content before creating another document; preserve existing metadata and offer the existing document. For distinct name collisions, permanently append `_2`, `_3`, etc. before `.pdf`, consistently in the filename and title. Never overwrite or renumber an existing document.
+- [x] Establish Library/Inbox tabs and Settings entry, basic title/date lists without thumbnails, an initial flagged document-date fallback, and import time in details only.
+- [x] Add PDFKit viewing, existing-text in-document search, visible Share/Details, and single-document original-PDF sharing/export using independent copies and the stored filename.
+- [x] Establish a synthetic resource corpus for hundreds of PDFs and record representative file sizes/page counts and initial load/open timings.
+- [x] Verify relaunch persistence, interrupted writes/imports, resource failure, duplicate/name safety, source/export independence, and private storage. Run `make verify`, record evidence and outcome, and finalize this increment.
+
+Outcome, 2026-10-11: implemented the private library, versioned per-document JSON records, staged/atomic publication, exact-content deduplication, permanent filename numbering, system PDF import, Library/Inbox and Settings, PDFKit viewing/search, details, original-PDF sharing, and native PDF export. All dates are flagged import-date fallbacks; labeling, date editing, and review completion remain increment 2.
+
+Verification: `make verify` passed 10 unit tests and 2 UI tests on the iOS 27.0 iPhone 18 Pro simulator. Coverage includes relaunch, failed writes/out-of-space injection, interrupted-import recovery, missing/corrupt/future metadata, encrypted PDFs (including empty-password encryption), invalid inputs, symbolic-link rejection, duplicate/name safety, source/export independence, search page/range mapping, private-storage configuration, viewer navigation/details/search, export filename and cancellation, sharing, Settings, and import-picker presentation. Library, Details, share-sheet, and export screenshots were inspected. `make build CONFIGURATION=Release` also passed; test launch routing/fixtures are debug-only. The standard App Intents metadata-skip message remains informational.
+
+Resource baseline: 300 synthetic PDFs (250 text PDFs with 1/2/10 pages, 50 raster-heavy PDFs with 1/5/20 pages), 7,953–2,383,338 bytes each, 121,361,763 bytes total. The raster corpus reuses a synthetic image within each PDF. Final simulator run: corpus generation/import 4.27 s; library reload 0.101 s; largest-file open plus first-page render 0.005 s. These are simulator baselines, not physical-device guarantees; refine realistic scan diversity and device performance targets in increments 6 and 10.
+
+Limitations: signing and physical-device checks are not configured in this increment. Hardware file protection, camera, and authentication need their scheduled device verification. Native system picker presentation is UI-tested; library import/export content safety is covered by service tests. No later increment was started.
 
 ## 2. Labels, dates, and inbox review
 

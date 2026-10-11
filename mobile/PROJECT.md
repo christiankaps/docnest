@@ -8,7 +8,7 @@
 
 A free, native iPhone app for individuals managing hundreds of personal documents. The primary workflows are capturing PDFs, finding them through labels, and sharing them. The experience should be modern, intuitive, and consistent with standard iOS interactions.
 
-Current implementation: a SwiftUI Hello World screen, local app icon, and English string catalog. Only increment 0 is complete; the capabilities below describe the target product, not implemented functionality.
+Current implementation: a private local PDF library with safe file import, duplicate detection and numbered filenames, Library/Inbox lists, PDF viewing and existing-text search, details, sharing, and PDF export. The local icon and English string catalog remain self-contained. Increments 0 and 1 are finalized; implementation and verification evidence are recorded in PLAN.md. The remaining capabilities below describe the target product.
 
 The initial delivery is local-only. The project is independent of the desktop app and is not a companion app. Everything required to build it stays inside this folder; reused resources are copied locally.
 
@@ -139,6 +139,6 @@ These do not block local delivery and require their own finalized increments lat
 
 The local delivery must support the specified capture → review → label/year retrieval → share workflow, value labels, privacy, and recovery for hundreds of personal PDFs. Define representative page/file-size fixtures and measurable responsiveness targets during implementation; no unverified performance promise is made.
 
-Use `make help` and `make verify` from this folder. The current gate is a simulator build; add relevant tests as behavior is introduced. Physical-device checks are required for camera and authentication behavior. Details and per-increment acceptance are in PLAN.md.
+Use `make help` and `make verify` from this folder. The gate builds and runs library safety/resource tests and simulator UI checks; extend it as behavior is introduced. Physical-device checks remain required for camera and authentication behavior. Details and per-increment acceptance are in PLAN.md.
 
-Use Git for coherent verified changes, preserve unrelated work, and integrate directly on main without feature branches or pull requests. Prefix mobile commits with `[mobile]`. Publishing requires explicit authorization. Keep INBOX.md user-owned; DECISIONS.md and LESSONS.md are temporary queues, not additional product specifications.
+Use Git for coherent verified changes, preserve unrelated work, and integrate directly on main without feature branches or pull requests. Prefix mobile commits with `[mobile]`. Commit and push to main after every verified increment as part of finalization, without waiting for another request; finish this before starting the next increment. App distribution/publishing requires separate explicit authorization. Keep INBOX.md user-owned; DECISIONS.md and LESSONS.md are temporary queues, not additional product specifications.

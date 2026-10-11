@@ -1,10 +1,10 @@
 # Mobile technical design
 
-This document captures implementation boundaries and platform choices for [PROJECT.md](PROJECT.md). It does not imply that planned components exist. Current code remains the Hello World scaffold.
+This document captures implementation boundaries and platform choices for [PROJECT.md](PROJECT.md). The local PDF library is implemented; later capabilities remain planned as tracked in [PLAN.md](PLAN.md).
 
 ## Local architecture
 
-Use a small native application with one authoritative metadata model and private original PDFs. Choose the simplest local persistence mechanism during increment 1 and record the concrete schema/layout here before finalizing that increment. No cloud proof, cloud entitlement, account handling, or sync abstraction is required for local delivery.
+Use a small native application with one authoritative metadata model and private original PDFs. No cloud proof, cloud entitlement, account handling, or sync abstraction is required for local delivery.
 
 - Stable document and label IDs are independent of filenames. Content identity supports exact-PDF deduplication; display filename/title carries permanent collision numbering.
 - Keep original bytes separate from metadata and derived OCR/search data. User date/label/value changes do not rewrite PDFs.
@@ -14,6 +14,27 @@ Use a small native application with one authoritative metadata model and private
 - Stage files and commit metadata recoverably. Interrupted writes must not leave a visible document pointing to missing content or replace the last valid copy.
 - Imports, scans, and restores reuse document validation, exact-content duplicate detection, identity, and naming rules. App-private storage allows filenames to remain user-facing metadata while identifiers govern storage.
 - Reject encrypted or unreadable PDFs clearly. Reject malformed backups safely. Check available resources and provide useful failure/retry states rather than silently skipping data or partially reporting success.
+
+### Implemented local format (schema 1)
+
+`LibraryStore` is an actor that serializes imports, reads, exports, and existing-text searches off the UI actor. The authoritative library lives at `Library/Application Support/DocNestLibrary` inside the app sandbox:
+
+```text
+DocNestLibrary/
+  Documents/<UUID>/original.pdf
+  Documents/<UUID>/metadata.json
+  Staging/<UUID>/...
+```
+
+Each metadata record contains schema version, stable UUID, display filename, SHA-256 content hash, byte/page counts, calendar document date (year/month/day), date provenance, import timestamp, review state, and independent processing state. Schema 1 uses `importFallback`, `inbox`/`reviewed`, and `notStarted`; later increments introduce editing and processing. JSON timestamps use Foundation Codable's seconds since 2001-01-01 UTC. Calendar dates use the local Gregorian capture date and do not change year when the timezone changes. No separate database or rebuildable catalog is needed for hundreds of records.
+
+Import acquires temporary security-scoped access and coordinates a read of the source. It copies bytes into Staging, requires a regular file (rejecting copied symbolic links), rejects encryption (even an empty-password PDF), verifies readable pages, hashes in 1 MiB chunks, and checks duplicates before resolving names. Case-insensitive, Unicode-normalized filename comparisons avoid ambiguous collisions; control characters/path separators are sanitized. Original spelling is otherwise retained, including extension case. The numbered name is durable metadata and the title omits only the extension.
+
+After writing metadata atomically, a same-volume directory rename publishes the complete document. Startup removes unpublished Staging transactions and loads only complete published records. A published import survives termination before UI acknowledgement; reimport detects the same content. Unexpected/missing/corrupt records fail closed with files preserved and a Retry action; startup never resets a damaged library. Newer schemas are rejected before decoding their fields. File-protection attributes use `completeUntilFirstUserAuthentication`; the later library-lock increment must review the capture/access policy.
+
+Share/export copies are created under an app-private temporary `DocNestExports/<UUID>/<filename>` directory. The system receives these copies, never live-library URLs. Sharing uses a native activity sheet; export uses SwiftUI's file exporter with a file transfer representation and explicit suggested filename. Copies are removed after completion/cancellation or next library load. The app's generated Info.plist explicitly disables file sharing and opening documents in place. Its source is `project.yml`; there is no document-provider extension or cloud entitlement.
+
+The viewer uses PDFKit without saving mutations to originals. Existing-text search runs in the store and returns page indices, match ranges, and snippets; the viewer highlights/navigates to that range. The current UI supports Library/Inbox lists, Settings, PDF details, viewing, import, search, sharing, and PDF export. Labeling, date editing, review completion, OCR, and whole-library backups remain later increments.
 
 ## Capture and access boundary
 
@@ -64,8 +85,8 @@ Define a versioned backup manifest and payload layout in increment 9. Validate p
 
 | Decision | When | Required evidence |
 | --- | --- | --- |
-| Local persistence and file layout | 1 | Relaunch, interrupted-write recovery, duplicate/name safety, no Files visibility |
-| Resource test corpus and initial timing baseline | 1; refine in 6 and 10 | Hundreds of documents, representative sizes/page counts, bounded work and disk failure |
+| Local persistence and file layout | Resolved in 1; see schema above | Relaunch, interrupted-write recovery, duplicate/name safety, no Files visibility |
+| Resource test corpus and timing targets | Baseline in 1; refine in 6 and 10 | 300 synthetic PDFs; see PLAN.md for measurements; set device targets as processing is added |
 | Share staging and file protection | 4–5 | Locked capture, process interruption, access boundaries, lifecycle tests |
 | Date extraction, multilingual parsing, and search indexing | 6 | English/German fixtures, ambiguous dates, page mapping, user-edit precedence |
 | Suggestion matching and history | 7 | Repeatable fixtures, explicit acceptance, no regressions to manual edits |

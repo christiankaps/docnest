@@ -23,6 +23,13 @@ targets:
     platform: iOS
     sources:
       - path: DocNestMobile
+    info:
+      path: DocNestMobile/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIFileSharingEnabled: false
+        LSSupportsOpeningDocumentsInPlace: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.kaps.docnest.mobile
@@ -33,3 +40,26 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     scheme:
       gatherCoverageData: false
+      testTargets:
+        - DocNestMobileTests
+        - DocNestMobileUITests
+  DocNestMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: DocNestMobileTests
+    dependencies:
+      - target: DocNestMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kaps.docnest.mobile.tests
+  DocNestMobileUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: DocNestMobileUITests
+    dependencies:
+      - target: DocNestMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kaps.docnest.mobile.uitests

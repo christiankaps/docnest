@@ -7,25 +7,69 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0B4120D2121E33F038AB0C1A /* LibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 538357E8BF055A8C5F53143A /* LibraryModel.swift */; };
+		2DE0AEAFD0E04A1796D1E640 /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F9661B182B8E2EF35B9C83 /* LibraryStore.swift */; };
 		746E3DF201F7C1DAA414F636 /* DocNestMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED4A9F451DEBFE95B55EB6CE /* DocNestMobileApp.swift */; };
+		7D673CD34B7C26FC3AC6100F /* LibraryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C18DC14FCB5FA57DAEAC93FC /* LibraryStoreTests.swift */; };
+		9152EA6C017944CEFCD36900 /* LibraryDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD118ADD739A3681CD788FFA /* LibraryDocument.swift */; };
+		947F3DC7BBB2D68B09C96145 /* LibraryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07037B12926671EE9F615C8E /* LibraryUITests.swift */; };
+		9A98138A166F6A1D973080A2 /* DevelopmentFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAE74C7EAC7CFC48CC0FF8A /* DevelopmentFixtures.swift */; };
 		9D75D0E788D4F32ECE2E676B /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = FF5A9CA554F1DD780FCC60E2 /* Localizable.xcstrings */; };
 		B0E6B2257CF1821CEFBED621 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E798228EF257C707318832C /* ContentView.swift */; };
+		B4309277131018485A72D641 /* DocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103C6A1773AAC622B1D8A56D /* DocumentView.swift */; };
 		D9465CBD2824C1E3197D74FA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9D9B228273DDB072E8117480 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		DCE60BE41768E9E7703CC6D4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 30493D2B6F380E17643D0F2B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B6D09886100EAC194EE3432B;
+			remoteInfo = DocNestMobile;
+		};
+		FDDA3C60DEC70D8243971A14 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 30493D2B6F380E17643D0F2B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B6D09886100EAC194EE3432B;
+			remoteInfo = DocNestMobile;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		07037B12926671EE9F615C8E /* LibraryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryUITests.swift; sourceTree = "<group>"; };
+		103C6A1773AAC622B1D8A56D /* DocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentView.swift; sourceTree = "<group>"; };
 		2E798228EF257C707318832C /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		2FAC56798BE18385C464E458 /* DocNestMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DocNestMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		38F9661B182B8E2EF35B9C83 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
+		538357E8BF055A8C5F53143A /* LibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModel.swift; sourceTree = "<group>"; };
+		56C2EA346A3E09DB133727A2 /* DocNestMobileUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DocNestMobileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6AA19B93CDAD50F7E3AE89C1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7B93E969C6B0246D1C80FB8C /* DocNestMobileTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DocNestMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9D9B228273DDB072E8117480 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BFAE74C7EAC7CFC48CC0FF8A /* DevelopmentFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevelopmentFixtures.swift; sourceTree = "<group>"; };
+		C18DC14FCB5FA57DAEAC93FC /* LibraryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStoreTests.swift; sourceTree = "<group>"; };
+		DD118ADD739A3681CD788FFA /* LibraryDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDocument.swift; sourceTree = "<group>"; };
 		ED4A9F451DEBFE95B55EB6CE /* DocNestMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocNestMobileApp.swift; sourceTree = "<group>"; };
 		FF5A9CA554F1DD780FCC60E2 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		41567AAB297101093F96A75F /* DocNestMobileUITests */ = {
+			isa = PBXGroup;
+			children = (
+				07037B12926671EE9F615C8E /* LibraryUITests.swift */,
+			);
+			path = DocNestMobileUITests;
+			sourceTree = "<group>";
+		};
 		4B766BF727B1E1F263A7AB14 = {
 			isa = PBXGroup;
 			children = (
 				9710BCEA3797B578A84560A2 /* DocNestMobile */,
+				B002682DF8052F01095DD6CC /* DocNestMobileTests */,
+				41567AAB297101093F96A75F /* DocNestMobileUITests */,
 				F0FC5102859F2D6635EC9FFB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -35,16 +79,40 @@
 			children = (
 				9D9B228273DDB072E8117480 /* Assets.xcassets */,
 				2E798228EF257C707318832C /* ContentView.swift */,
+				BFAE74C7EAC7CFC48CC0FF8A /* DevelopmentFixtures.swift */,
 				ED4A9F451DEBFE95B55EB6CE /* DocNestMobileApp.swift */,
+				103C6A1773AAC622B1D8A56D /* DocumentView.swift */,
+				6AA19B93CDAD50F7E3AE89C1 /* Info.plist */,
 				FF5A9CA554F1DD780FCC60E2 /* Localizable.xcstrings */,
+				BC4A16451588C3739CF65612 /* Library */,
 			);
 			path = DocNestMobile;
+			sourceTree = "<group>";
+		};
+		B002682DF8052F01095DD6CC /* DocNestMobileTests */ = {
+			isa = PBXGroup;
+			children = (
+				C18DC14FCB5FA57DAEAC93FC /* LibraryStoreTests.swift */,
+			);
+			path = DocNestMobileTests;
+			sourceTree = "<group>";
+		};
+		BC4A16451588C3739CF65612 /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				DD118ADD739A3681CD788FFA /* LibraryDocument.swift */,
+				538357E8BF055A8C5F53143A /* LibraryModel.swift */,
+				38F9661B182B8E2EF35B9C83 /* LibraryStore.swift */,
+			);
+			path = Library;
 			sourceTree = "<group>";
 		};
 		F0FC5102859F2D6635EC9FFB /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				2FAC56798BE18385C464E458 /* DocNestMobile.app */,
+				7B93E969C6B0246D1C80FB8C /* DocNestMobileTests.xctest */,
+				56C2EA346A3E09DB133727A2 /* DocNestMobileUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -52,6 +120,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		60243590E62BB8E6FF558278 /* DocNestMobileTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D15C09BE02584E7B97E1EA34 /* Build configuration list for PBXNativeTarget "DocNestMobileTests" */;
+			buildPhases = (
+				46D78A49DB861DE20AF54938 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				84D255A6F59E1BDB844A6A47 /* PBXTargetDependency */,
+			);
+			name = DocNestMobileTests;
+			packageProductDependencies = (
+			);
+			productName = DocNestMobileTests;
+			productReference = 7B93E969C6B0246D1C80FB8C /* DocNestMobileTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		B6D09886100EAC194EE3432B /* DocNestMobile */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 378773A33D62B13FBB290B34 /* Build configuration list for PBXNativeTarget "DocNestMobile" */;
@@ -70,6 +156,24 @@
 			productReference = 2FAC56798BE18385C464E458 /* DocNestMobile.app */;
 			productType = "com.apple.product-type.application";
 		};
+		EDEB8F3B06265D6B50B23205 /* DocNestMobileUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7120076FE0A6CC2443621671 /* Build configuration list for PBXNativeTarget "DocNestMobileUITests" */;
+			buildPhases = (
+				AF828EB95666D470130BC090 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D3AC7771B565F380CEBF03C6 /* PBXTargetDependency */,
+			);
+			name = DocNestMobileUITests;
+			packageProductDependencies = (
+			);
+			productName = DocNestMobileUITests;
+			productReference = 56C2EA346A3E09DB133727A2 /* DocNestMobileUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -79,8 +183,15 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
+					60243590E62BB8E6FF558278 = {
+						ProvisioningStyle = Automatic;
+					};
 					B6D09886100EAC194EE3432B = {
 						ProvisioningStyle = Automatic;
+					};
+					EDEB8F3B06265D6B50B23205 = {
+						ProvisioningStyle = Automatic;
+						TestTargetID = B6D09886100EAC194EE3432B;
 					};
 				};
 			};
@@ -99,6 +210,8 @@
 			projectRoot = "";
 			targets = (
 				B6D09886100EAC194EE3432B /* DocNestMobile */,
+				60243590E62BB8E6FF558278 /* DocNestMobileTests */,
+				EDEB8F3B06265D6B50B23205 /* DocNestMobileUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -116,16 +229,50 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		46D78A49DB861DE20AF54938 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7D673CD34B7C26FC3AC6100F /* LibraryStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		642BC705DC39B39A570087AA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				B0E6B2257CF1821CEFBED621 /* ContentView.swift in Sources */,
+				9A98138A166F6A1D973080A2 /* DevelopmentFixtures.swift in Sources */,
 				746E3DF201F7C1DAA414F636 /* DocNestMobileApp.swift in Sources */,
+				B4309277131018485A72D641 /* DocumentView.swift in Sources */,
+				9152EA6C017944CEFCD36900 /* LibraryDocument.swift in Sources */,
+				0B4120D2121E33F038AB0C1A /* LibraryModel.swift in Sources */,
+				2DE0AEAFD0E04A1796D1E640 /* LibraryStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AF828EB95666D470130BC090 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				947F3DC7BBB2D68B09C96145 /* LibraryUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		84D255A6F59E1BDB844A6A47 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B6D09886100EAC194EE3432B /* DocNestMobile */;
+			targetProxy = FDDA3C60DEC70D8243971A14 /* PBXContainerItemProxy */;
+		};
+		D3AC7771B565F380CEBF03C6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B6D09886100EAC194EE3432B /* DocNestMobile */;
+			targetProxy = DCE60BE41768E9E7703CC6D4 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		02A7A568925A207F745F8848 /* Debug */ = {
@@ -133,6 +280,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = DocNestMobile/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = DocNest;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -145,6 +293,22 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
+		};
+		0B6EE4EC2093CEBD9B510E8C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.mobile.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DocNestMobile.app/DocNestMobile";
+			};
+			name = Release;
 		};
 		42B33AB0FD8777628FC98B2F /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -212,6 +376,54 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
+		};
+		5073D6ADC900785F47515281 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.mobile.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = DocNestMobile;
+			};
+			name = Release;
+		};
+		7C22B2E5D19D39CCB25000A8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.mobile.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DocNestMobile.app/DocNestMobile";
+			};
+			name = Debug;
+		};
+		9F009D249F9FF71BF2FBA8F4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kaps.docnest.mobile.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = DocNestMobile;
+			};
+			name = Debug;
 		};
 		B3D0F4F41C14B8824DB8412D /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -292,6 +504,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = DocNestMobile/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = DocNest;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -313,6 +526,24 @@
 			buildConfigurations = (
 				02A7A568925A207F745F8848 /* Debug */,
 				B8DC3BDC741ADD7252F27F5E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7120076FE0A6CC2443621671 /* Build configuration list for PBXNativeTarget "DocNestMobileUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9F009D249F9FF71BF2FBA8F4 /* Debug */,
+				5073D6ADC900785F47515281 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D15C09BE02584E7B97E1EA34 /* Build configuration list for PBXNativeTarget "DocNestMobileTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7C22B2E5D19D39CCB25000A8 /* Debug */,
+				0B6EE4EC2093CEBD9B510E8C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
