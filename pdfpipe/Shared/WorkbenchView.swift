@@ -93,14 +93,23 @@ struct WorkbenchView: View {
                     ForEach(store.configuration.pipelines) { Text($0.name).tag(Optional($0.id)) }
                 }.pickerStyle(.menu).accessibilityIdentifier("pipelinePicker")
                 if let selected {
+                    let preview = model.filenamePreview(selected)
                     Text(selected.summary.isEmpty ? "Keep PDF unchanged" : selected.summary).font(.subheadline).foregroundStyle(.secondary)
                     if selected.needsText {
                         TextField("Text for {text}", text: $model.manualText).textFieldStyle(.roundedBorder)
                     }
+                    switch preview {
+                    case .success(let filename):
+                        Text("Filename: \(filename)").font(.subheadline).textSelection(.enabled)
+                            .accessibilityIdentifier("proposedFilename")
+                    case .failure(let error):
+                        Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
+                            .font(.footnote).foregroundStyle(.red)
+                    }
                     if selected.unattended { Label("Saves automatically to \(selected.destination?.name ?? "folder")", systemImage: "folder.badge.gearshape").font(.footnote) }
                     Button("Run pipeline") { model.run(selected) }
                         .buttonStyle(.borderedProminent).controlSize(.large)
-                        .frame(maxWidth: .infinity).disabled(model.busy)
+                        .frame(maxWidth: .infinity).disabled(model.busy || (try? preview.get()) == nil)
                         .accessibilityIdentifier("runPipeline")
                 }
             }

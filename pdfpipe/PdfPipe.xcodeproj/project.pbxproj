@@ -12,6 +12,7 @@
 		1944CB6E4D7C3E27AF764ADE /* DestinationWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9438EEDD6EA9EB8EC08EF97C /* DestinationWriter.swift */; };
 		217FCE2851ED145B13B20CA9 /* Pipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 158574A2A2E70078EBCD5EFB /* Pipeline.swift */; };
 		23D3EDFFF316C2B83638AF2F /* PipelineStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F262E14265CFD3D1125517BA /* PipelineStore.swift */; };
+		37044A632402B24F88357CA2 /* ReviewRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DF210482D41C44E8A478B54 /* ReviewRegressionTests.swift */; };
 		444D46A7A05DD95A6D49EEB0 /* TemporarySession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FEF675F55BE68078FB97018 /* TemporarySession.swift */; };
 		59051A80C2C8DAD909FA732E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D12CE0FADFE1C224A4118839 /* Assets.xcassets */; };
 		6B1EEA81A1093702C36DC608 /* SessionFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EE8A71374B5E262AC909265 /* SessionFlowTests.swift */; };
@@ -22,6 +23,7 @@
 		73E3B09616E5F6BFB8ACBD1A /* WorkbenchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95D55DF088D6C3A2D7025494 /* WorkbenchView.swift */; };
 		7623FE881DE8C5892494E1D9 /* DestinationWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9438EEDD6EA9EB8EC08EF97C /* DestinationWriter.swift */; };
 		7FC768B8F7D1E3B2006265BE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 958AE0D9AC9052DD9BB67024 /* PrivacyInfo.xcprivacy */; };
+		90D6B3F902647239F449258A /* InboxDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AE19EBE86477D1F8F7A71F6 /* InboxDelivery.swift */; };
 		98068A9D24A8BA5E5162BA40 /* DocumentSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7758A0160FCEE1ED93F8B107 /* DocumentSessionModel.swift */; };
 		A089701B3B35EF5E5DD86A40 /* WorkbenchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95D55DF088D6C3A2D7025494 /* WorkbenchView.swift */; };
 		AE612AAC119A7667E8256C56 /* DocumentSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7758A0160FCEE1ED93F8B107 /* DocumentSessionModel.swift */; };
@@ -33,6 +35,7 @@
 		DD456287134B5DE33A8A4AB4 /* SystemViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9784536D3D3E86FDBA31C47 /* SystemViews.swift */; };
 		DE934DFE850AAEE3C9CA2F40 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAA4C44852198AF2E7EEC73B /* ShareViewController.swift */; };
 		E11F9C4AE634812F7B655F0F /* DevelopmentFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 923792F411570DE0F114D818 /* DevelopmentFixtures.swift */; };
+		F257A1A1FEE327E359DD69BA /* InboxDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AE19EBE86477D1F8F7A71F6 /* InboxDelivery.swift */; };
 		FCB64428D1AF23DF4D73E10E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 958AE0D9AC9052DD9BB67024 /* PrivacyInfo.xcprivacy */; };
 		FD2F551BB49B99085C2DDAB3 /* ProcessingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCEC75BC9E581D30C841542A /* ProcessingTests.swift */; };
 		FEAB6AE93D6EAC2B82F8AB9A /* DocumentEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F1376BBCF2AA61FE45813C /* DocumentEngine.swift */; };
@@ -79,8 +82,10 @@
 /* Begin PBXFileReference section */
 		158574A2A2E70078EBCD5EFB /* Pipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pipeline.swift; sourceTree = "<group>"; };
 		280BCC325DAE497D6BEBEDE0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		2DF210482D41C44E8A478B54 /* ReviewRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRegressionTests.swift; sourceTree = "<group>"; };
 		3A4714C79474C0F89E2D38E7 /* PipelineEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineEditor.swift; sourceTree = "<group>"; };
 		3AA69E683A796AC6C5AED95D /* PdfPipe.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PdfPipe.entitlements; sourceTree = "<group>"; };
+		4AE19EBE86477D1F8F7A71F6 /* InboxDelivery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxDelivery.swift; sourceTree = "<group>"; };
 		5D285D4478B1D48049A89A0A /* PdfPipe.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PdfPipe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5ED9C22B2282348A4E967C8D /* ConfigurationAndExportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationAndExportTests.swift; sourceTree = "<group>"; };
 		5EE8A71374B5E262AC909265 /* SessionFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionFlowTests.swift; sourceTree = "<group>"; };
@@ -122,6 +127,7 @@
 			children = (
 				5ED9C22B2282348A4E967C8D /* ConfigurationAndExportTests.swift */,
 				BCEC75BC9E581D30C841542A /* ProcessingTests.swift */,
+				2DF210482D41C44E8A478B54 /* ReviewRegressionTests.swift */,
 				5EE8A71374B5E262AC909265 /* SessionFlowTests.swift */,
 			);
 			path = PdfPipeTests;
@@ -133,6 +139,7 @@
 				9438EEDD6EA9EB8EC08EF97C /* DestinationWriter.swift */,
 				E2F1376BBCF2AA61FE45813C /* DocumentEngine.swift */,
 				7758A0160FCEE1ED93F8B107 /* DocumentSessionModel.swift */,
+				4AE19EBE86477D1F8F7A71F6 /* InboxDelivery.swift */,
 				158574A2A2E70078EBCD5EFB /* Pipeline.swift */,
 				F262E14265CFD3D1125517BA /* PipelineStore.swift */,
 				958AE0D9AC9052DD9BB67024 /* PrivacyInfo.xcprivacy */,
@@ -338,6 +345,7 @@
 			files = (
 				6B4E01EAA920E4F1B163CCA4 /* ConfigurationAndExportTests.swift in Sources */,
 				FD2F551BB49B99085C2DDAB3 /* ProcessingTests.swift in Sources */,
+				37044A632402B24F88357CA2 /* ReviewRegressionTests.swift in Sources */,
 				6B1EEA81A1093702C36DC608 /* SessionFlowTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -351,6 +359,7 @@
 				067EB9E1597E1FDF042C9F57 /* DocumentEngine.swift in Sources */,
 				98068A9D24A8BA5E5162BA40 /* DocumentSessionModel.swift in Sources */,
 				C75DB8171CD46A48C58AF08C /* HomeView.swift in Sources */,
+				F257A1A1FEE327E359DD69BA /* InboxDelivery.swift in Sources */,
 				C56D62FDAC145EC6B4232A1A /* PdfPipeApp.swift in Sources */,
 				217FCE2851ED145B13B20CA9 /* Pipeline.swift in Sources */,
 				045650466BA301EB2281B214 /* PipelineEditor.swift in Sources */,
@@ -376,6 +385,7 @@
 				1944CB6E4D7C3E27AF764ADE /* DestinationWriter.swift in Sources */,
 				FEAB6AE93D6EAC2B82F8AB9A /* DocumentEngine.swift in Sources */,
 				AE612AAC119A7667E8256C56 /* DocumentSessionModel.swift in Sources */,
+				90D6B3F902647239F449258A /* InboxDelivery.swift in Sources */,
 				6DA24A9713ACD9DCD63DB5E8 /* Pipeline.swift in Sources */,
 				23D3EDFFF316C2B83638AF2F /* PipelineStore.swift in Sources */,
 				DE934DFE850AAEE3C9CA2F40 /* ShareViewController.swift in Sources */,
@@ -496,11 +506,14 @@
 				APP_GROUP_IDENTIFIER = group.com.kaps.pdfpipe;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_ANALYZER_OTHER_FLAGS = "$(inherited) -analyzer-werror";
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_STATIC_ANALYZER_MODE = deep;
+				CLANG_STATIC_ANALYZER_MODE_ON_ANALYZE_ACTION = deep;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_COMMA = YES;
@@ -531,6 +544,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = s;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -545,11 +559,13 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				RUN_CLANG_STATIC_ANALYZER = YES;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -641,6 +657,7 @@
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;

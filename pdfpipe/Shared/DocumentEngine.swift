@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 
 struct DocumentFacts: Sendable {
     var filename: String
+    var originalBasename: String
     var sourceFormat: String
     var bytes: Int64
     var pages: Int
@@ -104,7 +105,7 @@ actor DocumentEngine {
         }
         try Task.checkCancellation()
         input = pdf
-        return try describe(pdf, filename: try FilenameTemplate.filename(sourceName), report: sourceFormat == "PDF" ? [] : ["Converted \(sourceFormat) to PDF"])
+        return try describe(pdf, filename: originalName, report: sourceFormat == "PDF" ? [] : ["Converted \(sourceFormat) to PDF"])
     }
 
     private func validate(_ document: PDFDocument) throws {
@@ -126,26 +127,25 @@ actor DocumentEngine {
         guard let pdf = PDFDocument(url: url), let page = pdf.page(at: 0) else { throw PipeError.message("The PDF result could not be opened.") }
         let rect = page.bounds(for: .cropBox)
         let bytes = Int64(try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
-        return .init(url: url, facts: .init(filename: filename, sourceFormat: sourceFormat, bytes: bytes,
+        return .init(url: url, facts: .init(filename: filename, originalBasename: sourceName, sourceFormat: sourceFormat, bytes: bytes,
             pages: pdf.pageCount, dimensions: "\(Int(rect.width)) × \(Int(rect.height)) pt (first page)",
             hasText: (0..<pdf.pageCount).contains { !(pdf.page(at: $0)?.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }), report: report)
     }
 
-    func process(_ pipeline: Pipeline, text: String,
+    func process(_ pipeline: Pipeline, text: String, date: Date = Date(),
                  progress: @Sendable (String) async -> Void) async throws -> ProcessedDocument {
         try pipeline.validate()
         guard let input else { throw PipeError.message("Import a document first.") }
         var output = input
-        var filename = try FilenameTemplate.filename(sourceName)
+        let filename = try pipeline.outputFilename(original: sourceName, text: text, date: date)
         var report = sourceFormat == "PDF" ? [] : ["Converted \(sourceFormat) to PDF"]
-        let date = Date()
-        let deadline = date.addingTimeInterval(120)
+        let deadline = Date().addingTimeInterval(120)
         for step in pipeline.steps {
             try Task.checkCancellation()
             if step.kind == .rename {
                 await progress("Building filename…")
-                filename = try FilenameTemplate.render(step.template, original: sourceName, text: text, date: date)
-                report.append("Renamed to \(filename)")
+                let stepFilename = try FilenameTemplate.render(step.template, original: sourceName, text: text, date: date)
+                report.append("Renamed to \(stepFilename)")
             } else {
                 let next = session.directory.appendingPathComponent("ocr-\(UUID().uuidString).pdf")
                 let count = try await ocr(output, to: next, deadline: deadline, progress: progress)

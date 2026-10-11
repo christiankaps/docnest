@@ -10,9 +10,9 @@ Requires iOS 26 or later. Built with SwiftUI, PDFKit, Vision, Core Graphics, and
 2. Use `{original}`, `{date}` (local processing date, `yyyy-MM-dd`), and `{text}` in filename templates. Literal text is allowed; `.pdf` is added automatically.
 3. Optionally choose a destination folder. Turn on **Run unattended** to save without reviewing, and explicitly set **Default for shared files** to run it automatically when sharing to PdfPipe. Unattended pipelines cannot use `{text}`.
 4. Share one PDF/JPEG/PNG from another app to PdfPipe, or use **Import a document** in the app. Direct import always starts interactively.
-5. Without an unattended default, select a pipeline and run it. Reviewed results allow filename correction, Share, Save to Files, or saving to the configured folder.
+5. Without an unattended default, select a pipeline, review the proposed filename, and run it. Missing text or invalid output names are shown before Run becomes available. Reviewed results allow filename correction, Share, Save to Files, or saving to the configured folder.
 
-Saving to a configured folder creates a unique filename on collision; existing files are never overwritten. Removing/deleting the default clears it, so the next shared import shows the chooser. Failed saving leaves the active result available for an alternate export. Canceling the system export picker keeps the copy available. Discard removes the working session.
+Saving to a configured folder stages the complete output before publishing its final filename and creates a unique filename on collision; existing files are never overwritten. Removing/deleting the default clears it, so the next shared import shows the chooser. Failed saving leaves the active result available for an alternate export. Canceling the system export picker keeps the copy available. Discard removes the working session.
 
 ## MVP limits
 
@@ -21,7 +21,7 @@ Saving to a configured folder creates a unique filename on collision; existing f
 - OCR detects languages automatically using the installed Vision recognizer. Pages with any existing text are retained without new recognition; mixed text/image pages may therefore retain unrecognized scanned content.
 - OCR preserves visible crop-page appearance but re-emits pages; annotation/form PDFs are rejected for OCR. Use a pipeline without OCR to retain their original PDF bytes. Encrypted/locked PDFs are rejected on import. Signed PDFs are not supported for OCR; the app does not validate signatures.
 - Incoming names use the sender's suggested filename, falling back to the provided file URL's basename. If the sender omits the original name, iOS may supply a generic type-based name. PdfPipe's own share export explicitly includes its output filename.
-- No interrupted-session recovery, background retry queue, or guaranteed execution after iOS terminates the share extension.
+- No interrupted-session recovery, background retry queue, or guaranteed execution after iOS terminates the share extension. A termination during saving may leave a hidden `.pdfpipe-<UUID>.partial` staging file in the chosen destination; remove that staging file manually. Providers must support atomic exclusive rename; unsupported providers report a save failure and keep the active result available for another export.
 - Document-derived fields and Apple Shortcuts integration are later milestones.
 
 ## Build and verification
@@ -35,9 +35,15 @@ make help
 make generate
 make build
 make build-device
+make build-release
+make build-release-simulator
+make analyze-release
+make test
 make test-unit
 make test-ui
+make test-release
 make verify
+make clean
 ```
 
 Override `DESTINATION` for an available simulator, for example:
@@ -48,7 +54,7 @@ make verify DESTINATION='platform=iOS Simulator,name=iPhone 17,OS=26.0'
 
 To try the app, open `PdfPipe.xcodeproj` in Xcode, choose the PdfPipe scheme and an iPhone simulator, and press Run. Simulator App Group entitlements use local signing; no physical-device team setup is needed for the simulator.
 
-The integration gate is `make verify`. It regenerates the project and builds/runs the unit and UI test targets. Generated project files are checked in. Simulator builds use local ad-hoc signing so App Group entitlements are available. `make build-device` checks device-SDK compilation without provisioning; installing on physical devices requires proper Apple signing.
+The integration gate is `make verify`. It regenerates the project, builds/runs all Debug unit and UI tests, then analyzes and builds an optimized unsigned device Release. `make build-release` uses Swift `-O` whole-module optimization, C-family size optimization, and Xcode static analysis. Compiler warnings and Clang analyzer findings fail the build. Clang analysis covers C-family sources; Swift uses Swift 6 compiler/type/concurrency checks, with warnings as errors. `make test-release` runs unit tests with the Release optimizer and testability enabled. `make analyze-release` runs analysis alone; `make clean` removes local build/test artifacts. Generated project files are checked in. Simulator builds use local ad-hoc signing so App Group entitlements are available. `make build-device` checks device-SDK compilation without provisioning; installing on physical devices requires proper Apple signing.
 
 ## Device setup and remaining feasibility gate
 
@@ -58,6 +64,6 @@ No credentials, signing identities, or invented team identifiers are included. D
 
 Before distribution, test real-device sharing from Files and other host apps, app-to-extension folder access, iCloud/third-party destinations, revoked permissions, extension memory/termination behavior, cancellation and interrupted-session cleanup. Simulator checks do not establish this physical-device feasibility gate.
 
-Verification on 2026-10-11: the full gate passes on iOS 26.0 and 27.0 simulators (20 unit tests plus one UI test), and device-SDK compilation passes. Physical-device signing and provider/resource checks remain pending.
+Verification on 2026-10-11: the updated `make verify` passes on iOS 27.0 (26 unit tests, one UI test, and unsigned optimized device Release analysis/build). `make test-release` passes all 26 unit tests on iOS 26.0. Physical-device signing and provider/resource checks remain pending.
 
 See [PROJECT.md](PROJECT.md) for product scope and verification status, [ARCHITECTURE.md](ARCHITECTURE.md) for implementation ownership, and [PLAN.md](PLAN.md) for remaining work.

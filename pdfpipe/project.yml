@@ -6,6 +6,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
     TARGETED_DEVICE_FAMILY: "1"
     SUPPORTS_MACCATALYST: NO
     SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
@@ -17,6 +18,19 @@ settings:
     GENERATE_INFOPLIST_FILE: YES
     APP_GROUP_IDENTIFIER: group.com.kaps.pdfpipe
     INFOPLIST_KEY_PdfPipeAppGroup: $(APP_GROUP_IDENTIFIER)
+  configs:
+    Debug:
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+      SWIFT_COMPILATION_MODE: wholemodule
+      GCC_OPTIMIZATION_LEVEL: s
+      DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+      ENABLE_NS_ASSERTIONS: NO
+      RUN_CLANG_STATIC_ANALYZER: YES
+      CLANG_STATIC_ANALYZER_MODE: deep
+      CLANG_STATIC_ANALYZER_MODE_ON_ANALYZE_ACTION: deep
+      CLANG_ANALYZER_OTHER_FLAGS: "$(inherited) -analyzer-werror"
 targets:
   PdfPipe:
     type: application

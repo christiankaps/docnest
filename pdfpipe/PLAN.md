@@ -10,7 +10,15 @@
 
 ## Verified outcome (2026-10-11)
 
-The first MVP is implemented. `make verify` passes on dedicated iOS 26.0 and 27.0 simulators (20 unit tests and one end-to-end UI test). The final reviewed code passes the iOS 27 gate and device-SDK compilation with `make build-device`. The selected v1 icon is integrated. Real-device acceptance is pending; no signing credentials or team identifiers were invented, and unrelated mobile work remains untouched.
+The first MVP and four review corrections are implemented. `make verify` passes on the dedicated iOS 27 simulator: 26 unit tests, one end-to-end UI test, then optimized unsigned device Release analysis/build. `make test-release` passes all 26 unit tests on the dedicated iOS 26 simulator. The selected v1 icon is integrated. Real-device acceptance is pending; no signing credentials or team identifiers were invented, and unrelated mobile work remains untouched.
+
+Review corrections:
+- App-owned Inbox deliveries move into protected managed sessions immediately; failed/canceled imports and abandoned sessions clean up those copies. Rejected/unclaimed Inbox copies are removed safely without consuming external originals.
+- Configured saves stage and flush before exclusive atomic publication; interrupted writes cannot expose a partial final PDF. A forced-termination probe verified this behavior. Unexpected termination can leave a hidden `.partial` file at the destination.
+- Long input names remain importable for shortening; output validation runs before OCR.
+- The workbench previews the resolved filename and blocks invalid/missing input before Run, using the same preflight logic as execution.
+
+The Makefile now includes Debug/device/Release builds, standalone Release analysis, all/unit/UI/optimized-Release tests, the full integration gate, and cleanup. Release uses whole-module Swift optimization and strict compiler/analyzer diagnostics. A negative Clang analyzer probe verified findings produce errors.
 
 ## Remaining physical-device feasibility gate
 

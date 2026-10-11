@@ -101,7 +101,7 @@ The concept should be validated against these outcomes; detailed checks will be 
 
 ## Verification status (2026-10-11)
 
-- `make verify` passes on iOS 26.0 and 27.0 simulators: 20 unit tests and one end-to-end UI test. The final reviewed implementation passes the iOS 27 gate.
+- The original MVP passed on iOS 26.0 and 27.0 simulators. Review fixes add six regression tests (26 unit tests and one end-to-end UI test total), covering Inbox ownership/cleanup, long input names, filename preflight, atomic publication, collision races, and failed/canceled writes. Current verification results are recorded in PLAN.md.
 - `make build-device` passes for the app and share extension against the iOS 27 device SDK, without signing/provisioning.
 - Simulator screenshots were visually reviewed. The share-sheet test invokes the actual extension, verifies supplied filename preservation, and checks that extension discard retains the host's export copy.
 - Physical-device signing/App Group setup and real provider/resource validation remain required. A connected iPhone is available; signing-team information is pending. See [PLAN.md](PLAN.md) for the outstanding gate.

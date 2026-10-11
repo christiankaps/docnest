@@ -32,11 +32,12 @@ final class DocumentSessionModel: ObservableObject {
     func importFile(_ url: URL, store: PipelineStore, autoRun: Bool) {
         do {
             let session = try createSession()
+            let source = try InboxDelivery.claim(url, into: session.directory)
             busy = true
             progress = "Making a temporary copy…"
             task = Task {
                 do {
-                    let importer = Task.detached { try DocumentEngine.stage(url, to: session.directory) }
+                    let importer = Task.detached { try DocumentEngine.stage(source, to: session.directory) }
                     let staged = try await withTaskCancellationHandler { try await importer.value } onCancel: { importer.cancel() }
                     try Task.checkCancellation()
                     await prepare(staged, originalName: url.lastPathComponent, store: store, autoRun: autoRun)
@@ -133,6 +134,13 @@ final class DocumentSessionModel: ObservableObject {
     }
 
     private func updateProgress(_ value: String) { progress = value }
+
+    func filenamePreview(_ pipeline: Pipeline, date: Date = Date()) -> Result<String, Error> {
+        Result {
+            guard let document else { throw PipeError.message("Import a document first.") }
+            return try pipeline.outputFilename(original: document.facts.originalBasename, text: manualText, date: date)
+        }
+    }
 
     func applyFilename() async throws {
         guard let document, let engine else { return }

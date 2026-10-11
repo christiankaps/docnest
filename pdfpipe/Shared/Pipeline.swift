@@ -50,6 +50,17 @@ struct Pipeline: Codable, Identifiable, Equatable, Sendable {
             throw PipeError.message("Unattended pipelines need a destination folder and cannot use {text}.")
         }
     }
+
+    /// Shared by the preflight preview and execution, including every rename step.
+    func outputFilename(original: String, text: String, date: Date) throws -> String {
+        try validate()
+        var result: String?
+        for step in steps where step.kind == .rename {
+            result = try FilenameTemplate.render(step.template, original: original, text: text, date: date)
+        }
+        if let result { return result }
+        return try FilenameTemplate.filename(original)
+    }
 }
 
 struct PipelineConfiguration: Codable, Equatable, Sendable {

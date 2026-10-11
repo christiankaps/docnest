@@ -96,12 +96,21 @@ struct HomeView: View {
                 }
             }
             .onOpenURL { url in
-                if session != nil { error = "Finish or discard the current document before opening another." }
+                if session != nil {
+                    perform { try InboxDelivery.discard(url) }
+                    if error == nil { error = "Finish or discard the current document before opening another." }
+                }
                 else { open(url, autoRun: true) }
             }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { store.reload() } }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { store.reload() }
+                if phase == .background { perform { try InboxDelivery.removeUnclaimed() } }
+            }
             .task {
-                do { try TemporarySession.removeAbandoned(root: TemporarySession.root()) }
+                do {
+                    try InboxDelivery.excludeFromBackup()
+                    try TemporarySession.removeAbandoned(root: TemporarySession.root())
+                }
                 catch { self.error = error.localizedDescription }
             }
             .alert("PdfPipe", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {

@@ -1,3 +1,5 @@
 .build/
 .build-device/
+.build-release/
+.build-release-simulator/
 xcuserdata/

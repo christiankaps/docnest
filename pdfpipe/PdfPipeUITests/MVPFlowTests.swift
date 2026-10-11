@@ -27,6 +27,8 @@ final class MVPFlowTests: XCTestCase {
         app.buttons["pipelinePicker"].tap()
         app.buttons[pipelineName].firstMatch.tap()
         app.swipeUp()
+        XCTAssertTrue(app.staticTexts["proposedFilename"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["proposedFilename"].label.hasSuffix("PdfPipe-Test-Invoice.pdf"))
         XCTAssertTrue(app.buttons["runPipeline"].waitForExistence(timeout: 5))
         app.buttons["runPipeline"].tap()
         XCTAssertTrue(app.textFields["resultFilename"].waitForExistence(timeout: 10))
