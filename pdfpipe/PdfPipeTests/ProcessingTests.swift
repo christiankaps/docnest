@@ -53,6 +53,21 @@ final class ProcessingTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: session.directory.path))
     }
 
+    func testDocumentDerivedNameUsesPDFTextAndKeepsOriginal() async throws {
+        let source = try sourcePDF(text: "Invoice date 2026-10-05 Telekom Internet")
+        let original = try Data(contentsOf: source)
+        let (session, engine, _) = try await prepared(source)
+        let pipeline = Pipeline(steps: [.init(kind: .rename, template: "{documentDate}_{word1}")])
+        let prepared = try await engine.prepareRun(pipeline) { _ in }
+        XCTAssertEqual(prepared.analysis.date, .found("2026-10-05"))
+        XCTAssertFalse(prepared.analysis.words.isEmpty)
+        let result = try await engine.process(pipeline, text: "") { _ in }
+        XCTAssertTrue(result.facts.filename.hasPrefix("2026-10-05_"))
+        XCTAssertEqual(try Data(contentsOf: result.url), original)
+        XCTAssertEqual(try Data(contentsOf: source), original)
+        try session.cleanup()
+    }
+
     func testOCRCreatesSearchableInvisibleTextAndPreservesAppearance() async throws {
         let source = try sourcePDF(text: "INVOICE ACME 12345", scanned: true)
         let original = try Data(contentsOf: source)

@@ -7,6 +7,7 @@ struct WorkbenchView: View {
     @State private var exportURL: URL?
     @State private var exportedName: String?
     @State private var preparingExport = false
+    @ScaledMetric(relativeTo: .body) private var cloudBaseSize: CGFloat = 15
 
     private var selected: Pipeline? { store.configuration.pipelines.first { $0.id == model.pipelineID } }
 
@@ -27,7 +28,8 @@ struct WorkbenchView: View {
                                     .frame(height: 300).clipShape(RoundedRectangle(cornerRadius: 18))
                                     .accessibilityLabel("Document preview")
                                 attributes(document.facts)
-                                if !model.processed { pipelineSelection }
+                                if model.awaitingNaming { namingSelection }
+                                else if !model.processed { pipelineSelection }
                                 if model.processed { resultActions(document) }
                             }
                             if model.busy {
@@ -66,7 +68,7 @@ struct WorkbenchView: View {
                 } }
             }
         }
-        .tint(.teal)
+        .tint(PipeAppearance.accent)
     }
 
     private func attributes(_ facts: DocumentFacts) -> some View {
@@ -116,6 +118,90 @@ struct WorkbenchView: View {
         }.frame(maxWidth: .infinity, alignment: .leading)
          .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
         .disabled(model.busy)
+    }
+
+    private var namingSelection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Choose a filename").font(.title3.bold())
+            if let analysis = model.analysis {
+                switch analysis.date {
+                case .found(let value):
+                    Label("Document date: \(value)", systemImage: "calendar")
+                case .fallback:
+                    Label("No document date found. Using processing date.", systemImage: "calendar.badge.clock")
+                case .ambiguous(let candidates):
+                    Text("Several dates are plausible. Choose the document date.")
+                        .foregroundStyle(.orange)
+                    Picker("Document date", selection: $model.selectedDate) {
+                        Text("Choose a date").tag(nil as String?)
+                        ForEach(candidates, id: \.self) { candidate in
+                            Text(candidate).tag(Optional(candidate))
+                        }
+                    }.accessibilityIdentifier("documentDatePicker")
+                }
+                Text("Significant words").font(.headline)
+                if analysis.words.isEmpty {
+                    Text("No significant words found. Enter a word to name this document.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    let highest = max(analysis.words.first?.score ?? 1, 1)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 8)], alignment: .leading, spacing: 8) {
+                        ForEach(analysis.words) { word in
+                            let selected = model.selectedWords.contains(word.text)
+                            Button {
+                                model.toggleWord(word.text)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    if selected { Image(systemName: "checkmark") }
+                                    Text(word.text).lineLimit(2)
+                                }
+                                .font(.system(size: cloudBaseSize + 9 * word.score / highest, weight: selected ? .bold : .medium))
+                                .frame(maxWidth: .infinity, minHeight: 38)
+                                .padding(.horizontal, 5)
+                                .background(selected ? PipeAppearance.accent.opacity(0.22) : Color.secondary.opacity(0.10),
+                                    in: RoundedRectangle(cornerRadius: 10))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(word.text), \(selected ? "selected" : "not selected")")
+                            .accessibilityIdentifier("cloud-\(word.id)")
+                        }
+                    }
+                }
+                HStack {
+                    TextField("Add a word", text: $model.manualKeyword)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("manualKeyword")
+                    Button("Add") { model.addManualKeyword() }
+                        .disabled(model.manualKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                if !model.selectedWords.isEmpty {
+                    Text("Selected: \(model.selectedWords.joined(separator: ", "))")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                } else {
+                    Text("Without a selection, the template uses the highest-ranked words automatically.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                let preview = model.selectedFilenamePreview()
+                switch preview {
+                case .success(let value):
+                    Text("Filename: \(value)").textSelection(.enabled)
+                        .accessibilityIdentifier("proposedFilename")
+                case .failure(let error):
+                    Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red)
+                }
+                Button("Use filename") { model.confirmNaming() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.busy || (try? preview.get()) == nil)
+                    .accessibilityIdentifier("confirmFilename")
+                Button("Change pipeline") { model.resetNaming() }
+                    .buttonStyle(.bordered)
+                    .disabled(model.busy)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
     }
 
     private func resultActions(_ document: ProcessedDocument) -> some View {

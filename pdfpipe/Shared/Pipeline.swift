@@ -53,6 +53,7 @@ struct Pipeline: Codable, Identifiable, Equatable, Sendable {
     var destination: Destination?
     var unattended = false
     var needsText: Bool { steps.contains { $0.kind == .rename && $0.template.contains("{text}") } }
+    var needsAnalysis: Bool { steps.contains { $0.kind == .rename && FilenameTemplate.requiresAnalysis($0.template) } }
     var summary: String {
         (steps.map(\.title) + (destination == nil ? [] : ["Save to \(destination!.name)"])).joined(separator: " → ")
     }
@@ -81,7 +82,7 @@ struct Pipeline: Codable, Identifiable, Equatable, Sendable {
             throw PipeError.message("Give the pipeline a name.")
         }
         for step in steps where step.kind == .rename {
-            _ = try FilenameTemplate.render(step.template, original: "Document", text: "Example", date: Date())
+            try FilenameTemplate.validate(step.template)
         }
         if unattended && (destination == nil || needsText) {
             throw PipeError.message("Unattended pipelines need a destination folder and cannot use {text}.")
@@ -90,13 +91,17 @@ struct Pipeline: Codable, Identifiable, Equatable, Sendable {
 
     /// Shared by the preflight preview and execution, including every rename step.
     func outputFilename(original: String, text: String, date: Date) throws -> String {
+        try outputFilename(values: .init(original: original, manualText: text, processedAt: date))
+    }
+
+    func outputFilename(values: NamingValues) throws -> String {
         try validate()
         var result: String?
         for step in steps where step.kind == .rename {
-            result = try FilenameTemplate.render(step.template, original: original, text: text, date: date)
+            result = try FilenameTemplate.render(step.template, values: values)
         }
         if let result { return result }
-        return try FilenameTemplate.filename(original)
+        return try FilenameTemplate.filename(values.original)
     }
 }
 
@@ -117,50 +122,4 @@ struct PipelineConfiguration: Codable, Equatable, Sendable {
 enum PipeError: LocalizedError, Sendable {
     case message(String)
     var errorDescription: String? { if case let .message(value) = self { return value }; return nil }
-}
-
-enum FilenameTemplate {
-    static func render(_ template: String, original: String, text: String, date: Date) throws -> String {
-        var tokensRemoved = template
-        for token in ["{original}", "{date}", "{text}"] {
-            tokensRemoved = tokensRemoved.replacingOccurrences(of: token, with: "")
-        }
-        guard !tokensRemoved.contains("{"), !tokensRemoved.contains("}") else {
-            throw PipeError.message("Use only {original}, {date}, and {text} in filename templates.")
-        }
-        if template.contains("{text}") && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            throw PipeError.message("Enter the text required by this filename template.")
-        }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.dateFormat = "yyyy-MM-dd"
-        let expression = try NSRegularExpression(pattern: "\\{(original|date|text)\\}")
-        let source = template as NSString
-        var result = ""
-        var end = 0
-        for match in expression.matches(in: template, range: NSRange(location: 0, length: source.length)) {
-            result += source.substring(with: NSRange(location: end, length: match.range.location - end))
-            switch source.substring(with: match.range(at: 1)) {
-            case "original": result += original
-            case "date": result += formatter.string(from: date)
-            default: result += text
-            }
-            end = match.range.location + match.range.length
-        }
-        result += source.substring(from: end)
-        return try filename(result)
-    }
-
-    static func filename(_ value: String) throws -> String {
-        let stem = value.lowercased().hasSuffix(".pdf") ? String(value.dropLast(4)) : value
-        let forbidden = CharacterSet.controlCharacters.union(CharacterSet(charactersIn: "/\\:"))
-        let clean = stem.components(separatedBy: forbidden).joined(separator: "_")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty, clean != ".", clean != "..", !clean.hasPrefix(".") else {
-            throw PipeError.message("Enter a visible, non-empty filename.")
-        }
-        guard clean.utf8.count <= 180 else { throw PipeError.message("The filename is too long (maximum 180 bytes before .pdf).") }
-        return clean + ".pdf"
-    }
 }

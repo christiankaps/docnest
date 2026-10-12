@@ -2,6 +2,50 @@ import XCTest
 
 @MainActor
 final class MVPFlowTests: XCTestCase {
+    func testDocumentNamingChipsAndWordCloud() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let name = "Names " + String(UUID().uuidString.prefix(6))
+        app.buttons["newPipeline"].tap()
+        let field = app.textFields["pipelineName"]
+        field.tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 30) + name)
+        let clear = app.buttons["Clear template"]
+        for _ in 0..<8 { if clear.isHittable { break }; app.swipeUp() }
+        clear.tap()
+        app.buttons["addTemplate-documentDate"].tap()
+        app.buttons["addTemplate-underscore"].tap()
+        app.buttons["addTemplate-word1"].tap()
+        XCTAssertTrue(app.staticTexts["templateExample"].label.contains("2026-10-05_Telekom.pdf"))
+        app.buttons["savePipeline"].tap()
+        for _ in 0..<20 { if app.buttons["openFixture"].isHittable { break }; app.swipeUp() }
+        app.buttons["openFixture"].tap()
+        XCTAssertTrue(app.buttons["pipelinePicker"].waitForExistence(timeout: 10))
+        app.buttons["pipelinePicker"].tap()
+        let option = app.buttons[name].firstMatch
+        for _ in 0..<35 { if option.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(option.exists)
+        option.tap()
+        app.swipeUp()
+        app.buttons["runPipeline"].tap()
+        XCTAssertTrue(app.buttons["confirmFilename"].waitForExistence(timeout: 10))
+        let acme = app.buttons["cloud-acme"]
+        for _ in 0..<10 { if acme.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(acme.exists)
+        acme.tap()
+        XCTAssertTrue(app.staticTexts["proposedFilename"].label.contains("2026-10-05_Acme.pdf"))
+        let namingScreenshot = XCTAttachment(screenshot: app.screenshot())
+        namingScreenshot.name = "Document naming word cloud"
+        namingScreenshot.lifetime = .keepAlways
+        add(namingScreenshot)
+        app.buttons["confirmFilename"].tap()
+        XCTAssertTrue(app.textFields["resultFilename"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.textFields["resultFilename"].value as? String, "2026-10-05_Acme.pdf")
+        app.buttons["Discard"].tap()
+    }
+
     func testPipelineFirstImportSaveStepAndSwipeDeletion() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -97,7 +141,13 @@ final class MVPFlowTests: XCTestCase {
         app.buttons["openFixture"].tap()
         XCTAssertTrue(app.buttons["pipelinePicker"].waitForExistence(timeout: 10))
         app.buttons["pipelinePicker"].tap()
-        app.buttons[pipelineName].firstMatch.tap()
+        let createdPipeline = app.buttons[pipelineName].firstMatch
+        for _ in 0..<30 {
+            if createdPipeline.exists && createdPipeline.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(createdPipeline.exists, app.debugDescription)
+        createdPipeline.tap()
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["proposedFilename"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["proposedFilename"].label.hasSuffix("PdfPipe-Test-Invoice.pdf"))

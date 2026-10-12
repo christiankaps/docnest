@@ -21,6 +21,13 @@ struct ProcessedDocument: Sendable {
     var report: [String]
 }
 
+struct PreparedRun: Sendable {
+    var url: URL
+    var report: [String]
+    var processedAt: Date
+    var analysis: DocumentAnalysis
+}
+
 actor DocumentEngine {
     static let maximumBytes: Int64 = 30 * 1024 * 1024
     static let maximumPages = 50
@@ -134,32 +141,51 @@ actor DocumentEngine {
 
     func process(_ pipeline: Pipeline, text: String, date: Date = Date(),
                  progress: @Sendable (String) async -> Void) async throws -> ProcessedDocument {
+        let prepared = try await prepareRun(pipeline, text: text, date: date, progress: progress)
+        return try finishRun(prepared, pipeline: pipeline,
+            values: .init(original: sourceName, manualText: text, processedAt: date,
+                documentDate: prepared.analysis.date.value,
+                dateAmbiguous: prepared.analysis.date.isAmbiguous,
+                words: prepared.analysis.words.map(\.text)))
+    }
+
+    func prepareRun(_ pipeline: Pipeline, text: String = "", date: Date = Date(),
+                    progress: @Sendable (String) async -> Void) async throws -> PreparedRun {
         try pipeline.validate()
         guard let input else { throw PipeError.message("Import a document first.") }
+        if !pipeline.needsAnalysis {
+            _ = try pipeline.outputFilename(original: sourceName, text: text, date: date)
+        }
         var output = input
-        let filename = try pipeline.outputFilename(original: sourceName, text: text, date: date)
         var report = sourceFormat == "PDF" ? [] : ["Converted \(sourceFormat) to PDF"]
         let deadline = Date().addingTimeInterval(120)
-        for step in pipeline.steps {
+        for step in pipeline.steps where step.kind == .ocr {
             try Task.checkCancellation()
-            if step.kind == .rename {
-                await progress("Building filename…")
-                let stepFilename = try FilenameTemplate.render(step.template, original: sourceName, text: text, date: date)
-                report.append("Renamed to \(stepFilename)")
-            } else {
-                let next = session.directory.appendingPathComponent("ocr-\(UUID().uuidString).pdf")
-                let count = try await ocr(output, to: next, deadline: deadline,
-                    skipExistingText: step.skipExistingText, progress: progress)
-                output = next
-                report.append("OCR processed \(count) pages" + (step.skipExistingText ? "; existing text pages kept" : "; all pages recognized"))
-            }
+            let next = session.directory.appendingPathComponent("ocr-\(UUID().uuidString).pdf")
+            let count = try await ocr(output, to: next, deadline: deadline,
+                skipExistingText: step.skipExistingText, progress: progress)
+            output = next
+            report.append("OCR processed \(count) pages" + (step.skipExistingText ? "; existing text pages kept" : "; all pages recognized"))
         }
         try Task.checkCancellation()
+        let analysis = pipeline.needsAnalysis ? try DocumentAnalyzer.analyze(output) : .empty
+        return .init(url: output, report: report, processedAt: date, analysis: analysis)
+    }
+
+    func finishRun(_ prepared: PreparedRun, pipeline: Pipeline, values: NamingValues,
+                   overrideFilename: String? = nil) throws -> ProcessedDocument {
+        try Task.checkCancellation()
+        let filename = try overrideFilename.map(FilenameTemplate.filename) ?? pipeline.outputFilename(values: values)
         let resultDirectory = session.directory.appendingPathComponent("output-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: resultDirectory, withIntermediateDirectories: true)
         let result = resultDirectory.appendingPathComponent(filename)
-        try FileManager.default.copyItem(at: output, to: result)
+        try FileManager.default.copyItem(at: prepared.url, to: result)
+        let report = prepared.report + (pipeline.steps.contains { $0.kind == .rename } ? ["Renamed to \(filename)"] : [])
         return try describe(result, filename: filename, report: report)
+    }
+
+    func preview(_ prepared: PreparedRun) throws -> ProcessedDocument {
+        try describe(prepared.url, filename: sourceName + ".pdf", report: prepared.report)
     }
 
     func renameResult(_ document: ProcessedDocument, name: String) throws -> ProcessedDocument {

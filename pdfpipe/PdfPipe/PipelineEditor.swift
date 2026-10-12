@@ -51,14 +51,7 @@ struct PipelineEditor: View {
                             Label("Rename", systemImage: "character.cursor.ibeam").font(.headline)
                         }.accessibilityIdentifier("enableRename")
                         if renameEnabled {
-                            TextField("Filename template", text: $filenameTemplate)
-                                .textInputAutocapitalization(.never).autocorrectionDisabled()
-                                .accessibilityIdentifier("filenameTemplate")
-                            Text("{original} · {date} · {text}\nDate uses yyyy-MM-dd. The .pdf extension is added automatically.")
-                                .font(.caption).foregroundStyle(.secondary)
-                            if let preview = try? FilenameTemplate.render(filenameTemplate, original: "Invoice", text: "Acme", date: Date()) {
-                                Text("Example: \(preview)").font(.caption).foregroundStyle(.teal)
-                            }
+                            TemplateChipEditor(template: $filenameTemplate)
                         } else {
                             Text("Keep the original filename.").font(.caption).foregroundStyle(.secondary)
                         }
@@ -116,6 +109,6 @@ struct PipelineEditor: View {
             .alert("Cannot save pipeline", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button("OK") { error = nil }
             } message: { Text(error ?? "") }
-        }.tint(.teal)
+        }.tint(PipeAppearance.accent)
     }
 }

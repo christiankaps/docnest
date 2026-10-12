@@ -13,11 +13,19 @@ final class DocumentSessionModel: ObservableObject {
     @Published var busy = false
     @Published var processed = false
     @Published var savedName: String?
+    @Published var awaitingNaming = false
+    @Published var analysis: DocumentAnalysis?
+    @Published var selectedWords: [String] = []
+    @Published var selectedDate: String?
+    @Published var manualKeyword = ""
     private var session: TemporarySession?
     private var engine: DocumentEngine?
     private var task: Task<Void, Never>?
     private var importProgress: Progress?
     private var finished = false
+    private var runDate: Date?
+    private var pendingRun: PreparedRun?
+    private var pendingPipeline: Pipeline?
     private let inboxDirectory: URL
     var onFinished: (() -> Void)?
 
@@ -106,6 +114,7 @@ final class DocumentSessionModel: ObservableObject {
     func run(_ pipeline: Pipeline) {
         guard !busy else { return }
         busy = true
+        runDate = Date()
         task = Task { await execute(pipeline) }
     }
 
@@ -114,17 +123,52 @@ final class DocumentSessionModel: ObservableObject {
         busy = true
         processed = false
         savedName = nil
+        awaitingNaming = false
+        analysis = nil
+        selectedWords = []
+        selectedDate = nil
+        pendingRun = nil
+        pendingPipeline = nil
         do {
-            let result = try await engine.process(pipeline, text: manualText) { [weak self] value in
+            let date = runDate ?? Date()
+            runDate = date
+            let prepared = try await engine.prepareRun(pipeline, text: manualText, date: date) { [weak self] value in
                 await self?.updateProgress(value)
             }
+            try Task.checkCancellation()
+            if pipeline.needsAnalysis && !pipeline.unattended {
+                let preview = try await engine.preview(prepared)
+                pendingRun = prepared
+                pendingPipeline = pipeline
+                analysis = prepared.analysis
+                document = preview
+                awaitingNaming = true
+                progress = "Choose a filename"
+                busy = false
+                return
+            }
+            let values = namingValues(for: prepared)
+            if pipeline.needsAnalysis && pipeline.unattended {
+                do { _ = try pipeline.outputFilename(values: values) }
+                catch {
+                    let preview = try await engine.preview(prepared)
+                    pendingRun = prepared
+                    pendingPipeline = pipeline
+                    analysis = prepared.analysis
+                    document = preview
+                    awaitingNaming = true
+                    busy = false
+                    self.error = "Automatic naming needs review: \(error.localizedDescription)"
+                    return
+                }
+            }
+            let result = try await engine.finishRun(prepared, pipeline: pipeline, values: values)
             try Task.checkCancellation()
             document = result
             filename = result.facts.filename
             processed = true
             if pipeline.unattended, let destination = pipeline.destination {
                 progress = "Saving to \(destination.name)…"
-                // Cancellation must reach the writing task, not just its parent.
                 let writer = Task.detached { try DestinationWriter.save(result.url, destination: destination) }
                 let saved = try await withTaskCancellationHandler { try await writer.value } onCancel: { writer.cancel() }
                 savedName = saved.lastPathComponent
@@ -138,12 +182,78 @@ final class DocumentSessionModel: ObservableObject {
         }
     }
 
+    private func namingValues(for prepared: PreparedRun) -> NamingValues {
+        NamingValues(original: document?.facts.originalBasename ?? "Document", manualText: manualText,
+            processedAt: prepared.processedAt, documentDate: selectedDate ?? prepared.analysis.date.value,
+            dateAmbiguous: prepared.analysis.date.isAmbiguous && selectedDate == nil,
+            words: prepared.analysis.words.map(\.text))
+    }
+
+    func selectedFilenamePreview() -> Result<String, Error> {
+        Result {
+            guard let pendingRun, let pendingPipeline else { throw PipeError.message("Analyze a document first.") }
+            if !selectedWords.isEmpty {
+                let values = namingValues(for: pendingRun)
+                let date = try FilenameTemplate.render("{documentDate}", values: values)
+                let stem = String(date.dropLast(4)) + "_" + selectedWords.joined(separator: "_")
+                return try FilenameTemplate.filename(stem)
+            }
+            return try pendingPipeline.outputFilename(values: namingValues(for: pendingRun))
+        }
+    }
+
+    func toggleWord(_ word: String) {
+        if let index = selectedWords.firstIndex(of: word) { selectedWords.remove(at: index) }
+        else { selectedWords.append(word) }
+    }
+
+    func addManualKeyword() {
+        let term = manualKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty, !selectedWords.contains(term) else { return }
+        selectedWords.append(term)
+        manualKeyword = ""
+    }
+
+    func resetNaming() {
+        awaitingNaming = false
+        pendingRun = nil
+        pendingPipeline = nil
+        analysis = nil
+        selectedWords = []
+        selectedDate = nil
+    }
+
+    func confirmNaming() {
+        guard let pendingRun, let pendingPipeline, let engine, !busy else { return }
+        busy = true
+        task = Task {
+            do {
+                let resolved = try selectedFilenamePreview().get()
+                let final = try await engine.finishRun(pendingRun, pipeline: pendingPipeline,
+                    values: namingValues(for: pendingRun), overrideFilename: selectedWords.isEmpty ? nil : resolved)
+                try Task.checkCancellation()
+                document = final
+                filename = final.facts.filename
+                processed = true
+                awaitingNaming = false
+                self.pendingRun = nil
+                self.pendingPipeline = nil
+                busy = false
+            } catch {
+                busy = false
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
     private func updateProgress(_ value: String) { progress = value }
 
     func filenamePreview(_ pipeline: Pipeline, date: Date = Date()) -> Result<String, Error> {
         Result {
             guard let document else { throw PipeError.message("Import a document first.") }
-            return try pipeline.outputFilename(original: document.facts.originalBasename, text: manualText, date: date)
+            if pipeline.needsAnalysis { return "Filename available after document analysis" }
+            return try pipeline.outputFilename(original: document.facts.originalBasename, text: manualText,
+                date: runDate ?? date)
         }
     }
 

@@ -52,6 +52,22 @@ final class ConfigurationAndExportTests: XCTestCase {
         XCTAssertEqual(try FilenameTemplate.filename("invoice/2026:Acme.pdf"), "invoice_2026_Acme.pdf")
     }
 
+    func testStructuredTemplateKeepsLegacyMeaningAndDefersDocumentValues() throws {
+        let template = "{date}_{documentDate}_{word1}_{original}_{text}"
+        let parts = try FilenameTemplate.parse(template)
+        XCTAssertEqual(FilenameTemplate.source(parts), template)
+        XCTAssertTrue(FilenameTemplate.requiresAnalysis(template))
+        let date = try XCTUnwrap(Calendar(identifier: .gregorian).date(from: DateComponents(year: 2026, month: 10, day: 12)))
+        let values = NamingValues(original: "report{date}", manualText: "Final", processedAt: date,
+            documentDate: "2026-10-05", words: ["Telekom"])
+        XCTAssertEqual(try FilenameTemplate.render(template, values: values),
+            "2026-10-12_2026-10-05_Telekom_report{date}_Final.pdf")
+        XCTAssertEqual(try FilenameTemplate.render("{date}", original: "Source", text: "", date: date), "2026-10-12.pdf")
+        XCTAssertThrowsError(try FilenameTemplate.render(template, values: .init(original: "Source", manualText: "Final", processedAt: date)))
+        XCTAssertThrowsError(try FilenameTemplate.parse("{word4}"))
+        XCTAssertThrowsError(try FilenameTemplate.parse("Broken}"))
+    }
+
     func testPipelinePersistenceExplicitDefaultAndDeletion() throws {
         let name = "PdfPipeTests-\(UUID())"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))

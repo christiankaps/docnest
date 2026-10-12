@@ -126,6 +126,115 @@ final class SessionFlowTests: XCTestCase {
         XCTAssertTrue(finished)
     }
 
+    func testInteractiveNamingWaitsForSelectionAndUsesSessionOnlyWords() async throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try sourcePDF(root: root, text: "Invoice date 2026-10-05 Telekom Internet")
+        let original = try Data(contentsOf: source)
+        let domain = "PdfPipeSelectionTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let store = PipelineStore(defaults: defaults)
+        let pipeline = Pipeline(name: "Smart", steps: [.init(kind: .rename,
+            template: "{documentDate}_{word1}_{word2}_{word3}")])
+        try store.save(pipeline, isDefault: false)
+        let model = DocumentSessionModel()
+        model.pipelineID = pipeline.id
+        model.importFile(source, store: store, autoRun: false)
+        try await waitForIdle(model)
+        model.run(pipeline)
+        try await waitForIdle(model)
+        XCTAssertTrue(model.awaitingNaming)
+        XCTAssertFalse(model.processed)
+        XCTAssertEqual(model.analysis?.date, .found("2026-10-05"))
+        model.toggleWord("Telekom")
+        XCTAssertEqual(try model.selectedFilenamePreview().get(), "2026-10-05_Telekom.pdf")
+        model.confirmNaming()
+        try await waitForIdle(model)
+        XCTAssertNil(model.error)
+        XCTAssertTrue(model.processed)
+        XCTAssertEqual(model.filename, "2026-10-05_Telekom.pdf")
+        XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(model.document?.url)), original)
+        XCTAssertEqual(try Data(contentsOf: source), original)
+        XCTAssertEqual(store.configuration.pipelines.first?.steps.first?.template,
+                       "{documentDate}_{word1}_{word2}_{word3}")
+        model.discard()
+    }
+
+    func testUnattendedDocumentNamingSavesWithoutInput() async throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try sourcePDF(root: root, text: "Invoice date 2026-10-05 Telekom Internet")
+        let original = try Data(contentsOf: source)
+        let destinationURL = root.appendingPathComponent("saved")
+        try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+        let domain = "PdfPipeAutoNaming-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let store = PipelineStore(defaults: defaults)
+        let pipeline = Pipeline(name: "Automatic naming", steps: [.init(kind: .rename,
+            template: "{documentDate}_{word1}_{word2}")],
+            destination: try Destination.selected(destinationURL), unattended: true)
+        try store.save(pipeline, isDefault: true)
+        let model = DocumentSessionModel()
+        var finished = false
+        model.onFinished = { finished = true }
+        model.importFile(source, store: store, autoRun: true)
+        try await waitForIdle(model)
+        XCTAssertNil(model.error)
+        XCTAssertTrue(finished)
+        XCTAssertFalse(model.awaitingNaming)
+        let savedName = try XCTUnwrap(model.savedName)
+        XCTAssertTrue(savedName.hasPrefix("2026-10-05_"))
+        XCTAssertEqual(try Data(contentsOf: destinationURL.appendingPathComponent(savedName)), original)
+        XCTAssertEqual(try Data(contentsOf: source), original)
+    }
+
+    func testUnattendedNamingNeedsReviewForAmbiguousDateAndMissingWords() async throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try sourcePDF(root: root,
+            text: "Invoice date 2026-10-05 Invoice date 2026-10-06")
+        let destinationURL = root.appendingPathComponent("saved")
+        try FileManager.default.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+        let domain = "PdfPipeAutoNaming-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let store = PipelineStore(defaults: defaults)
+        let pipeline = Pipeline(name: "Ambiguous", steps: [.init(kind: .rename,
+            template: "{documentDate}_{word1}")], destination: try Destination.selected(destinationURL), unattended: true)
+        try store.save(pipeline, isDefault: true)
+        let model = DocumentSessionModel()
+        model.importFile(source, store: store, autoRun: true)
+        try await waitForIdle(model)
+        XCTAssertTrue(model.awaitingNaming)
+        XCTAssertFalse(model.processed)
+        XCTAssertNotNil(model.error)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: destinationURL.path), [])
+        model.selectedDate = "2026-10-05"
+        model.manualKeyword = "Rechnung"
+        model.addManualKeyword()
+        model.error = nil
+        model.confirmNaming()
+        try await waitForIdle(model)
+        XCTAssertTrue(model.processed)
+        XCTAssertNil(model.error)
+        XCTAssertNil(model.savedName, "Correction requires an explicit save")
+        model.discard()
+
+        let shortSource = try sourcePDF(root: root, text: "Alpha")
+        let short = Pipeline(name: "Needs words", steps: [.init(kind: .rename,
+            template: "{documentDate}_{word3}")], destination: try Destination.selected(destinationURL), unattended: true)
+        try store.save(short, isDefault: true)
+        let second = DocumentSessionModel()
+        second.importFile(shortSource, store: store, autoRun: true)
+        try await waitForIdle(second)
+        XCTAssertTrue(second.awaitingNaming)
+        XCTAssertNotNil(second.error)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: destinationURL.path), [])
+        second.discard()
+    }
+
     func testProviderImportPreservesSuppliedFilenameAndCopiesInput() async throws {
         let root = try temporaryRoot()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -169,11 +278,11 @@ final class SessionFlowTests: XCTestCase {
         return root
     }
 
-    private func sourcePDF(root: URL) throws -> URL {
+    private func sourcePDF(root: URL, text: String = "Synthetic invoice") throws -> URL {
         let source = root.appendingPathComponent("source.pdf")
         try UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792)).writePDF(to: source) { context in
             context.beginPage()
-            "Synthetic invoice".draw(at: CGPoint(x: 50, y: 70), withAttributes: [.font: UIFont.systemFont(ofSize: 24)])
+            text.draw(at: CGPoint(x: 50, y: 70), withAttributes: [.font: UIFont.systemFont(ofSize: 24)])
         }
         return source
     }

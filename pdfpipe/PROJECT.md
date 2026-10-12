@@ -7,19 +7,17 @@ Maturity: MVP
 
 PDF Pipe is a native iPhone document workbench. It receives one document, processes a temporary copy through a saved pipeline, and lets the user share or save the resulting PDF. An explicitly configured default pipeline can process and save unattended. Originals are never modified.
 
-This file owns the consolidated product concept, accepted requirements, and open product decisions. [PLAN.md](PLAN.md) owns delivery increments and verification status; [ARCHITECTURE.md](ARCHITECTURE.md) describes the implemented architecture; [README.md](README.md) describes current usage, commands, and limits. Planned behavior below must not be presented as already implemented.
+This file owns the consolidated product concept, accepted requirements, and remaining product decisions. [PLAN.md](PLAN.md) owns increment and verification status; [ARCHITECTURE.md](ARCHITECTURE.md) describes implementation ownership; [README.md](README.md) describes current usage, commands, and limits.
 
 Platform: iPhone first, iOS 26 or later; build with Xcode 27 and XcodeGen. The display name is **PDF Pipe**. Preserve existing bundle IDs, App Group, project paths, targets/schemes, installation, and saved configuration. Root direct-to-main Git policy applies. Use `make help`, edit `project.yml` and regenerate, and run `make verify` before code integration.
 
-## Current baseline
+## Current state
 
-The first MVP implements PDF/JPEG/PNG import, preview and attributes, optional searchable OCR, simple filename templates, pipeline management, interactive export, and configured-folder unattended saving. The editor shows OCR, Rename, and Save once each with enable switches and fixed execution order. Home supports swipe deletion and pipeline-first import.
+The MVP and functional increments I1–I8 are implemented. PDF/JPEG/PNG import, preview and attributes, optional searchable OCR, pipeline management, interactive export, and configured-folder unattended saving remain available. The editor shows OCR, Rename, and Save once each in fixed order. Home supports swipe deletion and pipeline-first import and focuses on those tasks without branding or storage-policy copy.
 
-Current templates accept `{original}`, `{date}` (local processing date, `yyyy-MM-dd`), `{text}` (per-import manual input), and literals. The editor is a plain text field. Document-date extraction, significant-word ranking, word-cloud selection, and template chips are not implemented.
+The chip editor composes filename templates from document date, Word 1–3, separators, original name, processing date, manual text, and editable fixed text. `{date}` retains its original processing-date meaning. Document dates and ranked words come from PDF text after optional OCR. The interactive workbench shows a weighted word cloud and pauses for review; the unattended default resolves the same values automatically when possible. The app follows the iOS light/dark appearance and uses a centralized blue accent. Light/default, dark, and grayscale tinted icon variants use the selected v1 motif.
 
-Current UI uses system surfaces with hard-coded teal accents and retains home-screen branding/footer copy. Only one explicit app-icon asset is integrated. Deliberate light/dark visual verification and dark/tinted icon assets remain pending.
-
-The latest simulator gate passed 33 unit tests, two UI tests, and optimized unsigned device Release analysis/build. The preceding physical-iPhone baseline passed 27 unit tests and one UI test; the latest signed Release is installed and launch-checked. Provider/resource feasibility and distribution are not yet established. Exact coverage and remaining checks are in PLAN.md.
+The final iOS 27 simulator gate passed 41 unit tests, three UI tests, static analysis, and the optimized unsigned device Release build. The optimized simulator Release passed the same 41 unit tests. On an iPhone 14 Pro, 23 targeted tests passed and the signed optimized Release build was installed and launched. Provider/resource feasibility, visual verification of system-selected Home Screen icon variants, and distribution remain open; see PLAN.md.
 
 ## Product invariants and scope
 
@@ -52,19 +50,19 @@ Save to folder is optional and always last. Disabling Save also clears unattende
 
 In every mode, show progress and permit cancellation. An export cancellation keeps the result available. Processing errors support correction/retry or discard; destination-write errors keep the processed result available for another export. Do not silently redirect output. Existing pipeline selection, deletion, configuration persistence, and source preservation remain regression requirements.
 
-## Document-derived naming: accepted next milestone
+## Document-derived naming
 
 ### Date
 
 Prefer a date found in the document content. If none is found, use the processing date. File metadata is not the intended fallback. Document date and processing date remain distinct concepts: existing `{date}` templates keep their current meaning.
 
-Multiple plausible dates, ambiguous numeric formats, and low-quality recognition need an explicit selection policy before unattended document-date naming ships. Do not silently call an ambiguous result “no date” to bypass that policy.
+The resolver recognizes ISO and common dotted/slashed numeric dates. Clearly labeled document/issue dates outrank due/service dates. Competing candidates and ambiguous day/month slash dates require interactive selection; unattended processing stops for review without publishing a final PDF. Invalid dates do not count as found dates. Output uses `yyyy-MM-dd`. Additional languages and formats require measured expansion.
 
 ### Words and interactive selection
 
 After OCR, or using existing text, show a word cloud weighted by each word's importance/significance in the document. Users select one or more words to form the suffix after the date. Word 1, Word 2, and Word 3 in automatic templates mean the first, second, and third highest-ranked significant words, respectively.
 
-Frequency alone is not the product definition of significance. The ranking method and supported language coverage require representative-document evaluation before being declared adequate. Short phrases, manually added cloud terms, and user-controlled ordering of selected words are proposals awaiting a scope decision.
+A bounded, deterministic local ranker scores distinct words using heading position and repeated appearances across lines, filters English/German stopwords and repeated page lines, and uses stable tie-breaks. The result is a useful heuristic, not semantic understanding. Interactive users can add a missing word manually and select terms in the order desired; selected terms are session-only. Short-phrase extraction and richer language support remain future improvements.
 
 ### Template editor
 
@@ -81,33 +79,25 @@ Use the same naming rules for preview and execution. Check template structure/co
 
 Missing or ambiguous required values require correction or an explicit failure unless an accepted fallback applies. The processing-date fallback is accepted for an absent document date. Missing words have no accepted fallback yet. Unattended execution must not export a filename that silently omits required values or substitutes invented words.
 
-Interactive word selection must never leak into persisted pipeline configuration. The choice of how an interactive selection overrides an automatic ranked-word template remains open (D4 below).
+Interactive word selection never enters persisted pipeline configuration. When at least one word is selected, its session-only filename is document date (or processing-date fallback) plus the selected words in tap order; otherwise the saved ranked-word template is used. In an unattended failure, the workbench retains the processed copy for correction and an explicit user-directed save.
 
-## Appearance and home screen: accepted next milestone
+## Appearance and home screen
 
 - Support light and dark appearances throughout the app and share-extension workflow, including word clouds, chips, previews, dialogs, and errors.
 - Provide light/default, dark, and tinted app-icon appearances using the selected [v1 motif](design/app-icon-v1.png), the curved pipeline arrow. V2 remains unselected. Icon appearance follows the user's Home Screen setting independently of app-interface appearance.
 - Remove the large app icon, slogan, accompanying promotional copy, and “No document library” footer from Home. This does not change the temporary-storage policy.
 - Focus Home on importing and managing pipelines, retaining swipe deletion and visible default/unattended status.
-- Reconsider the current teal accent. No replacement color has been selected.
+- Use a centralized system blue accent for actions and selected controls. The interface follows the iOS light/dark setting. Selected word-cloud terms include a checkmark; no manual appearance override is currently provided.
 
-Recommended visual direction, not yet approved: PDF Pipe navigation title → import action → Pipelines heading with add action → concise pipeline rows. Use neutral system surfaces and restrained adaptive blue for actions/selected controls. Selection should also have a checkmark or equivalent non-color indicator. Follow system appearance by default; an explicit System / Light / Dark setting is optional pending D1.
+The Home layout uses the PDF Pipe navigation title, import action, and a concise Pipelines list with an add action. System surfaces provide the light and dark palettes.
 
 The icon family must remain recognizable at Home Screen size and with different user tints. Validate contrast and legibility in both interface appearances. [Apple's icon guidance](https://developer.apple.com/design/human-interface-guidelines/app-icons) describes system-controlled icon appearances.
 
-## Open decisions for the next milestone
+## Decisions and remaining questions
 
-These are proposals for the relevant increment, not reasons to block unrelated work.
+The implementation resolves former decisions D1–D5: system-following appearance with blue accent; labeled document date preference with ambiguity requiring review; strict required-word handling with interactive manual correction; selected cloud words forming a session-only date-and-words filename; and deterministic on-device word ranking, initially without phrases. These choices are now implemented policy, not proposals.
 
-| ID | Decision | Recommendation to evaluate | Needed before |
-| --- | --- | --- | --- |
-| D1 | Accent and appearance control | Preview adaptive blue in light/dark; system-following initially, explicit override only if wanted. | Final appearance acceptance (I1). |
-| D2 | Competing/ambiguous dates | Prefer clearly labeled document/issue dates over due/service dates; show candidates interactively; fail unattended when unresolved. Start with existing `yyyy-MM-dd` output. | Date behavior acceptance (I4), unattended enablement (I8). |
-| D3 | Too few significant words or no usable text | Keep strict missing-value behavior: explain/correct interactively, fail unattended. Do not silently omit requested word slots or enable OCR. | Ranked-word acceptance (I5), unattended enablement (I8). |
-| D4 | Interactive selection versus ranked template | Keep automatic rank slots stable; let explicit cloud selection build a session-only date + selected-word suffix in selection order. No automatic saving before confirmation. | Word-cloud interaction (I7). |
-| D5 | Ranking scope and quality | Start with a deterministic on-device approach; evaluate German/English synthetic fixtures, filter stopwords/boilerplate, consider headings/distinctiveness, deduplicate, use stable tie-breaks. Defer phrases initially. | Ranking acceptance (I5). |
-
-Additional future decisions: distribution, monetization/audience, supported extraction categories beyond date/words, configurable date formats, and a manual override entry point for an unattended default. Physical OCR language quality, provider access, and extension resource behavior require evidence, not assumed guarantees.
+Remaining questions concern extraction quality on real multilingual/scanned documents, new date formats or configurable formatting, short phrases, distribution and audience, third-party provider access, and extension resource limits. A manual override entry point for an unattended default has not been accepted.
 
 ## Acceptance and boundaries
 

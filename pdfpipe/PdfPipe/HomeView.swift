@@ -15,14 +15,6 @@ struct HomeView: View {
         NavigationStack {
             List {
                 Section {
-                    HStack(spacing: 18) {
-                        Image("BrandIcon").resizable().frame(width: 76, height: 76)
-                            .clipShape(RoundedRectangle(cornerRadius: 18)).accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("PDFs, ready to go.").font(.title2.bold())
-                            Text("Process a copy. Keep the original.").font(.subheadline).foregroundStyle(.secondary)
-                        }
-                    }
                     Button {
                         importPipelineID = nil
                         choosingPipeline = true
@@ -37,7 +29,7 @@ struct HomeView: View {
                 }
                 Section {
                     HStack {
-                        Text("Your pipelines").font(.title2.bold())
+                        Text("Pipelines").font(.headline)
                         Spacer()
                         Button { editing = Pipeline() } label: { Image(systemName: "plus.circle.fill").font(.title2) }
                             .accessibilityLabel("New pipeline").accessibilityIdentifier("newPipeline")
@@ -45,7 +37,7 @@ struct HomeView: View {
                     }
                     if store.configuration.pipelines.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Image(systemName: "arrow.trianglehead.branch").font(.largeTitle).foregroundStyle(.teal)
+                            Image(systemName: "arrow.trianglehead.branch").font(.largeTitle).foregroundStyle(PipeAppearance.accent)
                             Text("Create your first pipeline").font(.headline)
                             Text("Combine OCR and filename templates. Add a destination folder to save automatically.")
                                 .foregroundStyle(.secondary)
@@ -57,12 +49,12 @@ struct HomeView: View {
                             Button { editing = pipeline } label: {
                                 VStack(alignment: .leading, spacing: 10) {
                                     HStack {
-                                        Image(systemName: pipeline.unattended ? "bolt.fill" : "arrow.trianglehead.branch").foregroundStyle(.teal)
+                                        Image(systemName: pipeline.unattended ? "bolt.fill" : "arrow.trianglehead.branch").foregroundStyle(PipeAppearance.accent)
                                         Text(pipeline.name).font(.headline).foregroundStyle(.primary)
                                         Spacer()
                                         if store.configuration.defaultID == pipeline.id {
                                             Text("DEFAULT").font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 5)
-                                                .background(.teal.opacity(0.12), in: Capsule()).foregroundStyle(.teal)
+                                                .background(PipeAppearance.accent.opacity(0.12), in: Capsule()).foregroundStyle(PipeAppearance.accent)
                                         }
                                         Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                                     }
@@ -70,7 +62,7 @@ struct HomeView: View {
                                         .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.leading)
                                     Text(pipeline.unattended ? "Runs unattended" : "Review before export")
                                         .font(.caption).foregroundStyle(.secondary)
-                                }.padding(18).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
+                                }.padding(.vertical, 5)
                             }.buttonStyle(.plain)
                              .accessibilityIdentifier("pipeline-\(pipeline.id)")
                              .swipeActions(edge: .trailing) {
@@ -81,12 +73,6 @@ struct HomeView: View {
                                  Button("Delete", systemImage: "trash", role: .destructive) { perform { try store.delete(pipeline) } }
                              }
                         }
-                    }
-                } footer: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("No document library", systemImage: "lock.shield")
-                        Text("Share a PDF, JPEG, or PNG to PDF Pipe from another app. Working copies are temporary; your pipelines stay.")
-                            .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
                 #if DEBUG
@@ -166,7 +152,7 @@ struct HomeView: View {
             .alert("PDF Pipe", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button("OK") { error = nil }
             } message: { Text(error ?? "") }
-        }.tint(.teal)
+        }.tint(PipeAppearance.accent)
     }
 
     private func perform(_ action: () throws -> Void) { do { try action() } catch { self.error = error.localizedDescription } }

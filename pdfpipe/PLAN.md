@@ -1,6 +1,6 @@
 # PDF Pipe implementation plan
 
-Status: planned; I1–I9 have not started. Product requirements and decision IDs are authoritative in [PROJECT.md](PROJECT.md). This plan does not authorize publishing, deployment, or provisioning changes.
+Status: I1–I8 implemented and simulator-verified; I9 completed for automated simulator and targeted iPhone checks, with the evidence gaps below still open. Product requirements and decision IDs are authoritative in [PROJECT.md](PROJECT.md). This plan does not authorize publishing or deployment.
 
 ## Baseline and delivery rules
 
@@ -12,9 +12,9 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 
 ## I1 — Focused home screen and adaptive appearance
 
-- [ ] Remove the home icon, slogan/promotional copy, and storage-policy footer.
-- [ ] Retain import, pipeline creation/editing/duplication/swipe deletion, and default/unattended indicators in a concise native layout.
-- [ ] Centralize accent/semantic colors and check app + extension in light/dark appearances. Prepare the adaptive-blue proposal for D1; an explicit appearance setting remains optional.
+- [x] Remove the home icon, slogan/promotional copy, and storage-policy footer.
+- [x] Retain import, pipeline creation/editing/duplication/swipe deletion, and default/unattended indicators in a concise native layout.
+- [x] Centralize accent/semantic colors and check app + extension in light/dark appearances. Prepare the adaptive-blue proposal for D1; an explicit appearance setting remains optional.
 
 **Result:** a useful, uncluttered home screen and consistent appearance across existing flows.
 
@@ -26,8 +26,8 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 
 ## I2 — Light, dark, and tinted icon family
 
-- [ ] Derive three coherent appearances from the selected v1 motif; preserve its identity.
-- [ ] Integrate the assets through the project-owned icon workflow and retain reproducible source assets.
+- [x] Derive three coherent appearances from the selected v1 motif; preserve its identity.
+- [x] Integrate the assets through the project-owned icon workflow and retain reproducible source assets.
 - [ ] Verify the actual Home Screen icon variants, including different user-selected tints and small display sizes.
 
 **Result:** PDF Pipe fits the user's Home Screen appearance without changing its recognizable motif.
@@ -40,11 +40,11 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 
 ## I3 — Naming foundation and staged processing
 
-- [ ] Separate template syntax/configuration validation from document-value resolution and final filename validation.
-- [ ] Introduce a shared typed representation of template parts/resolution state while keeping saved legacy templates lossless and preserving `{date}` as processing date.
-- [ ] Capture a stable processing timestamp for each new naming run so preview and export cannot diverge at midnight. Reuse it while reviewing/editing that run.
-- [ ] Add session-scoped analysis state and a processing boundary after OCR, before final rename/save. Cancellation, retry, and cleanup must own the intermediate copy correctly.
-- [ ] Keep the current user workflow operational; do not expose unsupported new tokens yet.
+- [x] Separate template syntax/configuration validation from document-value resolution and final filename validation.
+- [x] Introduce a shared typed representation of template parts/resolution state while keeping saved legacy templates lossless and preserving `{date}` as processing date.
+- [x] Capture a stable processing timestamp for each new naming run so preview and export cannot diverge at midnight. Reuse it while reviewing/editing that run.
+- [x] Add session-scoped analysis state and a processing boundary after OCR, before final rename/save. Cancellation, retry, and cleanup must own the intermediate copy correctly.
+- [x] Keep the current user workflow operational; do not expose unsupported new tokens yet.
 
 **Result:** existing pipelines behave as before, and naming can wait for content without blocking OCR or rerunning it for each filename edit.
 
@@ -56,10 +56,10 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 
 ## I4 — Document date with processing-date fallback
 
-- [ ] Read available text after the enabled OCR step or from an existing searchable PDF; retain enough page/context information to explain candidate dates.
-- [ ] Resolve a document date under the agreed D2 policy, with processing date only when no document date is found.
-- [ ] Expose the result and its source in the interactive workbench; expose uncertainty/candidates rather than a fabricated final date.
-- [ ] Make the new date value available to the shared template resolver while retaining old `{date}` semantics. Keep unattended use unavailable until I8.
+- [x] Read available text after the enabled OCR step or from an existing searchable PDF; retain enough page/context information to explain candidate dates.
+- [x] Resolve a document date under the agreed D2 policy, with processing date only when no document date is found.
+- [x] Expose the result and its source in the interactive workbench; expose uncertainty/candidates rather than a fabricated final date.
+- [x] Make the new date value available to the shared template resolver while retaining old `{date}` semantics. Keep unattended use unavailable until I8.
 
 **Result:** an interactive import can use a content date and clearly show when the fallback was used.
 
@@ -71,10 +71,10 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 
 ## I5 — Significant-word ranking
 
-- [ ] Implement a deterministic, bounded ranking strategy against the language/document scope selected in D5.
-- [ ] Filter stopwords and repeated boilerplate; normalize/deduplicate candidates while retaining suitable display text. Use relevance signals beyond raw frequency and stable tie-breaks.
-- [ ] Supply ordered candidates and significance weights for Word 1–3 and the later cloud; do not persist recognized text or candidates in settings/logs.
-- [ ] Surface missing text/too few meaningful candidates according to D3. Never run disabled OCR implicitly.
+- [x] Implement a deterministic, bounded ranking strategy against the language/document scope selected in D5.
+- [x] Filter stopwords and repeated boilerplate; normalize/deduplicate candidates while retaining suitable display text. Use relevance signals beyond raw frequency and stable tie-breaks.
+- [x] Supply ordered candidates and significance weights for Word 1–3 and the later cloud; do not persist recognized text or candidates in settings/logs.
+- [x] Surface missing text/too few meaningful candidates according to D3. Never run disabled OCR implicitly.
 
 **Result:** the shared analysis can produce inspectable, ranked naming suggestions from representative documents.
 
@@ -86,10 +86,10 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 
 ## I6 — Chip-based filename template editor
 
-- [ ] Replace primary raw-template entry with tappable date, Word 1–3, `_`, and `-` chips; support removing/replacing parts. Drag reordering is optional, not a prerequisite.
-- [ ] Preserve editing of existing original-name, processing-date, manual-text, and literal parts. Distinguish document-date-with-fallback from processing-date-only in labels.
-- [ ] Show clearly labeled example values in the pipeline editor and actual resolved values in the document workbench, with `.pdf` automatic.
-- [ ] Persist the template losslessly through the shared parser/serializer; keep preview and export on the same rendering path. New ranked templates remain interactive-only until I8.
+- [x] Replace primary raw-template entry with tappable date, Word 1–3, `_`, and `-` chips; support removing/replacing parts. Drag reordering is optional, not a prerequisite.
+- [x] Preserve editing of existing original-name, processing-date, manual-text, and literal parts. Distinguish document-date-with-fallback from processing-date-only in labels.
+- [x] Show clearly labeled example values in the pipeline editor and actual resolved values in the document workbench, with `.pdf` automatic.
+- [x] Persist the template losslessly through the shared parser/serializer; keep preview and export on the same rendering path. New ranked templates remain interactive-only until I8.
 
 **Result:** users can compose `Date_Word1_Word2_Word3` without typing syntax, save it, reopen it, and see the correct resolved filename for a document.
 
@@ -101,10 +101,10 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 
 ## I7 — Interactive weighted word cloud
 
-- [ ] Present the ranked candidates after text analysis, with visible weight and accessible selectable controls; include explicit selected-state indicators.
-- [ ] Select/deselect one or more words and update the date-prefixed filename live under the agreed D4 rule.
-- [ ] Show date provenance/fallback, allow correction of unresolved naming inputs, and retain final filename correction before export.
-- [ ] Pause before final rename/save; changing selection only recomputes the name, not OCR. Keep all selections within the current temporary session.
+- [x] Present the ranked candidates after text analysis, with visible weight and accessible selectable controls; include explicit selected-state indicators.
+- [x] Select/deselect one or more words and update the date-prefixed filename live under the agreed D4 rule.
+- [x] Show date provenance/fallback, allow correction of unresolved naming inputs, and retain final filename correction before export.
+- [x] Pause before final rename/save; changing selection only recomputes the name, not OCR. Keep all selections within the current temporary session.
 
 **Result:** import → process/analyze → choose meaningful words → review final name → share/save/discard works end to end.
 
@@ -116,10 +116,10 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 
 ## I8 — Unattended document-derived naming and save
 
-- [ ] Enable the new date/ranked-word templates for unattended pipelines once their inputs can resolve automatically.
-- [ ] Resolve exactly the required rank slots; use the accepted missing-date fallback and agreed ambiguous-date/missing-word behavior.
-- [ ] Save only after final filename validation using the existing coordinated, exclusive publication path. Preserve destination errors, cancellation, collision behavior, and cleanup.
-- [ ] Keep per-import manual input incompatible with unattended execution and prevent a hidden interactive word-cloud dependency.
+- [x] Enable the new date/ranked-word templates for unattended pipelines once their inputs can resolve automatically.
+- [x] Resolve exactly the required rank slots; use the accepted missing-date fallback and agreed ambiguous-date/missing-word behavior.
+- [x] Save only after final filename validation using the existing coordinated, exclusive publication path. Preserve destination errors, cancellation, collision behavior, and cleanup.
+- [x] Keep per-import manual input incompatible with unattended execution and prevent a hidden interactive word-cloud dependency.
 
 **Result:** sharing a document to the default pipeline produces the intended file in its configured folder without any input on success.
 
@@ -131,13 +131,13 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 
 ## I9 — Final simulator validation and targeted iPhone checks if needed
 
-- [ ] After I8, run the final simulator `make verify` gate and `make test-release` and review the complete interactive/unattended flows.
-- [ ] Assess recorded evidence gaps and document whether physical-iPhone verification is needed and which checks require it. Do not schedule an automatic full device-suite rerun without a relevant gap.
+- [x] After I8, run the final simulator `make verify` gate and `make test-release` and review the complete interactive/unattended flows.
+- [x] Assess recorded evidence gaps and document whether physical-iPhone verification is needed and which checks require it. Do not schedule an automatic full device-suite rerun without a relevant gap.
 - [ ] Verify app and extension imports from Files and available host apps using synthetic searchable/scanned/mixed PDFs and images, starting in the simulator.
 - [ ] Assess persisted folder access across app/extension, iCloud and available third-party providers, revoked/unavailable access, successful/error/canceled saves, and collisions. Perform device-specific checks only where needed after I8.
 - [ ] Exercise supported-size documents, OCR/ranking quality, cancellation/termination, cleanup, and settings/log privacy in the simulator. Use a physical iPhone after I8 where necessary to establish actual extension memory/time, locking, or provider behavior.
 - [ ] Review light/dark screens, word cloud/chips, icon appearances, and configuration compatibility in the simulator; add targeted iPhone checks only for remaining gaps.
-- [ ] Update README/ARCHITECTURE/PROJECT with actual delivered behavior, limits, and verification evidence. List any failed or unperformed required checks explicitly.
+- [x] Update README/ARCHITECTURE/PROJECT with actual delivered behavior, limits, and verification evidence. List any failed or unperformed required checks explicitly.
 
 **Result:** simulator evidence for the complete interactive/unattended workflow, supplemented by necessary physical-iPhone checks after all functional increments, with accurate remaining limits. Distribution is a separate decision and is not implied by passing this phase.
 
@@ -145,19 +145,20 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 
 **Dependency:** I1–I8 completed and verified in the simulator. No physical-iPhone verification before I8. Use established signing and project commands; do not assume past provisioning authorization covers unrelated changes.
 
-## Recorded verification baseline (2026-10-11)
+## Recorded verification (2026-10-12)
 
 | Check | Evidence and limit |
 | --- | --- |
-| Latest simulator integration gate | `make verify`: 33 unit tests, two UI tests, optimized unsigned device Release analysis/build on iOS 27. |
-| Optimized unit baseline | Earlier `make test-release`: the then-existing 26 tests on iOS 26; rerun for the new milestone. |
-| Physical automated baseline | iPhone 14 Pro, iOS 27.0.1: 27 unit tests and app/share-extension UI test. Predates the latest UI/force-OCR changes. |
-| Latest physical install | Signed optimized Release 0.1.0 (build 1), analysis/build and signature verification passed; installed and launched as PDF Pipe with saved settings. Not a full device test rerun. |
+| Increment simulator checks | I1 light/dark Home screenshots and two UI tests; I2 three compiled asset renditions; I3–I5 focused unit tests including real PDF; I6/I7 chip/word-cloud UI test and visual review; I8 focused unattended unit tests. |
+| Final simulator integration gate | `make verify` on iOS 27: 41 unit tests, three UI tests, static analysis, optimized unsigned device Release build. |
+| Optimized simulator tests | `make test-release`: 41 unit tests passed on iOS 27. |
+| Physical targeted tests | iPhone 14 Pro, iOS 27.0.1: 23 tests covering date/ranking, real-PDF/OCR processing, and unattended local saving. No full UI suite was rerun on device. |
+| Latest physical install | Signed optimized Release 0.1.0 (build 1), analysis/build and signature verification passed; installed and launched as PDF Pipe after the device tests. |
 | Real Inbox/cleanup | Actual Inbox delivery previewed and consumed; relaunch reclaimed abandoned session. Backup exclusion belongs on Documents because iOS forbids modifying Inbox itself. |
 | Export integrity | Local destination tests cover atomic publication/collisions/errors/cancellation; a termination probe confirmed no partial final PDF. This does not prove all Files-provider bookmarks or rename capabilities. |
 | Signing/App Group | User-selected team `QQ2W7FVVXM` preserved; signed installation/shared configuration verified. Automatic provisioning was explicitly authorized for the preceding device-test run. |
 
-Existing physical provider/resource evidence gaps remain recorded for the post-I8 needs assessment in I9. No guaranteed background completion or distribution readiness is claimed.
+The interactive chip and word-cloud path was exercised in a simulator UI test. The unattended success/failure path was exercised in simulator and device session tests against a local destination; the new unattended share-extension-to-external-provider path has not been exercised end to end. The simulator compiled the light/dark/tinted icon renditions, and the default Home Screen icon was viewed; switching the Home Screen appearance/tint was blocked by the locked Mac GUI. The actual appearance of the dark/tinted icons remains unverified. iCloud and third-party Files-provider bookmarks, revoked access, extension memory/time under large OCR workloads, and interrupted provider writes require targeted real-device checks with a user-selected destination. No guaranteed background completion or distribution readiness is claimed.
 
 ## Deferred work
 
