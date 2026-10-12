@@ -1,10 +1,16 @@
 import Foundation
 import Combine
 
+struct PipelineImportSnapshot: Sendable {
+    let configuration: PipelineConfiguration
+    let error: String?
+}
+
 @MainActor
 final class PipelineStore: ObservableObject {
     @Published private(set) var configuration = PipelineConfiguration()
     @Published private(set) var error: String?
+    var importSnapshot: PipelineImportSnapshot { .init(configuration: configuration, error: error) }
     private let defaults: UserDefaults?
     private static let key = "pipelines.v1"
 

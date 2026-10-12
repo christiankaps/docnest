@@ -32,7 +32,7 @@ final class ProcessingTests: XCTestCase {
         return url
     }
 
-    private func prepared(_ source: URL) async throws -> (TemporarySession, DocumentEngine, ProcessedDocument) {
+    private func prepared(_ source: URL) async throws -> (TemporarySession, DocumentEngine, SessionDocument) {
         let session = try TemporarySession(root: root.appendingPathComponent("sessions"))
         let engine = DocumentEngine(session: session)
         let staged = try DocumentEngine.stage(source, to: session.directory)

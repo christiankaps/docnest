@@ -14,7 +14,7 @@ The app Home owns pipeline management and pipeline-first direct import. `Pipelin
 
 `PipelineStore` and `DocumentSessionModel` run on the main actor. The engine is an actor, so PDF rendering and Vision work happen off the UI actor. Streaming import and destination writes run in worker tasks; cancellation propagates to those workers. Item-provider files are copied synchronously inside their callback before its temporary URL expires.
 
-`DocumentSessionModel` owns the current task, session, and engine. Discard cancels and awaits work before removing files. A failed save retains the active processed result. UIKit export callbacks distinguish cancellation from success; cleanup occurs after the system sheet dismisses. A share completion acknowledges handoff, not permanent recipient storage or cloud sync.
+`DocumentSessionModel` owns the current task, session, and engine. Its published phase is the single source for review, processing, naming, saving, result, and finished presentation. Import receives a configuration-and-error snapshot from `PipelineStore`; it does not depend on persistence. Discard cancels and awaits work before removing files. A failed save retains the active processed result. UIKit export callbacks distinguish cancellation from success; cleanup occurs after the system sheet dismisses. A share completion acknowledges handoff, not permanent recipient storage or cloud sync.
 
 ## Persistent configuration
 

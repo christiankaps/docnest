@@ -230,7 +230,7 @@ struct WorkbenchView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func resultActions(_ document: ProcessedDocument) -> some View {
+    private func resultActions(_ document: SessionDocument) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Label("Ready to export", systemImage: "checkmark.circle.fill").font(.title3.bold())
             ForEach(Array(document.report.enumerated()), id: \.offset) { _, value in

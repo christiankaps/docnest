@@ -21,11 +21,12 @@ final class SessionFlowTests: XCTestCase {
         let model = DocumentSessionModel()
         var finished = false
         model.onFinished = { finished = true }
-        model.importFile(source, store: store, autoRun: true)
+        model.importFile(source, snapshot: store.importSnapshot, autoRun: true)
         try await waitForIdle(model)
         XCTAssertNil(model.error)
         XCTAssertTrue(finished, "Successful unattended processing must finish the host request without a Done tap")
         XCTAssertEqual(model.savedName, "Ready_source.pdf")
+        guard case .finished("Ready_source.pdf") = model.phase else { return XCTFail("Successful save must finish") }
         XCTAssertNil(model.document)
         XCTAssertEqual(try Data(contentsOf: destination.appendingPathComponent("Ready_source.pdf")), original)
         XCTAssertEqual(try Data(contentsOf: source), original)
@@ -48,11 +49,12 @@ final class SessionFlowTests: XCTestCase {
         let model = DocumentSessionModel()
         var finished = false
         model.onFinished = { finished = true }
-        model.importFile(source, store: store, autoRun: true)
+        model.importFile(source, snapshot: store.importSnapshot, autoRun: true)
         try await waitForIdle(model)
         XCTAssertNotNil(model.error)
         XCTAssertFalse(finished)
         XCTAssertTrue(model.processed)
+        guard case .result = model.phase else { return XCTFail("Failed automatic save must retain the result phase") }
         let retained = try XCTUnwrap(model.document?.url)
         XCTAssertTrue(FileManager.default.fileExists(atPath: retained.path))
         XCTAssertNil(model.savedName)
@@ -77,7 +79,7 @@ final class SessionFlowTests: XCTestCase {
         let store = PipelineStore(defaults: defaults)
         try store.save(Pipeline(name: "Automatic", destination: try Destination.selected(root), unattended: true), isDefault: true)
         let model = DocumentSessionModel()
-        model.importFile(source, store: store, autoRun: false)
+        model.importFile(source, snapshot: store.importSnapshot, autoRun: false)
         try await waitForIdle(model)
         XCTAssertNotNil(model.document)
         XCTAssertNil(model.pipelineID)
@@ -111,7 +113,7 @@ final class SessionFlowTests: XCTestCase {
         try store.save(selected, isDefault: false)
         let model = DocumentSessionModel()
         model.pipelineID = selected.id
-        model.importFile(source, store: store, autoRun: false)
+        model.importFile(source, snapshot: store.importSnapshot, autoRun: false)
         try await waitForIdle(model)
         XCTAssertNil(model.error)
         XCTAssertEqual(model.pipelineID, selected.id)
@@ -140,10 +142,12 @@ final class SessionFlowTests: XCTestCase {
         try store.save(pipeline, isDefault: false)
         let model = DocumentSessionModel()
         model.pipelineID = pipeline.id
-        model.importFile(source, store: store, autoRun: false)
+        model.importFile(source, snapshot: store.importSnapshot, autoRun: false)
         try await waitForIdle(model)
+        guard case .review = model.phase else { return XCTFail("Import must enter review") }
         model.run(pipeline)
         try await waitForIdle(model)
+        guard case .naming = model.phase else { return XCTFail("Analysis must enter naming") }
         XCTAssertTrue(model.awaitingNaming)
         XCTAssertFalse(model.processed)
         XCTAssertEqual(model.analysis?.date, .found("2026-10-05"))
@@ -152,6 +156,7 @@ final class SessionFlowTests: XCTestCase {
         model.confirmNaming()
         try await waitForIdle(model)
         XCTAssertNil(model.error)
+        guard case .result = model.phase else { return XCTFail("Confirmed name must enter result") }
         XCTAssertTrue(model.processed)
         XCTAssertEqual(model.filename, "2026-10-05_Telekom.pdf")
         XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(model.document?.url)), original)
@@ -179,7 +184,7 @@ final class SessionFlowTests: XCTestCase {
         let model = DocumentSessionModel()
         var finished = false
         model.onFinished = { finished = true }
-        model.importFile(source, store: store, autoRun: true)
+        model.importFile(source, snapshot: store.importSnapshot, autoRun: true)
         try await waitForIdle(model)
         XCTAssertNil(model.error)
         XCTAssertTrue(finished)
@@ -205,7 +210,7 @@ final class SessionFlowTests: XCTestCase {
             template: "{documentDate}_{word1}")], destination: try Destination.selected(destinationURL), unattended: true)
         try store.save(pipeline, isDefault: true)
         let model = DocumentSessionModel()
-        model.importFile(source, store: store, autoRun: true)
+        model.importFile(source, snapshot: store.importSnapshot, autoRun: true)
         try await waitForIdle(model)
         XCTAssertTrue(model.awaitingNaming)
         XCTAssertFalse(model.processed)
@@ -227,12 +232,25 @@ final class SessionFlowTests: XCTestCase {
             template: "{documentDate}_{word3}")], destination: try Destination.selected(destinationURL), unattended: true)
         try store.save(short, isDefault: true)
         let second = DocumentSessionModel()
-        second.importFile(shortSource, store: store, autoRun: true)
+        second.importFile(shortSource, snapshot: store.importSnapshot, autoRun: true)
         try await waitForIdle(second)
         XCTAssertTrue(second.awaitingNaming)
         XCTAssertNotNil(second.error)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: destinationURL.path), [])
         second.discard()
+    }
+
+    func testImportSnapshotReportsConfigurationErrorAndKeepsReviewCopy() async throws {
+        let root = try temporaryRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try sourcePDF(root: root)
+        let model = DocumentSessionModel()
+        model.importFile(source, snapshot: .init(configuration: .init(), error: "Configuration unavailable"), autoRun: true)
+        try await waitForIdle(model)
+        XCTAssertEqual(model.error, "Configuration unavailable")
+        guard case .review = model.phase else { return XCTFail("Configuration failure must leave the imported copy for review") }
+        XCTAssertNotNil(model.document)
+        model.discard()
     }
 
     func testProviderImportPreservesSuppliedFilenameAndCopiesInput() async throws {
@@ -246,7 +264,7 @@ final class SessionFlowTests: XCTestCase {
         let provider = try XCTUnwrap(NSItemProvider(contentsOf: source))
         provider.suggestedName = "Supplied invoice.pdf"
         let model = DocumentSessionModel()
-        model.importProvider(provider, store: PipelineStore(defaults: defaults))
+        model.importProvider(provider, snapshot: PipelineStore(defaults: defaults).importSnapshot)
         try await waitForIdle(model)
         XCTAssertNil(model.error)
         XCTAssertEqual(model.document?.facts.filename, "Supplied invoice.pdf")

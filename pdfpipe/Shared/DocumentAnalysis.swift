@@ -13,7 +13,6 @@ enum DocumentDate: Sendable, Equatable {
     case ambiguous([String])
     var value: String? { if case .found(let value) = self { value } else { nil } }
     var isAmbiguous: Bool { if case .ambiguous = self { true } else { false } }
-    var candidates: [String] { if case .ambiguous(let dates) = self { dates } else { [] } }
 }
 
 struct DocumentAnalysis: Sendable {

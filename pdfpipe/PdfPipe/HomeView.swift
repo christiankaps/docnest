@@ -182,7 +182,7 @@ struct HomeView: View {
         model.pipelineID = pipelineID
         model.onFinished = { session = nil }
         session = model
-        model.importFile(url, store: store, autoRun: autoRun)
+        model.importFile(url, snapshot: store.importSnapshot, autoRun: autoRun)
     }
 
     #if DEBUG

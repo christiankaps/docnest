@@ -15,7 +15,7 @@ struct DocumentFacts: Sendable {
     var hasText: Bool
 }
 
-struct ProcessedDocument: Sendable {
+struct SessionDocument: Sendable {
     var url: URL
     var facts: DocumentFacts
     var report: [String]
@@ -75,7 +75,7 @@ actor DocumentEngine {
         return target
     }
 
-    func prepare(staged: URL, originalName: String) throws -> ProcessedDocument {
+    func prepare(staged: URL, originalName: String) throws -> SessionDocument {
         try Task.checkCancellation()
         sourceName = (originalName as NSString).deletingPathExtension
         if sourceName.isEmpty { sourceName = "Document" }
@@ -130,7 +130,7 @@ actor DocumentEngine {
         }
     }
 
-    private func describe(_ url: URL, filename: String, report: [String]) throws -> ProcessedDocument {
+    private func describe(_ url: URL, filename: String, report: [String]) throws -> SessionDocument {
         guard let pdf = PDFDocument(url: url), let page = pdf.page(at: 0) else { throw PipeError.message("The PDF result could not be opened.") }
         let rect = page.bounds(for: .cropBox)
         let bytes = Int64(try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
@@ -140,7 +140,7 @@ actor DocumentEngine {
     }
 
     func process(_ pipeline: Pipeline, text: String, date: Date = Date(),
-                 progress: @Sendable (String) async -> Void) async throws -> ProcessedDocument {
+                 progress: @Sendable (String) async -> Void) async throws -> SessionDocument {
         let prepared = try await prepareRun(pipeline, text: text, date: date, progress: progress)
         return try finishRun(prepared, pipeline: pipeline,
             values: .init(original: sourceName, manualText: text, processedAt: date,
@@ -173,7 +173,7 @@ actor DocumentEngine {
     }
 
     func finishRun(_ prepared: PreparedRun, pipeline: Pipeline, values: NamingValues,
-                   overrideFilename: String? = nil) throws -> ProcessedDocument {
+                   overrideFilename: String? = nil) throws -> SessionDocument {
         try Task.checkCancellation()
         let filename = try overrideFilename.map(FilenameTemplate.filename) ?? pipeline.outputFilename(values: values)
         let resultDirectory = session.directory.appendingPathComponent("output-\(UUID().uuidString)", isDirectory: true)
@@ -184,11 +184,11 @@ actor DocumentEngine {
         return try describe(result, filename: filename, report: report)
     }
 
-    func preview(_ prepared: PreparedRun) throws -> ProcessedDocument {
+    func preview(_ prepared: PreparedRun) throws -> SessionDocument {
         try describe(prepared.url, filename: sourceName + ".pdf", report: prepared.report)
     }
 
-    func renameResult(_ document: ProcessedDocument, name: String) throws -> ProcessedDocument {
+    func renameResult(_ document: SessionDocument, name: String) throws -> SessionDocument {
         let filename = try FilenameTemplate.filename(name)
         let target = document.url.deletingLastPathComponent().appendingPathComponent(filename)
         if target != document.url { try FileManager.default.moveItem(at: document.url, to: target) }

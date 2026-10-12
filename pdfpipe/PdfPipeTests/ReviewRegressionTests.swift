@@ -37,7 +37,7 @@ final class ReviewRegressionTests: XCTestCase {
             if scenario == "failure" { try Data("not a PDF".utf8).write(to: source) }
             else { try writePDF(source) }
             let model = DocumentSessionModel(inboxDirectory: inbox)
-            model.importFile(source, store: PipelineStore(defaults: defaults), autoRun: false)
+            model.importFile(source, snapshot: PipelineStore(defaults: defaults).importSnapshot, autoRun: false)
             XCTAssertFalse(FileManager.default.fileExists(atPath: source.path), "Claim the app-owned delivery before asynchronous work")
             XCTAssertEqual(try root.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
             if scenario != "cancel" {
@@ -132,7 +132,10 @@ final class ReviewRegressionTests: XCTestCase {
         let engine = DocumentEngine(session: session)
         let staged = try DocumentEngine.stage(source, to: session.directory)
         let model = DocumentSessionModel()
-        model.document = try await engine.prepare(staged: staged, originalName: source.lastPathComponent)
+        _ = try await engine.prepare(staged: staged, originalName: source.lastPathComponent)
+        model.importFile(source, snapshot: PipelineImportSnapshot(configuration: .init(), error: nil), autoRun: false)
+        try await waitUntil { !model.busy }
+        XCTAssertNil(model.error)
         let date = Date(timeIntervalSince1970: 1_792_000_000)
         let pipeline = Pipeline(steps: [.init(kind: .rename, template: "First"),
                                        .init(kind: .rename, template: "{date}_{original}_{text}")])

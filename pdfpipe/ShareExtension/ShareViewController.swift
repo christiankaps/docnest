@@ -39,6 +39,6 @@ final class ShareViewController: UIViewController {
             model.error = "Share exactly one PDF, JPEG, or PNG file."
             return
         }
-        model.importProvider(provider, store: store)
+        model.importProvider(provider, snapshot: store.importSnapshot)
     }
 }

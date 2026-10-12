@@ -4,18 +4,39 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class DocumentSessionModel: ObservableObject {
-    @Published var document: ProcessedDocument?
+    enum Phase {
+        case idle
+        case working(SessionDocument?)
+        case review(SessionDocument)
+        case naming(SessionDocument)
+        case saving(SessionDocument)
+        case result(SessionDocument)
+        case finished(String)
+    }
+
+    @Published private(set) var phase: Phase = .idle
+    var document: SessionDocument? {
+        switch phase {
+        case .working(let document): document
+        case .review(let document), .naming(let document), .saving(let document), .result(let document): document
+        case .idle, .finished: nil
+        }
+    }
+    var busy: Bool {
+        switch phase { case .working, .saving: true; default: false }
+    }
+    var processed: Bool {
+        switch phase { case .result, .saving: true; default: false }
+    }
+    var awaitingNaming: Bool { if case .naming = phase { true } else { false } }
+    var savedName: String? { if case .finished(let name) = phase { name } else { nil } }
     @Published var pipelineID: UUID?
     @Published var manualText = ""
     @Published var filename = ""
-    @Published var progress = ""
+    @Published private(set) var progress = ""
     @Published var error: String?
-    @Published var busy = false
-    @Published var processed = false
-    @Published var savedName: String?
-    @Published var awaitingNaming = false
-    @Published var analysis: DocumentAnalysis?
-    @Published var selectedWords: [String] = []
+    @Published private(set) var analysis: DocumentAnalysis?
+    @Published private(set) var selectedWords: [String] = []
     @Published var selectedDate: String?
     @Published var manualKeyword = ""
     private var session: TemporarySession?
@@ -23,6 +44,7 @@ final class DocumentSessionModel: ObservableObject {
     private var task: Task<Void, Never>?
     private var importProgress: Progress?
     private var finished = false
+    private var discarding = false
     private var runDate: Date?
     private var pendingRun: PreparedRun?
     private var pendingPipeline: Pipeline?
@@ -42,34 +64,35 @@ final class DocumentSessionModel: ObservableObject {
         return session
     }
 
-    func importFile(_ url: URL, store: PipelineStore, autoRun: Bool) {
+    func importFile(_ url: URL, snapshot: PipelineImportSnapshot, autoRun: Bool) {
         do {
             let session = try createSession()
             let source = try InboxDelivery.claim(url, into: session.directory, inbox: inboxDirectory)
-            busy = true
+            phase = .working(nil)
             progress = "Making a temporary copy…"
             task = Task {
                 do {
                     let importer = Task.detached { try DocumentEngine.stage(source, to: session.directory) }
                     let staged = try await withTaskCancellationHandler { try await importer.value } onCancel: { importer.cancel() }
                     try Task.checkCancellation()
-                    await prepare(staged, originalName: url.lastPathComponent, store: store, autoRun: autoRun)
+                    await prepare(staged, originalName: url.lastPathComponent, snapshot: snapshot, autoRun: autoRun)
                 } catch {
-                    busy = false
+                    guard !discarding else { return }
+                    phase = .idle
                     self.error = error is CancellationError ? "Import canceled." : error.localizedDescription
                 }
             }
         } catch { self.error = error.localizedDescription }
     }
 
-    func importProvider(_ provider: NSItemProvider, store: PipelineStore) {
+    func importProvider(_ provider: NSItemProvider, snapshot: PipelineImportSnapshot) {
         do {
             let session = try createSession()
             guard let type = [UTType.pdf, .jpeg, .png].first(where: { provider.hasItemConformingToTypeIdentifier($0.identifier) }) else {
                 throw PipeError.message("Share a single PDF, JPEG, or PNG file.")
             }
             let suggestedName = provider.suggestedName?.trimmingCharacters(in: .whitespacesAndNewlines)
-            busy = true
+            phase = .working(nil)
             progress = "Making a temporary copy…"
             task = Task {
                 do {
@@ -85,45 +108,46 @@ final class DocumentSessionModel: ObservableObject {
                         }
                     }
                     try Task.checkCancellation()
-                    await prepare(incoming.url, originalName: incoming.name, store: store, autoRun: true)
+                    await prepare(incoming.url, originalName: incoming.name, snapshot: snapshot, autoRun: true)
                 } catch {
-                    busy = false
+                    guard !discarding else { return }
+                    phase = .idle
                     self.error = error is CancellationError ? "Import canceled." : error.localizedDescription
                 }
             }
         } catch { self.error = error.localizedDescription }
     }
 
-    private func prepare(_ staged: URL, originalName: String, store: PipelineStore, autoRun: Bool) async {
+    private func prepare(_ staged: URL, originalName: String, snapshot: PipelineImportSnapshot, autoRun: Bool) async {
         guard let engine else { return }
         do {
-            document = try await engine.prepare(staged: staged, originalName: originalName)
-            filename = document?.facts.filename ?? ""
-            busy = false
-            if let error = store.error { throw PipeError.message(error) }
-            if autoRun, let pipeline = try store.configuration.defaultPipeline() {
+            let prepared = try await engine.prepare(staged: staged, originalName: originalName)
+            try Task.checkCancellation()
+            filename = prepared.facts.filename
+            phase = .review(prepared)
+            if let error = snapshot.error { throw PipeError.message(error) }
+            if autoRun, let pipeline = try snapshot.configuration.defaultPipeline() {
                 pipelineID = pipeline.id
                 await execute(pipeline)
             }
         } catch {
-            busy = false
+            guard !discarding else { return }
+            if case .working = phase { phase = .idle }
             self.error = error is CancellationError ? "Import canceled." : error.localizedDescription
         }
     }
 
     func run(_ pipeline: Pipeline) {
-        guard !busy else { return }
-        busy = true
+        guard case .review(let document) = phase else { return }
+        phase = .working(document)
         runDate = Date()
         task = Task { await execute(pipeline) }
     }
 
     private func execute(_ pipeline: Pipeline) async {
         guard let engine else { return }
-        busy = true
-        processed = false
-        savedName = nil
-        awaitingNaming = false
+        let previous = document
+        phase = .working(previous)
         analysis = nil
         selectedWords = []
         selectedDate = nil
@@ -141,10 +165,8 @@ final class DocumentSessionModel: ObservableObject {
                 pendingRun = prepared
                 pendingPipeline = pipeline
                 analysis = prepared.analysis
-                document = preview
-                awaitingNaming = true
+                phase = .naming(preview)
                 progress = "Choose a filename"
-                busy = false
                 return
             }
             let values = namingValues(for: prepared)
@@ -155,29 +177,31 @@ final class DocumentSessionModel: ObservableObject {
                     pendingRun = prepared
                     pendingPipeline = pipeline
                     analysis = prepared.analysis
-                    document = preview
-                    awaitingNaming = true
-                    busy = false
+                    phase = .naming(preview)
                     self.error = "Automatic naming needs review: \(error.localizedDescription)"
                     return
                 }
             }
             let result = try await engine.finishRun(prepared, pipeline: pipeline, values: values)
             try Task.checkCancellation()
-            document = result
             filename = result.facts.filename
-            processed = true
             if pipeline.unattended, let destination = pipeline.destination {
+                phase = .saving(result)
                 progress = "Saving to \(destination.name)…"
                 let writer = Task.detached { try DestinationWriter.save(result.url, destination: destination) }
                 let saved = try await withTaskCancellationHandler { try await writer.value } onCancel: { writer.cancel() }
-                savedName = saved.lastPathComponent
+                try Task.checkCancellation()
                 try cleanSession()
-                busy = false
+                phase = .finished(saved.lastPathComponent)
                 finishOnce()
-            } else { busy = false }
+            } else { phase = .result(result) }
         } catch {
-            busy = false
+            guard !discarding else { return }
+            switch phase {
+            case .saving(let document): phase = .result(document)
+            case .working: phase = previous.map { .review($0) } ?? .idle
+            default: break
+            }
             self.error = error is CancellationError ? "Processing canceled. You can retry or discard the copy." : error.localizedDescription
         }
     }
@@ -215,7 +239,8 @@ final class DocumentSessionModel: ObservableObject {
     }
 
     func resetNaming() {
-        awaitingNaming = false
+        guard case .naming(let document) = phase else { return }
+        phase = .review(document)
         pendingRun = nil
         pendingPipeline = nil
         analysis = nil
@@ -224,23 +249,22 @@ final class DocumentSessionModel: ObservableObject {
     }
 
     func confirmNaming() {
-        guard let pendingRun, let pendingPipeline, let engine, !busy else { return }
-        busy = true
+        guard case .naming(let document) = phase,
+              let pendingRun, let pendingPipeline, let engine else { return }
+        phase = .working(document)
         task = Task {
             do {
                 let resolved = try selectedFilenamePreview().get()
                 let final = try await engine.finishRun(pendingRun, pipeline: pendingPipeline,
                     values: namingValues(for: pendingRun), overrideFilename: selectedWords.isEmpty ? nil : resolved)
                 try Task.checkCancellation()
-                document = final
+                phase = .result(final)
                 filename = final.facts.filename
-                processed = true
-                awaitingNaming = false
                 self.pendingRun = nil
                 self.pendingPipeline = nil
-                busy = false
             } catch {
-                busy = false
+                guard !discarding else { return }
+                if case .working(let document) = phase, let document { phase = .naming(document) }
                 self.error = error.localizedDescription
             }
         }
@@ -259,36 +283,48 @@ final class DocumentSessionModel: ObservableObject {
 
     func applyFilename() async throws {
         guard let document, let engine else { return }
-        self.document = try await engine.renameResult(document, name: filename)
-        filename = self.document?.facts.filename ?? filename
+        let renamed = try await engine.renameResult(document, name: filename)
+        guard !discarding else { throw CancellationError() }
+        if case .saving = phase { phase = .saving(renamed) }
+        else { phase = .result(renamed) }
+        filename = renamed.facts.filename
     }
 
     func save(_ destination: Destination) {
-        guard !busy else { return }
-        busy = true
+        guard case .result(let document) = phase else { return }
+        phase = .saving(document)
         task = Task {
             do {
                 try await applyFilename()
-                guard let document else { throw PipeError.message("No result is available to save.") }
+                guard let document = self.document else { throw PipeError.message("No result is available to save.") }
                 progress = "Saving to \(destination.name)…"
                 let writer = Task.detached { try DestinationWriter.save(document.url, destination: destination) }
                 let saved = try await withTaskCancellationHandler { try await writer.value } onCancel: { writer.cancel() }
-                savedName = saved.lastPathComponent
+                try Task.checkCancellation()
                 try cleanSession()
-                busy = false
-            } catch { busy = false; self.error = error.localizedDescription }
+                phase = .finished(saved.lastPathComponent)
+            } catch {
+                guard !discarding else { return }
+                if case .saving(let document) = phase { phase = .result(document) }
+                self.error = error.localizedDescription
+            }
         }
     }
 
     func exported(_ filename: String) {
-        savedName = filename
-        do { try cleanSession() } catch { self.error = "Export finished, but temporary cleanup failed: \(error.localizedDescription)" }
+        do {
+            try cleanSession()
+            phase = .finished(filename)
+        } catch { self.error = "Export finished, but temporary cleanup failed: \(error.localizedDescription)" }
     }
 
     func cancelProcessing() { task?.cancel(); importProgress?.cancel() }
 
     func discard() {
+        guard !discarding else { return }
+        discarding = true
         let running = task
+        phase = .idle
         running?.cancel()
         importProgress?.cancel()
         task = Task {
@@ -306,7 +342,7 @@ final class DocumentSessionModel: ObservableObject {
 
     private func cleanSession() throws {
         try session?.cleanup()
-        document = nil
+        phase = .idle
         engine = nil
         importProgress = nil
         session = nil
