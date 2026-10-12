@@ -3,133 +3,125 @@
 Workflow: ESTABLISHED
 Maturity: MVP
 
-## Product concept
+## Purpose and sources of truth
 
-PDF Pipe is a small, native iPhone app that receives a document, processes a temporary copy through a saved pipeline, and exports the resulting PDF. It supports interactive review and unattended processing with automatic saving to a configured folder. Originals are never modified.
+PDF Pipe is a native iPhone document workbench. It receives one document, processes a temporary copy through a saved pipeline, and lets the user share or save the resulting PDF. An explicitly configured default pipeline can process and save unattended. Originals are never modified.
 
-The app stores pipelines and configuration, not a document library. Document-derived filename generation is a core planned capability. iPad support and Apple Shortcuts integration are deferred.
+This file owns the consolidated product concept, accepted requirements, and open product decisions. [PLAN.md](PLAN.md) owns delivery increments and verification status; [ARCHITECTURE.md](ARCHITECTURE.md) describes the implemented architecture; [README.md](README.md) describes current usage, commands, and limits. Planned behavior below must not be presented as already implemented.
 
-Selected app icon: [design/app-icon-v1.png](design/app-icon-v1.png), the first version with the curved turquoise pipeline arrow. Use this asset for app integration; v2 is an unselected alternative. The selected PNG is 1024×1024 and opaque; its generation prompt is saved alongside it.
+Platform: iPhone first, iOS 26 or later; build with Xcode 27 and XcodeGen. The display name is **PDF Pipe**. Preserve existing bundle IDs, App Group, project paths, targets/schemes, installation, and saved configuration. Root direct-to-main Git policy applies. Use `make help`, edit `project.yml` and regenerate, and run `make verify` before code integration.
 
-This document is the authoritative product concept and current state. The first MVP is implemented in a self-contained app/share-extension project. Simulator and automated physical-iPhone verification pass; provider/resource feasibility and distribution are not yet established.
+## Current baseline
 
-The displayed app and share-target name is **PDF Pipe**. Existing bundle identifiers, App Group, project paths, and Xcode target/scheme names stay unchanged to preserve installation and saved configuration.
+The first MVP implements PDF/JPEG/PNG import, preview and attributes, optional searchable OCR, simple filename templates, pipeline management, interactive export, and configured-folder unattended saving. The editor shows OCR, Rename, and Save once each with enable switches and fixed execution order. Home supports swipe deletion and pipeline-first import.
 
-Platform policy: iPhone on iOS 26 or later. Build with Xcode 27 and XcodeGen. Use `make help`, regenerate with `make generate`, and run `make verify` before code integration. See [README.md](README.md) for usage/limits and [ARCHITECTURE.md](ARCHITECTURE.md) for implementation ownership. Root direct-to-main Git policy applies; preserve unrelated project changes.
+Current templates accept `{original}`, `{date}` (local processing date, `yyyy-MM-dd`), `{text}` (per-import manual input), and literals. The editor is a plain text field. Document-date extraction, significant-word ranking, word-cloud selection, and template chips are not implemented.
 
-## Accepted first-version scope
+Current UI uses system surfaces with hard-coded teal accents and retains home-screen branding/footer copy. Only one explicit app-icon asset is integrated. Deliberate light/dark visual verification and dark/tinted icon assets remain pending.
 
-- iPhone first; one document per session.
-- Receive PDFs through the iOS share sheet; accept JPEG and PNG and convert each imported image to a PDF. Other input formats are outside the initial scope.
-- Display a document preview and attributes: filename, format, byte size, page count, page dimensions, and text availability.
-- Create, edit, duplicate, and delete named pipelines with independently enabled OCR, Rename, and Save steps in that fixed order.
-- OCR produces searchable/selectable text in the exported PDF while preserving visible page appearance.
-- Filename templates combine literal text with original basename, processing date, and user-entered text. Document-derived placeholders follow in the extraction milestone.
-- Optionally configure a destination folder per pipeline.
-- Support interactive result review and user-directed sharing/saving, or unattended processing and saving without further input on a successful run.
-- Users explicitly designate one default pipeline for unattended imports. Without a default, show the pipeline chooser. The last-used pipeline never becomes an implicit default.
-- Process on-device, without an account or backend. User-selected output folders may be cloud-backed; exporting there does not constitute cloud processing by PDF Pipe.
+The latest simulator gate passed 33 unit tests, two UI tests, and optimized unsigned device Release analysis/build. The preceding physical-iPhone baseline passed 27 unit tests and one UI test; the latest signed Release is installed and launch-checked. Provider/resource feasibility and distribution are not yet established. Exact coverage and remaining checks are in PLAN.md.
+
+## Product invariants and scope
+
+- One document per session, received through the share sheet or Files import. Accept PDF, JPEG, and PNG; each imported image becomes one PDF page. Other conversions and batch processing are outside this milestone.
+- Show preview and attributes: filename, format, byte size, page count, page dimensions, and text availability.
+- Persist pipelines, preferences, and destination access references; never create a persistent document library or retain recognized content in settings or logs.
+- Process on-device without an account or backend. A user-selected cloud-backed destination is an export location, not cloud processing by PDF Pipe.
+- Never overwrite an original or an existing destination file. Collisions create a unique filename.
+- Temporary working copies are isolated and excluded from backup. Clean up on completion/discard and reclaim abandoned sessions at the next safe opportunity; preserve active export consumers.
+- No document history, interrupted-session recovery, or durable retry queue. iOS termination can interrupt execution and defer cleanup. Completed provider writing does not guarantee completed cloud synchronization.
+- Keep current bounded import/OCR limits and rejection rules described in README.md until separately changed. Encrypted PDFs are rejected; OCR does not support annotated/form/signed PDFs. Signatures are not validated.
 
 ## Pipeline model
 
-A pipeline has a name, switches for OCR, Rename, and Save to folder, and an execution mode. All three steps are always visible in the editor. Enabled steps run once each in the fixed order OCR → Rename → Save; there is no reordering or Add step menu. The two modes are interactive review and unattended execution, controlled by the Run unattended toggle.
+A pipeline has a name, enabled steps, optional save destination, filename template, and execution mode. Users create, edit, duplicate, and delete pipelines. Every editor shows the same steps in the fixed order **OCR → Rename → Save to folder**. Each enabled step runs once; there is no user-controlled step reordering.
 
-OCR and template-based renaming are optional. Save to folder is the optional final step; disabling it also clears unattended/default settings. OCR defaults to skipping pages that already contain text, so scanned pages in a mixed PDF still receive recognition. Turning that option off replaces existing text layers with fresh OCR. The later extraction capability supplies document-derived values to filename templates before renaming.
+OCR defaults to skipping pages with existing text; scanned pages in mixed PDFs are still recognized. Disabling that option replaces existing text layers with fresh OCR. A mixed text/image page can retain unrecognized image content when skipping is enabled; the interface must describe this limit truthfully.
 
-An unattended pipeline requires a configured destination and no per-import manual input. An invalid or unavailable default must lead to a chooser or actionable configuration error, not silent execution of a different pipeline.
+Document analysis belongs to Rename and supplies its date and word values after any enabled OCR. It is not a new reorderable step. Existing searchable text can supply naming values without rerunning OCR. Text-dependent renaming must not silently turn a disabled OCR step on; handling unavailable text is covered by the missing-value policy below.
 
-Illustrative initial pipeline: OCR → rename using processing date and original basename → save to a configured folder.
-
-Illustrative later pipeline: OCR if needed → extract document date, sender, and invoice number → rename using those fields → save. These fields are examples; supported fields and document categories remain TBD.
+Save to folder is optional and always last. Disabling Save also clears unattended/default settings. Unattended pipelines require a destination and no per-import manual input. Users explicitly designate the default for shared imports; last-used is never an implicit default. Invalid defaults produce a chooser or actionable error, never silent substitution.
 
 ## User journeys
 
-Interactive: share a document to PDF Pipe → choose a pipeline → inspect/process the copy → review the resulting PDF and filename → share, save, or discard.
+**Direct app import:** choose Import → select a pipeline → select a file → review/process. This remains interactive even when an unattended default exists.
 
-Unattended: share a document to PDF Pipe → run the explicitly configured default pipeline → save to its configured folder → clean up temporary files. No further interaction is needed on a successful run.
+**Interactive shared import:** share to PDF Pipe → select a pipeline → inspect/process the temporary copy → for content-derived naming, review date and choose significant words → review filename/result → share, save, or discard. The naming interaction occurs after text is available and before any final save. OCR must not need to run again merely because the user changes the selected words.
 
-The standalone app manages pipelines and imports documents from Files using the same engine. Direct app import asks for a pipeline before opening Files, then opens the document with that pipeline selected for review. It starts interactively even when an unattended default is configured. Pipelines can be deleted by swiping left on their home-screen row; long-press duplication and deletion remain available.
+**Unattended shared import:** share to PDF Pipe → run the explicit default → OCR if enabled → resolve document date and ranked-word template → save to the configured folder → clean up. A successful run requires no word selection or other confirmation.
 
-MVP interaction details:
+In every mode, show progress and permit cancellation. An export cancellation keeps the result available. Processing errors support correction/retry or discard; destination-write errors keep the processed result available for another export. Do not silently redirect output. Existing pipeline selection, deletion, configuration persistence, and source preservation remain regression requirements.
 
-- Show pipeline steps and the proposed filename before an explicit Run action in interactive mode.
-- Show progress and allow cancellation; allow final filename correction before export.
-- Keep the active result available after an export cancellation.
-- Stop on a failed processing step and allow retry from the session input. A destination-write failure keeps the active processed result available for another export.
-- On filename collisions, create a unique filename rather than overwrite any existing destination file. The source must never be overwritten under any policy.
-- Show destination/processing failures clearly; do not silently redirect output or report a failed save as successful.
+## Document-derived naming: accepted next milestone
 
-A saved destination PDF is an intentionally persistent user-owned output. It is outside PDF Pipe's temporary working storage.
+### Date
 
-## Core follow-on: document-derived renaming
+Prefer a date found in the document content. If none is found, use the processing date. File metadata is not the intended fallback. Document date and processing date remain distinct concepts: existing `{date}` templates keep their current meaning.
 
-Accepted workflow: OCR if needed → extract fields → build filename → review/correct and export, or save unattended when required values are unambiguous.
+Multiple plausible dates, ambiguous numeric formats, and low-quality recognition need an explicit selection policy before unattended document-date naming ships. Do not silently call an ambiguous result “no date” to bypass that policy.
 
-Missing or ambiguous required fields must prompt correction or an explicit failure. Do not invent values. Document dates and processing dates are distinct template fields.
+### Words and interactive selection
 
-This is a core product milestone deferred from the first MVP, not an optional extra. Exact fields, extraction method, ambiguity handling, template formatting, and fallback behavior are TBD. Configurable extraction rules using labels, patterns, or page regions have not been selected.
+After OCR, or using existing text, show a word cloud weighted by each word's importance/significance in the document. Users select one or more words to form the suffix after the date. Word 1, Word 2, and Word 3 in automatic templates mean the first, second, and third highest-ranked significant words, respectively.
 
-## Storage and privacy
+Frequency alone is not the product definition of significance. The ranking method and supported language coverage require representative-document evaluation before being declared adequate. Short phrases, manually added cloud terms, and user-controlled ordering of selected words are proposals awaiting a scope decision.
 
-Persist pipeline definitions, preferences, and destination access references. Minimal operational metadata may support temporary-file cleanup; document content and recognized text must not enter settings or logs.
+### Template editor
 
-Temporary disk files are allowed for processing and export. Use isolated session storage, excluded from backup. Clean up after completion/discard and remove abandoned files at the next safe opportunity. Keep export files available for as long as a system consumer needs them.
+Use tappable chips for **Date**, **Word 1**, **Word 2**, **Word 3**, and common separators **`_`** and **`-`**. Show the assembled template and a live filename preview; `.pdf` is added automatically. The user should not need to type token syntax.
 
-There is no document history, interrupted-session recovery, or durable retry queue. Unexpected iOS process termination can leave temporary files pending cleanup; immediate deletion cannot be guaranteed. Exact cleanup mechanics remain to be validated.
+Example template: `[Date] [_] [Word 1] [_] [Word 2] [_] [Word 3]`.
+Example result: `2026-10-05_Telekom_Rechnung_Internet.pdf`.
 
-Unattended execution means no further user input on success. It does not promise continued background processing after iOS terminates the extension. Destination-provider write completion also does not guarantee completed cloud synchronization.
+In the pipeline editor, no document is loaded: previews must clearly use example values. With a document loaded, the preview must use actual resolved values and expose unresolved inputs. Existing original-name, processing-date, manual-text, and literal templates must remain readable/editable without silently changing meaning. Exact new token syntax and storage representation are implementation choices, not user-facing syntax requirements.
 
-## Delivery milestones
+### Resolution and failure behavior
 
-1. **Feasibility gate:** prototype temporary import, preview, OCR, interactive export, configured-folder access/saving, unattended execution, cancellation, and cleanup on real iPhones. Validate the extension independently of the full app.
-2. **First MVP:** deliver the accepted scope above with reproducible build and verification commands.
-3. **Core extraction milestone:** deliver document-derived filename templates with review/correction and explicit handling of missing or ambiguous required fields.
-4. **Later capability:** Apple Shortcuts integration. Exact placement relative to extraction and the available actions are TBD; exposing named pipelines as document-processing actions is a proposal.
+Use the same naming rules for preview and execution. Check template structure/configuration before OCR; resolve content-dependent values and validate the final filename once text is available. Do not prevent analysis merely because its output does not exist yet, and do not show an invented final name beforehand.
 
-The minimum iOS version is settled at iOS 26. If extension limits conflict with unattended processing, present the evidence and decide a revised workflow; do not silently add persistent job storage or assume the extension can launch the app.
+Missing or ambiguous required values require correction or an explicit failure unless an accepted fallback applies. The processing-date fallback is accepted for an absent document date. Missing words have no accepted fallback yet. Unattended execution must not export a filename that silently omits required values or substitutes invented words.
 
-## Verification expectations
+Interactive word selection must never leak into persisted pipeline configuration. The choice of how an interactive selection overrides an automatic ranked-word template remains open (D4 below).
 
-The concept should be validated against these outcomes; detailed checks will be established with implementation:
+## Appearance and home screen: accepted next milestone
 
-- Source bytes remain unchanged on success, failure, and cancellation.
-- Exported OCR text is searchable/selectable in another viewer, and visible page appearance is preserved.
-- Pipelines/configuration survive app restart without retaining document content.
-- Interactive and unattended imports choose pipelines according to the explicit default policy.
-- Configured-folder access works from the app and extension; revoked permission, unavailable providers, failed/partial writes, and filename collisions have truthful outcomes.
-- Missing or ambiguous required extracted fields cannot silently produce a supposedly successful result.
-- Export cancellation is distinct from completion, and temporary cleanup respects active consumers and interrupted sessions.
-- Extension resource/lifecycle limits are understood on real devices. No guaranteed background completion is claimed without evidence.
+- Support light and dark appearances throughout the app and share-extension workflow, including word clouds, chips, previews, dialogs, and errors.
+- Provide light/default, dark, and tinted app-icon appearances using the selected [v1 motif](design/app-icon-v1.png), the curved pipeline arrow. V2 remains unselected. Icon appearance follows the user's Home Screen setting independently of app-interface appearance.
+- Remove the large app icon, slogan, accompanying promotional copy, and “No document library” footer from Home. This does not change the temporary-storage policy.
+- Focus Home on importing and managing pipelines, retaining swipe deletion and visible default/unattended status.
+- Reconsider the current teal accent. No replacement color has been selected.
 
-## Verification status (2026-10-11)
+Recommended visual direction, not yet approved: PDF Pipe navigation title → import action → Pipelines heading with add action → concise pipeline rows. Use neutral system surfaces and restrained adaptive blue for actions/selected controls. Selection should also have a checkmark or equivalent non-color indicator. Follow system appearance by default; an explicit System / Light / Dark setting is optional pending D1.
 
-- The original MVP passed on iOS 26.0 and 27.0 simulators. The reviewed device baseline has seven regression tests (27 unit tests and one end-to-end UI test total), covering Inbox ownership/cleanup, long input names, filename preflight, atomic publication, collision races, and failed/canceled writes. Current verification results are recorded in PLAN.md.
-- `make build-device` passes for the app and share extension against the iOS 27 device SDK, without signing/provisioning.
-- Simulator screenshots were visually reviewed. The share-sheet test invokes the actual extension, verifies supplied filename preservation, and checks that extension discard retains the host's export copy.
-- The user configured signing team `QQ2W7FVVXM` for both targets; `project.yml` preserves that setting. Signed installation, all 27 unit tests, and the app/share-extension UI test pass on an iPhone 14 Pro running iOS 27.0.1, including shared App Group configuration. Actual Inbox import/preview passes after excluding the Documents parent from backup instead of modifying the system-managed Inbox. Real provider/resource validation remains pending. See [PLAN.md](PLAN.md) for the outstanding gate.
+The icon family must remain recognizable at Home Screen size and with different user tints. Validate contrast and legibility in both interface appearances. [Apple's icon guidance](https://developer.apple.com/design/human-interface-guidelines/app-icons) describes system-controlled icon appearances.
 
-- Workflow/OCR-option updates pass the iOS 27 simulator gate with 33 unit tests, two UI tests, and optimized unsigned device Release analysis/build. Physical-iPhone verification above applies to the preceding baseline; the updated UI and force-OCR option still need a full device test rerun. The current signed Release build is installed and launch-checked on the iPhone, with the PDF Pipe name and existing settings confirmed.
+## Open decisions for the next milestone
 
-## Open decisions
+These are proposals for the relevant increment, not reasons to block unrelated work.
 
-- Intended audience, distribution, and monetization.
-- Physical-device OCR language availability and quality. MVP automatically detects language and defaults to skipping pages with existing text; mixed text/image pages may retain unrecognized content unless that skip option is disabled.
-- Additional template/date formatting options. MVP uses {original}, {date} (local yyyy-MM-dd), and {text}; creates unique names on collision; rejects unknown tokens and hidden/empty/overlong names.
-- Supported extraction fields/categories, extraction approach, and missing-value fallbacks.
-- Interactive entry point when a default unattended pipeline is configured; no manual-override feature has been separately accepted.
-- Physical-device resource/conversion validation. MVP limits inputs to 30 MB/50 pages, images to 40 million pixels, and OCR rasterization to 4 million pixels per page. Encrypted PDFs are rejected on import; annotated/form PDFs are rejected for OCR. Signatures are not validated; signed PDFs are unsupported for OCR.
-- Extension export/access behavior, error presentation, cleanup mechanics, and exact save semantics.
-- Distribution signing and App Group provisioning; development-device App Group access is verified.
+| ID | Decision | Recommendation to evaluate | Needed before |
+| --- | --- | --- | --- |
+| D1 | Accent and appearance control | Preview adaptive blue in light/dark; system-following initially, explicit override only if wanted. | Final appearance acceptance (I1). |
+| D2 | Competing/ambiguous dates | Prefer clearly labeled document/issue dates over due/service dates; show candidates interactively; fail unattended when unresolved. Start with existing `yyyy-MM-dd` output. | Date behavior acceptance (I4), unattended enablement (I8). |
+| D3 | Too few significant words or no usable text | Keep strict missing-value behavior: explain/correct interactively, fail unattended. Do not silently omit requested word slots or enable OCR. | Ranked-word acceptance (I5), unattended enablement (I8). |
+| D4 | Interactive selection versus ranked template | Keep automatic rank slots stable; let explicit cloud selection build a session-only date + selected-word suffix in selection order. No automatic saving before confirmation. | Word-cloud interaction (I7). |
+| D5 | Ranking scope and quality | Start with a deterministic on-device approach; evaluate German/English synthetic fixtures, filter stopwords/boilerplate, consider headings/distinctiveness, deduplicate, use stable tie-breaks. Defer phrases initially. | Ranking acceptance (I5). |
 
-## Scope boundaries
+Additional future decisions: distribution, monetization/audience, supported extraction categories beyond date/words, configurable date formats, and a manual override entry point for an unattended default. Physical OCR language quality, provider access, and extension resource behavior require evidence, not assumed guarantees.
 
-No initial batch processing, arbitrary Office/web conversion, conditional scripting, AI classification, content-based destination routing, cloud processing, signing, annotation, document archive, or recoverable background queue.
+## Acceptance and boundaries
 
-Unselected suggestions are not requirements: pipeline testing UI, configurable extraction rules, configurable fallback rules, image preparation, page operations, compression presets, pipeline export/import, and a manual override feature. Filename templates are accepted; Shortcuts is accepted for later.
+Every completed increment must preserve original bytes, pipeline/default behavior, configuration compatibility, cancellation, collision handling, and truthful save errors. New acceptance checks must cover date fallback/ambiguity, ranked words, template equivalence, actual filename previews, interactive selection before save, and unattended no-input success. Appearance changes require visual review in both modes and accessible selection indicators.
+
+Verify each increment in the simulator first, including relevant automated and visual checks, before proceeding to the next increment. Physical-iPhone verification, if needed to resolve evidence gaps, occurs only after the final functional increment (I8). Record device-only questions during earlier increments without scheduling interim iPhone runs. The existing `make verify` gate, including unsigned device-SDK Release analysis/build, remains required; compilation for the device SDK is not physical-device verification. See PLAN.md for increment-specific checks and the final validation phase.
+
+Apple Shortcuts is accepted for later; exact actions are TBD. iPad, arbitrary Office/web conversion, conditional scripting, AI classification, content-based destination routing, cloud processing, signing, annotation, a document archive, and recoverable background jobs remain out of scope.
+
+Unselected ideas remain proposals: configurable extraction/fallback rules, page regions/patterns, image preparation, page operations, compression presets, pipeline export/import, and a pipeline testing UI. Do not introduce them implicitly while implementing chips or extraction.
 
 ## Platform references
 
 - [Apple: App extension overview](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/ExtensionOverview.html): extension lifecycle and restrictions on opening the containing app.
 - [Apple: Handling common extension scenarios](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/ExtensionScenarios.html): extension resource constraints and shared-container access.
-- [Apple: Recognizing text in images](https://developer.apple.com/documentation/vision/recognizing-text-in-images): text recognition; writing a searchable PDF requires separate implementation and validation.
-- [Apple: Providing access to directories](https://developer.apple.com/documentation/uikit/providing-access-to-directories): selected folders, saved access, coordinated writes, and revoked permissions. Access across app/extension must be proven.
+- [Apple: Recognizing text in images](https://developer.apple.com/documentation/vision/recognizing-text-in-images): recognition; writing a searchable PDF still requires separate implementation and validation.
+- [Apple: Providing access to directories](https://developer.apple.com/documentation/uikit/providing-access-to-directories): selected folders, saved access, coordinated writes, and revoked permissions. Cross-process provider access must be proven.
