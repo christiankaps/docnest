@@ -7,6 +7,7 @@ struct WorkbenchView: View {
     @State private var exportURL: URL?
     @State private var exportedName: String?
     @State private var preparingExport = false
+    @State private var showingDetails = false
     @ScaledMetric(relativeTo: .body) private var cloudBaseSize: CGFloat = 15
 
     private var selected: Pipeline? { store.configuration.pipelines.first { $0.id == model.pipelineID } }
@@ -22,31 +23,68 @@ struct WorkbenchView: View {
                     } actions: { Button("Done") { model.discard() }.buttonStyle(.borderedProminent) }
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
+                        VStack(alignment: .leading, spacing: 18) {
                             if let document = model.document {
-                                PDFPreview(url: document.url)
-                                    .frame(height: 300).clipShape(RoundedRectangle(cornerRadius: 18))
-                                    .accessibilityLabel("Document preview")
-                                attributes(document.facts)
-                                if model.awaitingNaming { namingSelection }
-                                else if !model.processed { pipelineSelection }
-                                if model.processed { resultActions(document) }
+                                if model.processed {
+                                    PDFPreview(url: document.url)
+                                        .frame(height: 200)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .accessibilityLabel("Processed document preview")
+                                    resultActions(document)
+                                } else if model.awaitingNaming {
+                                    namingSelection
+                                } else {
+                                    Text(document.facts.filename)
+                                        .font(.headline)
+                                        .lineLimit(2)
+                                        .textSelection(.enabled)
+                                    PDFPreview(url: document.url)
+                                        .frame(height: 220)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .accessibilityLabel("Document preview")
+                                    DisclosureGroup("Document details", isExpanded: $showingDetails) {
+                                        attributes(document.facts)
+                                    }
+                                    if !model.busy { pipelineSelection }
+                                }
                             }
                             if model.busy {
-                                VStack(spacing: 12) {
-                                    ProgressView(model.progress).frame(maxWidth: .infinity)
+                                VStack(alignment: .leading, spacing: 12) {
+                                    ProgressView(model.progress)
                                     Button("Cancel processing", role: .cancel) { model.cancelProcessing() }
-                                }.padding()
+                                }.frame(maxWidth: .infinity, alignment: .leading)
                             }
                             if model.document == nil && !model.busy {
                                 ContentUnavailableView("No document available", systemImage: "doc", description: Text("Discard this session and import a supported file again."))
                             }
-                        }.padding(20)
+                        }.padding()
                     }
                 }
             }
-            .navigationTitle("Document")
+            .navigationTitle(model.savedName != nil ? "Finished" : model.processed ? "Result" :
+                model.awaitingNaming ? "Choose Filename" : model.busy ? "Processing" : "Review Document")
             .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom) {
+                if model.savedName == nil && !model.busy {
+                    if model.awaitingNaming {
+                        let preview = model.selectedFilenamePreview()
+                        primaryAction("Continue", identifier: "confirmFilename",
+                            disabled: (try? preview.get()) == nil) { model.confirmNaming() }
+                    } else if !model.processed, let selected {
+                        let preview = model.filenamePreview(selected)
+                        primaryAction("Run Pipeline", identifier: "runPipeline",
+                            disabled: (try? preview.get()) == nil) { model.run(selected) }
+                    } else if model.processed {
+                        if let destination = selected?.destination {
+                            primaryAction("Save to \(destination.name)", identifier: "saveToFolder",
+                                disabled: preparingExport) { model.save(destination) }
+                        } else {
+                            primaryAction("Share PDF", identifier: "sharePDF",
+                                disabled: preparingExport) { prepareExport(share: true) }
+                        }
+                    }
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     if model.savedName == nil { Button("Discard", role: .destructive) { model.discard() }.disabled(preparingExport) }
@@ -85,8 +123,8 @@ struct WorkbenchView: View {
     }
 
     private var pipelineSelection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Choose a pipeline").font(.title3.bold())
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Pipeline").font(.headline)
             if store.configuration.pipelines.isEmpty {
                 Text("Create a pipeline in the PDF Pipe app, then share or import this file again.").foregroundStyle(.secondary)
             } else {
@@ -98,7 +136,7 @@ struct WorkbenchView: View {
                     let preview = model.filenamePreview(selected)
                     Text(selected.summary.isEmpty ? "Keep PDF unchanged" : selected.summary).font(.subheadline).foregroundStyle(.secondary)
                     if selected.needsText {
-                        TextField("Text for {text}", text: $model.manualText).textFieldStyle(.roundedBorder)
+                        TextField("Text for filename", text: $model.manualText).textFieldStyle(.roundedBorder)
                     }
                     switch preview {
                     case .success(let filename):
@@ -108,21 +146,15 @@ struct WorkbenchView: View {
                         Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
                             .font(.footnote).foregroundStyle(.red)
                     }
-                    if selected.unattended { Label("Saves automatically to \(selected.destination?.name ?? "folder")", systemImage: "folder.badge.gearshape").font(.footnote) }
-                    Button("Run pipeline") { model.run(selected) }
-                        .buttonStyle(.borderedProminent).controlSize(.large)
-                        .frame(maxWidth: .infinity).disabled(model.busy || (try? preview.get()) == nil)
-                        .accessibilityIdentifier("runPipeline")
+                    if selected.unattended { Label("Saves automatically to \(selected.destination?.name ?? "folder")", systemImage: "folder").font(.footnote) }
                 }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
-         .padding().background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
         .disabled(model.busy)
     }
 
     private var namingSelection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Choose a filename").font(.title3.bold())
             if let analysis = model.analysis {
                 switch analysis.date {
                 case .found(let value):
@@ -139,7 +171,7 @@ struct WorkbenchView: View {
                         }
                     }.accessibilityIdentifier("documentDatePicker")
                 }
-                Text("Significant words").font(.headline)
+                Text("Suggested words").font(.headline)
                 if analysis.words.isEmpty {
                     Text("No significant words found. Enter a word to name this document.")
                         .foregroundStyle(.secondary)
@@ -155,11 +187,12 @@ struct WorkbenchView: View {
                                     if selected { Image(systemName: "checkmark") }
                                     Text(word.text).lineLimit(2)
                                 }
-                                .font(.system(size: cloudBaseSize + 9 * word.score / highest, weight: selected ? .bold : .medium))
+                                .font(.system(size: cloudBaseSize + 2 + 3 * word.score / highest,
+                                              weight: selected || word.score / highest > 0.7 ? .semibold : .regular))
                                 .frame(maxWidth: .infinity, minHeight: 38)
-                                .padding(.horizontal, 5)
-                                .background(selected ? PipeAppearance.accent.opacity(0.22) : Color.secondary.opacity(0.10),
-                                    in: RoundedRectangle(cornerRadius: 10))
+                                .padding(.horizontal, 8)
+                                .background(selected ? PipeAppearance.accent.opacity(0.15) : Color.secondary.opacity(0.08),
+                                    in: Capsule())
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("\(word.text), \(selected ? "selected" : "not selected")")
@@ -190,38 +223,38 @@ struct WorkbenchView: View {
                     Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.red)
                 }
-                Button("Use filename") { model.confirmNaming() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.busy || (try? preview.get()) == nil)
-                    .accessibilityIdentifier("confirmFilename")
                 Button("Change pipeline") { model.resetNaming() }
-                    .buttonStyle(.bordered)
                     .disabled(model.busy)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
     }
 
     private func resultActions(_ document: ProcessedDocument) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Ready to export").font(.title3.bold())
+            Label("Ready to export", systemImage: "checkmark.circle.fill").font(.title3.bold())
             ForEach(Array(document.report.enumerated()), id: \.offset) { _, value in
                 Label(value, systemImage: "checkmark").font(.subheadline)
             }
             TextField("Filename", text: $model.filename).textFieldStyle(.roundedBorder)
                 .textInputAutocapitalization(.never).autocorrectionDisabled()
                 .accessibilityIdentifier("resultFilename")
-            HStack {
-                Button { prepareExport(share: true) } label: { Label("Share", systemImage: "square.and.arrow.up") }
-                Button { prepareExport(share: false) } label: { Label("Save to Files", systemImage: "folder") }
-            }.buttonStyle(.bordered).disabled(model.busy || preparingExport)
-            if let destination = selected?.destination {
-                Button("Save to \(destination.name)") { model.save(destination) }
-                    .buttonStyle(.borderedProminent).disabled(model.busy || preparingExport)
+            if selected?.destination != nil {
+                Button { prepareExport(share: true) } label: { Label("Share PDF", systemImage: "square.and.arrow.up") }
+                    .disabled(model.busy || preparingExport)
             }
+            Button { prepareExport(share: false) } label: { Label("Save to Files", systemImage: "folder") }
+                .disabled(model.busy || preparingExport)
         }
+    }
+
+    private func primaryAction(_ title: String, identifier: String, disabled: Bool,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) { Text(title).frame(maxWidth: .infinity) }
+            .buttonStyle(.borderedProminent).controlSize(.large)
+            .disabled(disabled).accessibilityIdentifier(identifier)
+            .padding(.horizontal).padding(.vertical, 10)
+            .background(.bar)
     }
 
     private func prepareExport(share: Bool) {

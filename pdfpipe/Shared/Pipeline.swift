@@ -55,7 +55,10 @@ struct Pipeline: Codable, Identifiable, Equatable, Sendable {
     var needsText: Bool { steps.contains { $0.kind == .rename && $0.template.contains("{text}") } }
     var needsAnalysis: Bool { steps.contains { $0.kind == .rename && FilenameTemplate.requiresAnalysis($0.template) } }
     var summary: String {
-        (steps.map(\.title) + (destination == nil ? [] : ["Save to \(destination!.name)"])).joined(separator: " → ")
+        let actions = steps.map { step in
+            step.kind == .rename ? (needsAnalysis ? "Name from document" : "Rename file") : step.title
+        }
+        return (actions + (destination.map { ["Save to \($0.name)"] } ?? [])).joined(separator: " · ")
     }
 
     /// Saving an editor draft yields one enabled step of each kind in fixed order.

@@ -6,13 +6,12 @@ struct TemplateChipEditor: View {
     @State private var editingLiteral: Int?
 
     private var parts: [FilenameTemplate.Part] { (try? FilenameTemplate.parse(template)) ?? [] }
-    private let columns = [GridItem(.adaptive(minimum: 104), spacing: 8)]
+    private let columns = [GridItem(.adaptive(minimum: 100), spacing: 8)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Filename").font(.subheadline.bold())
-            ScrollView(.horizontal) {
-                HStack(spacing: 6) {
+            Text("Filename parts").font(.headline)
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
                     if parts.isEmpty { Text("Tap the parts below").foregroundStyle(.secondary) }
                     ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
                         HStack(spacing: 4) {
@@ -34,18 +33,36 @@ struct TemplateChipEditor: View {
                         .padding(.horizontal, 10).padding(.vertical, 8)
                         .background(PipeAppearance.accent.opacity(0.12), in: Capsule())
                     }
-                }.padding(.vertical, 2)
             }
             .accessibilityIdentifier("filenameTemplate")
+            Text("Add a part").font(.headline)
+            Text("Date").font(.subheadline).foregroundStyle(.secondary)
             LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                ForEach([FilenameTemplate.Token.documentDate, .word1, .word2, .word3,
-                         .original, .date, .text], id: \.self) { token in
+                ForEach([FilenameTemplate.Token.documentDate, .date], id: \.self) { token in
                     Button(token.title) { append(.token(token)) }
                         .buttonStyle(.bordered)
                         .accessibilityIdentifier("addTemplate-\(token.rawValue)")
                 }
+            }
+            Text("Words").font(.subheadline).foregroundStyle(.secondary)
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                ForEach([FilenameTemplate.Token.word1, .word2, .word3], id: \.self) { token in
+                    Button(token.title) { append(.token(token)) }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("addTemplate-\(token.rawValue)")
+                }
+            }
+            Text("Separator or other text").font(.subheadline).foregroundStyle(.secondary)
+            HStack {
                 Button("_") { append(.literal("_")) }.buttonStyle(.bordered).accessibilityIdentifier("addTemplate-underscore")
                 Button("-") { append(.literal("-")) }.buttonStyle(.bordered).accessibilityIdentifier("addTemplate-hyphen")
+            }
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                ForEach([FilenameTemplate.Token.original, .text], id: \.self) { token in
+                    Button(token.title) { append(.token(token)) }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("addTemplate-\(token.rawValue)")
+                }
             }
             HStack {
                 TextField("Fixed text", text: $draft)
@@ -68,7 +85,7 @@ struct TemplateChipEditor: View {
                 editingLiteral = nil
                 draft = ""
             }.font(.caption)
-            Text("Document date uses the date found in the PDF, or today's date when none is found. Processing date always uses today's date. The .pdf extension is added automatically.")
+            Text("Document date uses the date in the PDF, falling back to today. Processing date always uses today. .pdf is added automatically.")
                 .font(.caption).foregroundStyle(.secondary)
             if let preview = try? FilenameTemplate.render(template, values: .init(original: "Invoice",
                 manualText: "Acme", processedAt: Date(), documentDate: "2026-10-05",

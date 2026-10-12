@@ -9,6 +9,8 @@ PDF Pipe is a native iPhone document workbench. It receives one document, proces
 
 This file owns the consolidated product concept, accepted requirements, and remaining product decisions. [PLAN.md](PLAN.md) owns increment and verification status; [ARCHITECTURE.md](ARCHITECTURE.md) describes implementation ownership; [README.md](README.md) describes current usage, commands, and limits.
 
+The planned interface redesign is in [UI_MAKEOVER_PLAN.md](UI_MAKEOVER_PLAN.md). It does not describe the current UI until its increments are implemented and verified.
+
 Platform: iPhone first, iOS 26 or later; build with Xcode 27 and XcodeGen. The display name is **PDF Pipe**. Preserve existing bundle IDs, App Group, project paths, targets/schemes, installation, and saved configuration. Root direct-to-main Git policy applies. Use `make help`, edit `project.yml` and regenerate, and run `make verify` before code integration.
 
 ## Current state
@@ -16,6 +18,10 @@ Platform: iPhone first, iOS 26 or later; build with Xcode 27 and XcodeGen. The d
 The MVP and functional increments I1–I8 are implemented. PDF/JPEG/PNG import, preview and attributes, optional searchable OCR, pipeline management, interactive export, and configured-folder unattended saving remain available. The editor shows OCR, Rename, and Save once each in fixed order. Home supports swipe deletion and pipeline-first import and focuses on those tasks without branding or storage-policy copy.
 
 The chip editor composes filename templates from document date, Word 1–3, separators, original name, processing date, manual text, and editable fixed text. `{date}` retains its original processing-date meaning. Document dates and ranked words come from PDF text after optional OCR. The interactive workbench shows a weighted word cloud and pauses for review; the unattended default resolves the same values automatically when possible. The app follows the iOS light/dark appearance and uses a centralized blue accent. Light/default, dark, and grayscale tinted icon variants use the selected v1 motif.
+
+The interface makeover organizes Home around the pipeline list and a persistent import action. The pipeline editor presents the three fixed steps in separate conditional sections and opens filename composition in its own sheet. The shared document workbench presents review, processing, naming (when needed), and result as distinct states, with a persistent primary action for each decision. The underlying pipeline configuration and document processing behavior are unchanged.
+
+The makeover passed the iOS 27 simulator integration gate on an isolated iPhone 17 simulator: 41 unit tests, three UI tests, static analysis, and optimized device-SDK Release build. The optimized simulator Release passed 41 unit tests. Home was visually checked in light/dark and accessibility-large/Increased Contrast dark appearance; the naming screen was checked in a UI-test capture. Targeted chip/word-choice and OCR/import/delete UI tests also passed at accessibility-large text size. Manual VoiceOver and exhaustive accessibility/error-state review remain open; see UI_MAKEOVER_PLAN.md.
 
 The final iOS 27 simulator gate passed 41 unit tests, three UI tests, static analysis, and the optimized unsigned device Release build. The optimized simulator Release passed the same 41 unit tests. On an iPhone 14 Pro, 23 targeted tests passed and the signed optimized Release build was installed and launched. Provider/resource feasibility, visual verification of system-selected Home Screen icon variants, and distribution remain open; see PLAN.md.
 

@@ -8,6 +8,8 @@
 - `PdfPipeTests/`: source-integrity, OCR text/appearance/rotation, cancellation, import bounds, templates, configuration, export failures/collisions, and cleanup tests.
 - `PdfPipeUITests/`: simulator and physical-iPhone app/extension interaction checks.
 
+The app Home owns pipeline management and pipeline-first direct import. `PipelineEditor` presents conditional processing sections and opens `TemplateChipEditor` as a separate sheet; both continue to serialize the existing configuration model. The shared `WorkbenchView` derives its review, processing, naming, and result presentation from `DocumentSessionModel` state and uses a bottom safe-area action for the current decision. The share extension embeds that same workbench. No document-processing state moved into view-only code.
+
 ## Ownership and concurrency
 
 `PipelineStore` and `DocumentSessionModel` run on the main actor. The engine is an actor, so PDF rendering and Vision work happen off the UI actor. Streaming import and destination writes run in worker tasks; cancellation propagates to those workers. Item-provider files are copied synchronously inside their callback before its temporary URL expires.

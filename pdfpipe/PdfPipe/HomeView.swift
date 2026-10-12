@@ -14,55 +14,44 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    Button {
-                        importPipelineID = nil
-                        choosingPipeline = true
-                    } label: {
-                        Label("Import a document", systemImage: "square.and.arrow.down").frame(maxWidth: .infinity).padding(.vertical, 7)
-                    }.buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("importDocument")
-                        .disabled(store.error != nil)
-                    if let storeError = store.error {
-                        Label(storeError, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                if let storeError = store.error {
+                    Section {
+                        Label(storeError, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.red)
                         Button("Retry loading configuration") { store.reload() }
                     }
                 }
                 Section {
-                    HStack {
-                        Text("Pipelines").font(.headline)
-                        Spacer()
-                        Button { editing = Pipeline() } label: { Image(systemName: "plus.circle.fill").font(.title2) }
-                            .accessibilityLabel("New pipeline").accessibilityIdentifier("newPipeline")
-                            .disabled(store.error != nil)
-                    }
                     if store.configuration.pipelines.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Image(systemName: "arrow.trianglehead.branch").font(.largeTitle).foregroundStyle(PipeAppearance.accent)
-                            Text("Create your first pipeline").font(.headline)
-                            Text("Combine OCR and filename templates. Add a destination folder to save automatically.")
-                                .foregroundStyle(.secondary)
-                            Button("Create pipeline") { editing = Pipeline() }.buttonStyle(.bordered).disabled(store.error != nil)
-                        }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 22))
+                        ContentUnavailableView {
+                            Label("No pipelines yet", systemImage: "arrow.trianglehead.branch")
+                        } description: {
+                            Text("Create a pipeline to process your first document.")
+                        } actions: {
+                            Button("Create pipeline") { editing = Pipeline() }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(store.error != nil)
+                        }
+                        .listRowBackground(Color.clear)
                     } else {
                         ForEach(store.configuration.pipelines) { pipeline in
                             Button { editing = pipeline } label: {
-                                VStack(alignment: .leading, spacing: 10) {
+                                VStack(alignment: .leading, spacing: 5) {
                                     HStack {
-                                        Image(systemName: pipeline.unattended ? "bolt.fill" : "arrow.trianglehead.branch").foregroundStyle(PipeAppearance.accent)
-                                        Text(pipeline.name).font(.headline).foregroundStyle(.primary)
+                                        Text(pipeline.name).font(.body.weight(.semibold)).foregroundStyle(.primary)
                                         Spacer()
                                         if store.configuration.defaultID == pipeline.id {
-                                            Text("DEFAULT").font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 5)
-                                                .background(PipeAppearance.accent.opacity(0.12), in: Capsule()).foregroundStyle(PipeAppearance.accent)
+                                            Label("Default for sharing", systemImage: "checkmark.circle.fill")
+                                                .font(.caption).foregroundStyle(.secondary)
                                         }
-                                        Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
                                     }
                                     Text(pipeline.summary.isEmpty ? "Keep PDF unchanged" : pipeline.summary)
-                                        .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.leading)
-                                    Text(pipeline.unattended ? "Runs unattended" : "Review before export")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }.padding(.vertical, 5)
+                                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                                    if pipeline.unattended && store.configuration.defaultID != pipeline.id {
+                                        Text("Runs automatically when selected")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }.padding(.vertical, 3)
                             }.buttonStyle(.plain)
                              .accessibilityIdentifier("pipeline-\(pipeline.id)")
                              .swipeActions(edge: .trailing) {
@@ -75,14 +64,40 @@ struct HomeView: View {
                         }
                     }
                 }
-                #if DEBUG
-                    if ProcessInfo.processInfo.arguments.contains("--ui-testing") {
-                        Button("Open test document") { openFixture() }.accessibilityIdentifier("openFixture")
-                    }
-                #endif
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("PDF Pipe")
+            .navigationTitle("Pipelines")
+            .toolbar {
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("--ui-testing") {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Test document") { openFixture() }.accessibilityIdentifier("openFixture")
+                    }
+                }
+                #endif
+                ToolbarItem(placement: .primaryAction) {
+                    Button { editing = Pipeline() } label: { Image(systemName: "plus") }
+                        .accessibilityLabel("New pipeline")
+                        .accessibilityIdentifier("newPipeline")
+                        .disabled(store.error != nil)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if !store.configuration.pipelines.isEmpty {
+                    Button {
+                        importPipelineID = nil
+                        choosingPipeline = true
+                    } label: {
+                        Label("Import a document", systemImage: "square.and.arrow.down")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .accessibilityIdentifier("importDocument")
+                    .disabled(store.error != nil)
+                    .padding(.horizontal).padding(.vertical, 10)
+                    .background(.bar)
+                }
+            }
             .sheet(isPresented: $choosingPipeline, onDismiss: {
                 if importPipelineID != nil { importing = true }
             }) {

@@ -12,13 +12,28 @@ final class MVPFlowTests: XCTestCase {
         let field = app.textFields["pipelineName"]
         field.tap()
         field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 30) + name)
+        app.buttons["editFilenameTemplate"].tap()
         let clear = app.buttons["Clear template"]
         for _ in 0..<8 { if clear.isHittable { break }; app.swipeUp() }
         clear.tap()
-        app.buttons["addTemplate-documentDate"].tap()
-        app.buttons["addTemplate-underscore"].tap()
-        app.buttons["addTemplate-word1"].tap()
-        XCTAssertTrue(app.staticTexts["templateExample"].label.contains("2026-10-05_Telekom.pdf"))
+        let date = app.buttons["addTemplate-documentDate"]
+        for _ in 0..<8 { if date.isHittable { break }; app.swipeDown() }
+        XCTAssertTrue(date.isHittable)
+        date.tap()
+        let separator = app.buttons["addTemplate-underscore"]
+        for _ in 0..<8 { if separator.isHittable { break }; app.swipeUp() }
+        separator.tap()
+        let word = app.buttons["addTemplate-word1"]
+        for _ in 0..<8 { if word.isHittable { break }; app.swipeDown() }
+        word.tap()
+        let example = app.staticTexts["templateExample"]
+        for _ in 0..<8 { if example.isHittable { break }; app.swipeUp() }
+        let composerCapture = XCTAttachment(screenshot: app.screenshot())
+        composerCapture.name = "Filename composer after three parts"
+        composerCapture.lifetime = .keepAlways
+        add(composerCapture)
+        XCTAssertTrue(example.label.contains("2026-10-05_Telekom.pdf"), example.label)
+        app.buttons["Done"].tap()
         app.buttons["savePipeline"].tap()
         for _ in 0..<20 { if app.buttons["openFixture"].isHittable { break }; app.swipeUp() }
         app.buttons["openFixture"].tap()
@@ -58,6 +73,7 @@ final class MVPFlowTests: XCTestCase {
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap()
         name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 30) + pipelineName)
+        app.swipeUp() // Dismiss the keyboard before testing toggles at accessibility text sizes.
         let ocr = app.switches["enableOCR"]
         XCTAssertTrue(ocr.exists)
         XCTAssertTrue(app.switches["enableRename"].exists)
@@ -65,7 +81,12 @@ final class MVPFlowTests: XCTestCase {
         XCTAssertEqual(ocr.value as? String, "1")
         let skipExisting = app.switches["skipExistingText"]
         XCTAssertEqual(skipExisting.value as? String, "1")
+        if !skipExisting.isHittable { app.swipeUp() }
         tapSwitch(skipExisting)
+        let toggleCapture = XCTAttachment(screenshot: app.screenshot())
+        toggleCapture.name = "OCR settings after toggle"
+        toggleCapture.lifetime = .keepAlways
+        add(toggleCapture)
         XCTAssertEqual(skipExisting.value as? String, "0")
         tapSwitch(ocr)
         XCTAssertEqual(ocr.value as? String, "0")
@@ -78,7 +99,7 @@ final class MVPFlowTests: XCTestCase {
         app.alerts.buttons["OK"].tap()
         tapSwitch(saving)
         app.buttons["savePipeline"].tap()
-        XCTAssertTrue(app.navigationBars["Edit pipeline"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["New Pipeline"].waitForNonExistence(timeout: 5))
         for _ in 0..<10 {
             if app.buttons["importDocument"].exists && app.buttons["importDocument"].isHittable { break }
             app.swipeDown()
@@ -114,8 +135,7 @@ final class MVPFlowTests: XCTestCase {
     }
 
     private func tapSwitch(_ element: XCUIElement) {
-        let control = element.switches.firstMatch
-        if control.exists { control.tap() } else { element.tap() }
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
     }
 
     func testPipelineCreationImportReviewAndShareTarget() throws {
@@ -154,7 +174,7 @@ final class MVPFlowTests: XCTestCase {
         XCTAssertTrue(app.buttons["runPipeline"].waitForExistence(timeout: 5))
         app.buttons["runPipeline"].tap()
         XCTAssertTrue(app.textFields["resultFilename"].waitForExistence(timeout: 10))
-        app.buttons["Share"].tap()
+        app.buttons["sharePDF"].tap()
         XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5) || app.buttons["Copy"].waitForExistence(timeout: 5))
         let sharing = XCUIApplication(bundleIdentifier: "com.apple.SharingUIService")
         var extensionButton = sharing.cells["PDF Pipe"].firstMatch
