@@ -21,9 +21,11 @@ The chip editor composes filename templates from document date, Word 1–3, sepa
 
 The interface makeover organizes Home around the pipeline list and a persistent import action. The pipeline editor presents the three fixed steps in separate conditional sections and opens filename composition in its own sheet. The shared document workbench presents review, processing, naming (when needed), and result as distinct states, with a persistent primary action for each decision. The underlying pipeline configuration and document processing behavior are unchanged.
 
+Home shows the installed app's build date and time in the device's local time zone. Xcode stamps each app build into the bundle before signing; this date is separate from document processing dates used for filenames.
+
 The makeover passed the iOS 27 simulator integration gate on an isolated iPhone 17 simulator: 41 unit tests, three UI tests, static analysis, and optimized device-SDK Release build. The optimized simulator Release passed 41 unit tests. Home was visually checked in light/dark and accessibility-large/Increased Contrast dark appearance; the naming screen was checked in a UI-test capture. Targeted chip/word-choice and OCR/import/delete UI tests also passed at accessibility-large text size. Manual VoiceOver and exhaustive accessibility/error-state review remain open; see UI_MAKEOVER_PLAN.md.
 
-The final iOS 27 simulator gate passed 41 unit tests, three UI tests, static analysis, and the optimized unsigned device Release build. The optimized simulator Release passed the same 41 unit tests. On an iPhone 14 Pro, 23 targeted tests passed and the signed optimized Release build was installed and launched. Provider/resource feasibility, visual verification of system-selected Home Screen icon variants, and distribution remain open; see PLAN.md.
+The latest iOS 27 simulator gate passed 44 unit tests, five UI tests (including the build-date display), static analysis, and the optimized unsigned device Release build. The earlier optimized simulator Release passed 41 unit tests. On an iPhone 14 Pro, 23 targeted tests passed previously; the latest signed optimized Release was installed and launched. Provider/resource feasibility, visual verification of system-selected Home Screen icon variants, and distribution remain open; see PLAN.md.
 
 ## Product invariants and scope
 

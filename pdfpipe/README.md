@@ -16,6 +16,8 @@ Several plausible dates require a choice. If a required word is missing, automat
 
 Saving to a configured folder stages the complete output before publishing it and creates a unique filename on collision. Existing files and source documents are never overwritten.
 
+The bottom of **Pipelines** shows the installed app's build date and time in the iPhone's local time zone. Xcode stamps the app bundle at each build, including incremental builds; this is distinct from the document processing date used in filename templates.
+
 ## MVP limits
 
 - One file, at most 30 MB and 50 PDF pages. Images have at most 40 million source pixels and are downsampled to a maximum 4096-pixel edge for conversion; one image becomes one page at two image pixels per PDF point.
@@ -57,6 +59,8 @@ make verify DESTINATION='platform=iOS Simulator,name=iPhone 17,OS=26.0'
 To try the app, open `PdfPipe.xcodeproj` in Xcode, choose the PdfPipe scheme and an iPhone simulator, and press Run. Simulator App Group entitlements use local signing; no physical-device team setup is needed for the simulator.
 
 The integration gate is `make verify`. It regenerates the project, builds/runs all Debug unit and UI tests, then analyzes and builds an optimized unsigned device Release. `make build-release` uses Swift `-O` whole-module optimization, C-family size optimization, and Xcode static analysis. Compiler warnings and Clang analyzer findings fail the build. Clang analysis covers C-family sources; Swift uses Swift 6 compiler/type/concurrency checks, with warnings as errors. `make test-release` runs unit tests with the Release optimizer and testability enabled. `make analyze-release` runs analysis alone; `make clean` removes local build/test artifacts. Generated project files are checked in. Simulator builds use local ad-hoc signing so App Group entitlements are available. `make build-device` checks device-SDK compilation without provisioning; installing on physical devices requires proper Apple signing.
+
+The app target's `scripts/write-build-info.sh` build phase writes `PdfPipeBuildInfo.plist` into the app bundle before signing. Its UTC timestamp is displayed in local time on Home; no generated timestamp is written to the repository.
 
 ## Device setup and remaining feasibility gate
 

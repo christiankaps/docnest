@@ -186,6 +186,9 @@ final class MVPFlowTests: XCTestCase {
         app.launchArguments = ["--ui-testing", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launchEnvironment["PDFPIPE_UI_TEST_CONFIGURATION_SUITE"] = "com.kaps.pdfpipe.ui-tests.\(UUID().uuidString)"
         app.launch()
+        let buildDate = app.staticTexts["buildDate"]
+        XCTAssertTrue(buildDate.waitForExistence(timeout: 10))
+        XCTAssertFalse(buildDate.label.contains("unavailable"), buildDate.label)
         createPipeline(named: "Only pipeline", in: app)
         app.buttons["importDocument"].tap()
         let cancel = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Cancel", "Abbrechen")).firstMatch

@@ -36,6 +36,12 @@ targets:
     type: application
     platform: iOS
     sources: [PdfPipe, Shared]
+    postBuildScripts:
+      - name: Stamp build date
+        path: scripts/write-build-info.sh
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/PdfPipeBuildInfo.plist
+        basedOnDependencyAnalysis: false
     dependencies:
       - target: PdfPipeShare
     entitlements:

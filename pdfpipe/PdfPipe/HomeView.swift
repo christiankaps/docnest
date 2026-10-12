@@ -63,6 +63,11 @@ struct HomeView: View {
                              }
                         }
                     }
+                } footer: {
+                    Text("Build: \(BuildInfo.displayDate)")
+                        .font(.footnote)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .accessibilityIdentifier("buildDate")
                 }
             }
             .listStyle(.insetGrouped)

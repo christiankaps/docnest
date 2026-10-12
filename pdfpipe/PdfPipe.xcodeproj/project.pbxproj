@@ -36,6 +36,7 @@
 		AE612AAC119A7667E8256C56 /* DocumentSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7758A0160FCEE1ED93F8B107 /* DocumentSessionModel.swift */; };
 		AFF9533F0F382D3B27A3C750 /* DocumentAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B2ED9FD3DADDBEAB2A8F11C /* DocumentAnalysis.swift */; };
 		B914ED3E7BB380563FDBB07D /* PdfPipeShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ECEA1738059973A630747D78 /* PdfPipeShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		BAAE530F2EB43A769DF1C32B /* BuildInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = E72866A160B3581DCFE7066A /* BuildInfo.swift */; };
 		C56D62FDAC145EC6B4232A1A /* PdfPipeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E31505563E5321E1BF09A5B /* PdfPipeApp.swift */; };
 		C75DB8171CD46A48C58AF08C /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF3FF1B20DBD882A7AC4F024 /* HomeView.swift */; };
 		CB1D15AABB6A9ED52FC230BB /* MVPFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2B6EC99176D9070FA593179 /* MVPFlowTests.swift */; };
@@ -119,6 +120,7 @@
 		D814652046BDE9B417D219B0 /* PdfPipeUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PdfPipeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1F1AD65B789174DF223B29D /* PdfPipeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PdfPipeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2F1376BBCF2AA61FE45813C /* DocumentEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentEngine.swift; sourceTree = "<group>"; };
+		E72866A160B3581DCFE7066A /* BuildInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildInfo.swift; sourceTree = "<group>"; };
 		EAA4C44852198AF2E7EEC73B /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		ECEA1738059973A630747D78 /* PdfPipeShare.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PdfPipeShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F262E14265CFD3D1125517BA /* PipelineStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineStore.swift; sourceTree = "<group>"; };
@@ -202,6 +204,7 @@
 			isa = PBXGroup;
 			children = (
 				D12CE0FADFE1C224A4118839 /* Assets.xcassets */,
+				E72866A160B3581DCFE7066A /* BuildInfo.swift */,
 				923792F411570DE0F114D818 /* DevelopmentFixtures.swift */,
 				CF3FF1B20DBD882A7AC4F024 /* HomeView.swift */,
 				280BCC325DAE497D6BEBEDE0 /* Info.plist */,
@@ -241,6 +244,7 @@
 				1E80836FD873344F08F4CD6F /* Sources */,
 				FC5DF17B9426E5D649E2CB60 /* Resources */,
 				6B4D2997D7D76E08D4CF5CB0 /* Embed Foundation Extensions */,
+				4A42F7516F98E68DCA1CD8D5 /* Stamp build date */,
 			);
 			buildRules = (
 			);
@@ -358,6 +362,29 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		4A42F7516F98E68DCA1CD8D5 /* Stamp build date */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Stamp build date";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/PdfPipeBuildInfo.plist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "#!/bin/sh\nset -eu\n\noutput=\"${SCRIPT_OUTPUT_FILE_0:?Missing build-info output path}\"\nmkdir -p \"$(dirname \"$output\")\"\nrm -f \"$output\"\n/usr/bin/plutil -create xml1 \"$output\"\n/usr/bin/plutil -insert BuildTimestampUTC -string \"$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')\" \"$output\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		1D102506D6FD9ABEA55AB9E6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -376,6 +403,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9CDC08F54A929715458F2822 /* Appearance.swift in Sources */,
+				BAAE530F2EB43A769DF1C32B /* BuildInfo.swift in Sources */,
 				7623FE881DE8C5892494E1D9 /* DestinationWriter.swift in Sources */,
 				E11F9C4AE634812F7B655F0F /* DevelopmentFixtures.swift in Sources */,
 				5738D5EB3B1B7F1B5EE9389F /* DocumentAnalysis.swift in Sources */,
