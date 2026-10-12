@@ -16,28 +16,6 @@ struct PDFPreview: UIViewRepresentable {
     }
 }
 
-struct FolderPicker: UIViewControllerRepresentable {
-    var selected: (URL) -> Void
-    @Environment(\.dismiss) private var dismiss
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
-        picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
-        return picker
-    }
-    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
-    final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let parent: FolderPicker
-        init(_ parent: FolderPicker) { self.parent = parent }
-        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            if let url = urls.first { parent.selected(url) }
-            parent.dismiss()
-        }
-        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { parent.dismiss() }
-    }
-}
-
 struct ExportPicker: UIViewControllerRepresentable {
     let url: URL
     let completion: (Bool, String?) -> Void

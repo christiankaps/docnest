@@ -150,10 +150,10 @@ Recommended sequence: **I1 → I2 → I3 → I4 → I5 → I6 → I7 → I8 → 
 | Check | Evidence and limit |
 | --- | --- |
 | Increment simulator checks | I1 light/dark Home screenshots and two UI tests; I2 three compiled asset renditions; I3–I5 focused unit tests including real PDF; I6/I7 chip/word-cloud UI test and visual review; I8 focused unattended unit tests. |
-| Final simulator integration gate | `make verify` on iOS 27: 41 unit tests, three UI tests, static analysis, optimized unsigned device Release build. |
+| Latest simulator integration gate | `make verify` on a fresh iOS 27 simulator after the folder/import/naming updates: 43 unit tests, five UI tests (including Files folder creation/selection, pipeline save, and isolated sole/multiple-pipeline import), static analysis, optimized unsigned device Release build. |
 | Optimized simulator tests | `make test-release`: 41 unit tests passed on iOS 27. |
 | Physical targeted tests | iPhone 14 Pro, iOS 27.0.1: 23 tests covering date/ranking, real-PDF/OCR processing, and unattended local saving. No full UI suite was rerun on device. |
-| Latest physical install | Signed optimized Release 0.1.0 (build 1), analysis/build and signature verification passed; installed and launched as PDF Pipe after the device tests. |
+| Latest physical install | Signed optimized Release 0.1.0 (build 1) with the folder/import/naming updates installed and launched on iPhone 14 Pro. The updated folder picker has not yet been exercised on the physical device. |
 | Real Inbox/cleanup | Actual Inbox delivery previewed and consumed; relaunch reclaimed abandoned session. Backup exclusion belongs on Documents because iOS forbids modifying Inbox itself. |
 | Export integrity | Local destination tests cover atomic publication/collisions/errors/cancellation; a termination probe confirmed no partial final PDF. This does not prove all Files-provider bookmarks or rename capabilities. |
 | Signing/App Group | User-selected team `QQ2W7FVVXM` preserved; signed installation/shared configuration verified. Automatic provisioning was explicitly authorized for the preceding device-test run. |

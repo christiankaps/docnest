@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PipelineEditor: View {
     @ObservedObject var store: PipelineStore
@@ -22,7 +23,7 @@ struct PipelineEditor: View {
         _skipExistingText = State(initialValue: pipeline.steps.first { $0.kind == .ocr }?.skipExistingText ?? true)
         _renameEnabled = State(initialValue: pipeline.steps.contains { $0.kind == .rename })
         _savingEnabled = State(initialValue: pipeline.destination != nil)
-        _filenameTemplate = State(initialValue: pipeline.steps.last { $0.kind == .rename }?.template ?? "{date}_{original}")
+        _filenameTemplate = State(initialValue: pipeline.steps.last { $0.kind == .rename }?.template ?? "{documentDate}_{word1}")
     }
 
     var body: some View {
@@ -63,7 +64,14 @@ struct PipelineEditor: View {
                         }.accessibilityIdentifier("editFilenameTemplate")
                     }
                 } header: { Text("2 · Name file") }
-                  footer: { if !renameEnabled { Text("The original filename is kept.") } }
+                  footer: {
+                      if !renameEnabled { Text("The original filename is kept.") }
+                      else if FilenameTemplate.requiresAnalysis(filenameTemplate) {
+                          Text("Review the document date and significant words after processing.")
+                      } else {
+                          Text("This template does not use document words. Add Word 1 to show the word cloud.")
+                      }
+                  }
                 Section {
                     Toggle(isOn: $savingEnabled) {
                         Label("Save to folder", systemImage: "folder")
@@ -83,7 +91,7 @@ struct PipelineEditor: View {
                         }.accessibilityIdentifier("chooseSaveFolder")
                     }
                 } header: { Text("3 · Save output") }
-                  footer: { Text(savingEnabled ? "The folder is used after processing." : "You can share or save the result manually.") }
+                  footer: { Text(savingEnabled ? "In Files, open your destination folder and tap Open to select it." : "You can share or save the result manually.") }
                 if savingEnabled {
                     Section {
                         Toggle("Run automatically", isOn: $pipeline.unattended)
@@ -115,11 +123,10 @@ struct PipelineEditor: View {
                     }.accessibilityIdentifier("savePipeline")
                 }
             }
-            .sheet(isPresented: $selectingFolder) {
-                FolderPicker { url in
-                    do { pipeline.destination = try Destination.selected(url) }
-                    catch { self.error = error.localizedDescription }
-                }
+            .fileImporter(isPresented: $selectingFolder, allowedContentTypes: [.folder]) { result in
+                do { pipeline.destination = try Destination.selected(result.get()) }
+                catch CocoaError.userCancelled { return }
+                catch { self.error = error.localizedDescription }
             }
             .sheet(isPresented: $composingFilename) {
                 NavigationStack {

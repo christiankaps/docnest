@@ -2,6 +2,50 @@ import XCTest
 
 @MainActor
 final class MVPFlowTests: XCTestCase {
+    func testSelectedFolderAllowsSavingPipeline() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        app.buttons["newPipeline"].tap()
+        let saving = app.switches["enableSave"]
+        if !saving.isHittable { app.swipeUp() }
+        tapSwitch(saving)
+        XCTAssertEqual(saving.value as? String, "1", app.debugDescription)
+        for _ in 0..<8 { if app.buttons["chooseSaveFolder"].isHittable { break }; app.swipeUp() }
+        app.buttons["chooseSaveFolder"].tap()
+        XCTAssertTrue(app.buttons["Browse"].waitForExistence(timeout: 15), app.debugDescription)
+        app.buttons["Browse"].tap()
+        XCTAssertTrue(app.staticTexts["On My iPhone"].waitForExistence(timeout: 15), app.debugDescription)
+        app.staticTexts["On My iPhone"].tap()
+        let folderCell = app.cells.matching(NSPredicate(format: "identifier CONTAINS %@", ", Folder")).firstMatch
+        let folderName: String
+        if !folderCell.waitForExistence(timeout: 3) {
+            let more = app.buttons["OverflowBarButtonItem"]
+            XCTAssertTrue(more.waitForExistence(timeout: 5), app.debugDescription)
+            more.tap()
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.13)).tap()
+            XCTAssertTrue(folderCell.waitForExistence(timeout: 10), app.debugDescription)
+            folderName = String(folderCell.identifier.split(separator: ",").first ?? "")
+            // Files enters the newly created folder when its name is confirmed.
+            if app.buttons["Done"].exists { app.buttons["Done"].tap() }
+        } else {
+            folderName = String(folderCell.identifier.split(separator: ",").first ?? "")
+            folderCell.tap()
+        }
+        XCTAssertFalse(folderName.isEmpty)
+        let selectFolder = app.buttons["DOCPicker.actionButton"]
+        XCTAssertTrue(selectFolder.waitForExistence(timeout: 5), app.debugDescription)
+        selectFolder.tap()
+        let folder = app.buttons["chooseSaveFolder"]
+        XCTAssertTrue(folder.waitForExistence(timeout: 10))
+        let selected = expectation(for: NSPredicate(format: "label CONTAINS %@", folderName), evaluatedWith: folder)
+        let status = XCTWaiter.wait(for: [selected], timeout: 10)
+        XCTAssertEqual(status, .completed, app.debugDescription)
+        app.buttons["savePipeline"].tap()
+        XCTAssertTrue(app.navigationBars["New Pipeline"].waitForNonExistence(timeout: 5), app.debugDescription)
+    }
+
     func testDocumentNamingChipsAndWordCloud() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -65,6 +109,7 @@ final class MVPFlowTests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchEnvironment["PDFPIPE_UI_TEST_CONFIGURATION_SUITE"] = "com.kaps.pdfpipe.ui-tests.\(UUID().uuidString)"
         app.launch()
         let pipelineName = "Swipe " + String(UUID().uuidString.prefix(6))
         XCTAssertTrue(app.buttons["newPipeline"].waitForExistence(timeout: 10))
@@ -100,6 +145,7 @@ final class MVPFlowTests: XCTestCase {
         tapSwitch(saving)
         app.buttons["savePipeline"].tap()
         XCTAssertTrue(app.navigationBars["New Pipeline"].waitForNonExistence(timeout: 5))
+        createPipeline(named: "Chooser alternative", in: app)
         for _ in 0..<10 {
             if app.buttons["importDocument"].exists && app.buttons["importDocument"].isHittable { break }
             app.swipeDown()
@@ -115,7 +161,7 @@ final class MVPFlowTests: XCTestCase {
         choice.tap()
         XCTAssertTrue(app.navigationBars["Choose a pipeline"].waitForNonExistence(timeout: 5))
         let cancel = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Cancel", "Abbrechen")).firstMatch
-        XCTAssertTrue(cancel.waitForExistence(timeout: 5), "Choosing a pipeline should present the Files picker")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 15), "Choosing a pipeline should present the Files picker: \(app.debugDescription)")
         cancel.tap()
         XCTAssertTrue(app.buttons["importDocument"].waitForExistence(timeout: 5))
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "pipeline-", pipelineName)).firstMatch
@@ -132,6 +178,34 @@ final class MVPFlowTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["newPipeline"].waitForExistence(timeout: 10))
         XCTAssertFalse(row.exists, "Deletion must persist across launches")
+    }
+
+    func testSolePipelineImportOpensFilesDirectly() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-testing", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchEnvironment["PDFPIPE_UI_TEST_CONFIGURATION_SUITE"] = "com.kaps.pdfpipe.ui-tests.\(UUID().uuidString)"
+        app.launch()
+        createPipeline(named: "Only pipeline", in: app)
+        app.buttons["importDocument"].tap()
+        let cancel = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Cancel", "Abbrechen")).firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 15), "A sole pipeline should open Files directly: \(app.debugDescription)")
+        XCTAssertFalse(app.navigationBars["Choose a pipeline"].exists)
+        cancel.tap()
+        XCTAssertTrue(app.buttons["importDocument"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "pipeline-", "Only pipeline")).firstMatch.exists)
+    }
+
+    private func createPipeline(named pipelineName: String, in app: XCUIApplication) {
+        XCTAssertTrue(app.buttons["newPipeline"].waitForExistence(timeout: 10))
+        app.buttons["newPipeline"].tap()
+        let name = app.textFields["pipelineName"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 30) + pipelineName)
+        app.swipeUp()
+        app.buttons["savePipeline"].tap()
+        XCTAssertTrue(app.navigationBars["New Pipeline"].waitForNonExistence(timeout: 5))
     }
 
     private func tapSwitch(_ element: XCUIElement) {
@@ -170,10 +244,13 @@ final class MVPFlowTests: XCTestCase {
         createdPipeline.tap()
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["proposedFilename"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["proposedFilename"].label.hasSuffix("PdfPipe-Test-Invoice.pdf"))
+        XCTAssertTrue(app.staticTexts["proposedFilename"].label.contains("document analysis"))
         XCTAssertTrue(app.buttons["runPipeline"].waitForExistence(timeout: 5))
         app.buttons["runPipeline"].tap()
+        XCTAssertTrue(app.buttons["confirmFilename"].waitForExistence(timeout: 10))
+        app.buttons["confirmFilename"].tap()
         XCTAssertTrue(app.textFields["resultFilename"].waitForExistence(timeout: 10))
+        let resultFilename = try XCTUnwrap(app.textFields["resultFilename"].value as? String)
         app.buttons["sharePDF"].tap()
         XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5) || app.buttons["Copy"].waitForExistence(timeout: 5))
         let sharing = XCUIApplication(bundleIdentifier: "com.apple.SharingUIService")
@@ -204,7 +281,7 @@ final class MVPFlowTests: XCTestCase {
         let chooser = extensionUI.buttons["pipelinePicker"]
         XCTAssertTrue(chooser.waitForExistence(timeout: 10) || app.buttons["pipelinePicker"].exists || sharing.buttons["pipelinePicker"].exists,
                       extensionUI.debugDescription)
-        XCTAssertTrue(extensionUI.staticTexts.matching(NSPredicate(format: "label ENDSWITH %@", "PdfPipe-Test-Invoice.pdf")).firstMatch.exists,
+        XCTAssertTrue(extensionUI.staticTexts.matching(NSPredicate(format: "label ENDSWITH %@", resultFilename)).firstMatch.exists,
                       "The receiving extension should preserve the supplied output filename")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "PDF Pipe share extension"

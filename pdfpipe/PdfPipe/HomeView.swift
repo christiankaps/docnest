@@ -85,8 +85,13 @@ struct HomeView: View {
             .safeAreaInset(edge: .bottom) {
                 if !store.configuration.pipelines.isEmpty {
                     Button {
-                        importPipelineID = nil
-                        choosingPipeline = true
+                        if let solePipelineID = store.configuration.solePipelineID {
+                            importPipelineID = solePipelineID
+                            importing = true
+                        } else {
+                            importPipelineID = nil
+                            choosingPipeline = true
+                        }
                     } label: {
                         Label("Import a document", systemImage: "square.and.arrow.down")
                             .frame(maxWidth: .infinity)

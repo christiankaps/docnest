@@ -3,6 +3,20 @@ import XCTest
 
 @MainActor
 final class ConfigurationAndExportTests: XCTestCase {
+    func testDirectImportUsesOnlyPipelineWhenThereIsExactlyOne() {
+        let first = Pipeline(name: "First")
+        let second = Pipeline(name: "Second")
+        XCTAssertNil(PipelineConfiguration().solePipelineID)
+        XCTAssertEqual(PipelineConfiguration(pipelines: [first]).solePipelineID, first.id)
+        XCTAssertNil(PipelineConfiguration(pipelines: [first, second]).solePipelineID)
+    }
+
+    func testNewPipelineRequestsDocumentNamingReview() {
+        let pipeline = Pipeline()
+        XCTAssertTrue(pipeline.needsAnalysis)
+        XCTAssertEqual(pipeline.steps.first?.template, "{documentDate}_{word1}")
+    }
+
     func testOCRSkipPreferenceDefaultsForExistingPipelinesAndPersists() throws {
         let legacy = Data("{\"id\":\"00000000-0000-0000-0000-000000000001\",\"kind\":\"ocr\",\"template\":\"{original}\"}".utf8)
         XCTAssertTrue(try JSONDecoder().decode(PipelineStep.self, from: legacy).skipExistingText)

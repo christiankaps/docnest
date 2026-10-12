@@ -49,7 +49,7 @@ struct Destination: Codable, Equatable, Sendable {
 struct Pipeline: Codable, Identifiable, Equatable, Sendable {
     var id = UUID()
     var name = "New pipeline"
-    var steps: [PipelineStep] = [.init(kind: .rename)]
+    var steps: [PipelineStep] = [.init(kind: .rename, template: "{documentDate}_{word1}")]
     var destination: Destination?
     var unattended = false
     var needsText: Bool { steps.contains { $0.kind == .rename && $0.template.contains("{text}") } }
@@ -111,6 +111,8 @@ struct Pipeline: Codable, Identifiable, Equatable, Sendable {
 struct PipelineConfiguration: Codable, Equatable, Sendable {
     var pipelines: [Pipeline] = []
     var defaultID: UUID?
+
+    var solePipelineID: UUID? { pipelines.count == 1 ? pipelines[0].id : nil }
 
     func defaultPipeline() throws -> Pipeline? {
         guard let defaultID else { return nil }

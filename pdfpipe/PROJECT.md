@@ -48,7 +48,7 @@ Save to folder is optional and always last. Disabling Save also clears unattende
 
 ## User journeys
 
-**Direct app import:** choose Import → select a pipeline → select a file → review/process. This remains interactive even when an unattended default exists.
+**Direct app import:** choose Import → select a pipeline when several exist → select a file → review/process. A sole pipeline is selected automatically. This remains interactive even when an unattended default exists.
 
 **Interactive shared import:** share to PDF Pipe → select a pipeline → inspect/process the temporary copy → for content-derived naming, review date and choose significant words → review filename/result → share, save, or discard. The naming interaction occurs after text is available and before any final save. OCR must not need to run again merely because the user changes the selected words.
 
@@ -78,6 +78,8 @@ Example template: `[Date] [_] [Word 1] [_] [Word 2] [_] [Word 3]`.
 Example result: `2026-10-05_Telekom_Rechnung_Internet.pdf`.
 
 In the pipeline editor, no document is loaded: previews must clearly use example values. With a document loaded, the preview must use actual resolved values and expose unresolved inputs. Existing original-name, processing-date, manual-text, and literal templates must remain readable/editable without silently changing meaning. Exact new token syntax and storage representation are implementation choices, not user-facing syntax requirements.
+
+New pipelines start with a document-date and Word 1 template so interactive processing presents the word selection. Existing templates retain their stored meaning.
 
 ### Resolution and failure behavior
 
