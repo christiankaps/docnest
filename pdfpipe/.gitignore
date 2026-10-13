@@ -1,6 +1,7 @@
 .build/
 .build-device/
 .build-device-tests/
+.build-iphone/
 .build-release/
 .build-release-simulator/
 xcuserdata/

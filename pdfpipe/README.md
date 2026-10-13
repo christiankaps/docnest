@@ -1,77 +1,39 @@
 # PDF Pipe
 
-This README describes the current installed MVP. The accepted single-flow, user-controlled naming redesign is specified in [PROJECT.md](PROJECT.md), with implementation increments in [PLAN.md](PLAN.md).
-
-An iPhone document workbench: share a PDF or image, process a temporary copy through a saved pipeline, then share or save the result. Originals stay unchanged. There is no document library.
-
-Requires iOS 26 or later. Built with SwiftUI, PDFKit, Vision, Core Graphics, and native system pickers, with no third-party runtime dependencies.
+PDF Pipe helps you rename a PDF from its contents while keeping the final choice yours. Open or share one PDF, JPEG, or PNG on an iPhone running iOS 26 or later. The app makes a temporary copy, runs on-device OCR, then shows the PDF with suggested dates and significant words. It never changes the original or saves a result without a tap.
 
 ## Use
 
-1. On **Pipelines**, tap `+` to create a named pipeline. The editor groups the fixed steps as **Recognize text → Name file → Save output**. OCR keeps existing searchable text by default.
-2. New pipelines start with **Document date** + **Word 1**, so interactive processing presents the word cloud. Open **Filename template** to choose other parts such as **Word 2–3**, `_`, and `-`; original name, processing date, manual text, and fixed text are also available. The example adds `.pdf` automatically. Tap a part's remove control or edit a fixed-text part. Existing `{original}`, `{date}`, and `{text}` templates remain compatible and are not changed. `{date}` always means local processing date (`yyyy-MM-dd`); **Document date** uses a date in the PDF and falls back to processing date if none is found.
-3. Optionally enable **Save to folder** and choose a destination. To process shared files without review, enable **Run automatically** and **Default for shared files**. Automatic pipelines cannot require per-import manual text. Ranked-word parts resolve automatically if enough words are found.
-4. Share one PDF/JPEG/PNG to PDF Pipe, or choose **Import a document** in the app. Direct import asks for a pipeline when several exist; when there is only one, it is selected and the file picker opens immediately. Shared import uses the explicit unattended default when one exists.
-5. In **Review Document**, inspect the preview and details, choose a pipeline if needed, and run it. If naming needs review, **Choose Filename** shows the detected date and suggested words. Tapping multiple words puts them after the date in tap order; a manually entered word can correct missing suggestions. Without a selection, the saved template uses its ranked words. Continue to **Result**, where you can edit the final filename, share, save to Files, or save to the configured folder.
+1. Tap **Open a document** in the app, or share a file to PDF Pipe. OCR starts immediately, including on PDFs that already contain text. Existing selectable text stays in place; image text is added as an invisible searchable layer where it can be added safely.
+2. Review the PDF preview and OCR status. The highest-ranked document date is marked **Suggested**; other dates remain available. When no date is found, a clearly labeled processing-date fallback appears. Suggested words are ordered by significance.
+3. Tap date and word chips in any order. The filename updates live and shows selection order. Choose `-` or `_` for the **next** part you append; earlier joins stay as selected. Tap a selected chip to remove it. Add a word manually, or type a complete filename stem and use **Undo manual edit** to restore the prior chip composition. `.pdf` is added automatically.
+4. Tap **Share**, **Save to Files**, or **Save to [folder]**. Set the optional quick-save folder in **Settings**. Every output action is explicit, and a canceled export leaves the working copy available. **Discard** removes it.
 
-Several plausible dates require a choice. If a required word is missing, automatic saving pauses for review and publishes no final PDF. A failed destination save retains the processed copy. Canceling a system export sheet also retains the copy; Discard removes the working session. Swipe left on a pipeline to delete it; long-press to duplicate or delete. Disabling Save also clears unattended/default settings.
+The Home screen shows the installed build date and time. No document or recognized text is kept as a persistent library.
 
-Saving to a configured folder stages the complete output before publishing it and creates a unique filename on collision. Existing files and source documents are never overwritten.
+## Limits
 
-The bottom of **Pipelines** shows the installed app's build date and time in the iPhone's local time zone. Xcode stamps the app bundle at each build, including incremental builds; this is distinct from the document processing date used in filename templates.
-
-## MVP limits
-
-- One file, at most 30 MB and 50 PDF pages. Images have at most 40 million source pixels and are downsampled to a maximum 4096-pixel edge for conversion; one image becomes one page at two image pixels per PDF point.
-- Imports have a cooperative 30-second streaming-copy limit. OCR has a cooperative two-minute limit and renders one page at a time at up to 4 million pixels. Provider coordination and a synchronous Vision request cannot be forcibly interrupted mid-call.
-- OCR detects languages automatically using the installed Vision recognizer. **Skip pages with existing text** is on by default: existing searchable pages are retained and scanned pages still receive OCR. A page containing both text and an unrecognized image is skipped too. Turn the option off to recognize every page; existing text layers are flattened and replaced to avoid duplicate searchable text, which can increase file size.
-- OCR preserves visible crop-page appearance but re-emits pages; annotation/form PDFs are rejected for OCR. Use a pipeline without OCR to retain their original PDF bytes. Encrypted/locked PDFs are rejected on import. Signed PDFs are not supported for OCR; the app does not validate signatures.
-- Incoming names use the sender's suggested filename, falling back to the provided file URL's basename. If the sender omits the original name, iOS may supply a generic type-based name. PDF Pipe's own share export explicitly includes its output filename.
-- No interrupted-session recovery, background retry queue, or guaranteed execution after iOS terminates the share extension. A termination during saving may leave a hidden `.pdfpipe-<UUID>.partial` staging file in the chosen destination; remove that staging file manually. Providers must support atomic exclusive rename; unsupported providers report a save failure and keep the active result available for another export.
-- Document-date detection currently supports ISO and common dotted/slashed numeric dates. Clearly labeled issue dates outrank due dates; ambiguous results need review. The on-device word ranker is deterministic and bounded, with German/English stopwords, heading emphasis, and repeated-line filtering. It can miss meaningful phrases or misrank unusual layouts/languages. Apple Shortcuts integration is a later milestone.
+- One file at a time; up to 30 MB and 50 PDF pages. JPEG/PNG inputs may have at most 40 million source pixels and become one-page PDFs. Encrypted or unreadable PDFs are rejected.
+- Import copying has a 30-second limit. OCR has a two-minute limit, renders one page at a time, and uses at most four million pixels per page. A synchronous Vision request cannot be stopped mid-call; cancellation is checked between operations.
+- OCR attempts every page. On mixed pages it compares recognition with existing selectable text and adds only missing lines. If the PDF has annotations, forms, or signature structures, PDF Pipe keeps its readable PDF copy and uses recognized text for naming suggestions without rewriting the PDF. Other OCR failures also leave a readable copy and manual naming path when import succeeded.
+- Date detection covers ISO and common dotted/slashed numeric dates. Word ranking is bounded and tuned for common English/German documents; suggestions can be wrong or incomplete. The user always chooses the name.
+- A configured-folder save stages the complete output and publishes it with an exclusive atomic rename, choosing a unique suffix on collision. Some file providers may not support that operation. A process termination during saving can leave a hidden `.pdfpipe-<UUID>.partial` file in the chosen folder; it can be removed manually.
 
 ## Build and verification
 
-Prerequisites: Xcode 27 with iOS SDK/simulator support, and XcodeGen installed in the environment (verified with XcodeGen 2.46.0). `project.yml` is the source of the generated Xcode project; change it and regenerate, not the `.pbxproj` directly.
-
-From this folder:
+Xcode 27 and XcodeGen are required. `project.yml` owns the generated Xcode project. From this directory:
 
 ```sh
 make help
 make generate
 make build
-make build-device
-make build-release
-make build-release-simulator
-make analyze-release
 make test
-make test-unit
-make test-ui
-make test-release
 make verify
-make clean
+make build-release
 ```
 
-Override `DESTINATION` for an available simulator, for example:
+`make test` runs two focused unit tests and one simulator UI smoke test. `make verify` regenerates the project, runs that suite, then performs static analysis and an optimized unsigned device Release build. Swift and C-family compiler warnings are errors; Clang analyzer findings are errors. Override `DESTINATION` to use another simulator. `make build-device` checks unsigned device compilation; installing on an iPhone requires Apple development signing for the app, share extension, and App Group.
 
-```sh
-make verify DESTINATION='platform=iOS Simulator,name=iPhone 17,OS=26.0'
-```
+The one-flow redesign passed the simulator smoke suite and Release analysis/build on 13 October 2026. A signed Release was installed and launched on Christians iPhone 14 Pro. Real-file share-extension, Files-provider, OCR resource, and configured-folder checks on the iPhone remain the final device qualification; installation and launch alone do not prove those paths.
 
-To try the app, open `PdfPipe.xcodeproj` in Xcode, choose the PdfPipe scheme and an iPhone simulator, and press Run. Simulator App Group entitlements use local signing; no physical-device team setup is needed for the simulator.
-
-The integration gate is `make verify`. It regenerates the project, builds/runs all Debug unit and UI tests, then analyzes and builds an optimized unsigned device Release. `make build-release` uses Swift `-O` whole-module optimization, C-family size optimization, and Xcode static analysis. Compiler warnings and Clang analyzer findings fail the build. Clang analysis covers C-family sources; Swift uses Swift 6 compiler/type/concurrency checks, with warnings as errors. `make test-release` runs unit tests with the Release optimizer and testability enabled. `make analyze-release` runs analysis alone; `make clean` removes local build/test artifacts. Generated project files are checked in. Simulator builds use local ad-hoc signing so App Group entitlements are available. `make build-device` checks device-SDK compilation without provisioning; installing on physical devices requires proper Apple signing.
-
-The app target's `scripts/write-build-info.sh` build phase writes `PdfPipeBuildInfo.plist` into the app bundle before signing. Its UTC timestamp is displayed in local time on Home; no generated timestamp is written to the repository.
-
-## Device setup and remaining feasibility gate
-
-Both PdfPipe and PdfPipeShare use the user-selected Apple Developer team `QQ2W7FVVXM`, recorded in `project.yml`. Changes to signing settings should be recorded there before regenerating. Verify provisioning for the shared App Group matching `APP_GROUP_IDENTIFIER` (default `group.com.kaps.pdfpipe`). The two targets must share the same group; the app shows a configuration error rather than silently creating isolated settings if group storage is unavailable.
-
-No credentials, signing identities, or invented team identifiers are included. Do not enable automatic account/provisioning changes without the release owner's authorization.
-
-Before distribution, test real-device sharing from Files and other host apps, app-to-extension folder access, iCloud/third-party destinations, revoked permissions, extension memory/termination behavior, cancellation and interrupted-session cleanup. Simulator checks do not establish this physical-device feasibility gate.
-
-The current MVP passed its simulator integration gate, including unit/UI tests, static analysis, and an optimized unsigned device Release build. Prior targeted iPhone checks covered installation, app/share-extension interaction, Inbox import, and abandoned-session cleanup; provider/resource behavior still needs targeted proof. The new flow has not yet been implemented or installed.
-
-See [PROJECT.md](PROJECT.md) for the accepted product direction, [ARCHITECTURE.md](ARCHITECTURE.md) for current implementation ownership, and [PLAN.md](PLAN.md) for the staged redesign.
+See [PROJECT.md](PROJECT.md) for product policy, [ARCHITECTURE.md](ARCHITECTURE.md) for implementation ownership, and [PLAN.md](PLAN.md) for the delivery status.

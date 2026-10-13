@@ -1,69 +1,20 @@
-# PDF Pipe implementation plan
+# PDF Pipe delivery plan
 
-Status: **planned, not implemented**. [PROJECT.md](PROJECT.md) is the target product source of truth. [README.md](README.md) and [ARCHITECTURE.md](ARCHITECTURE.md) describe the current MVP until the redesign lands. This plan does not authorize distribution or deployment.
+Status: **functional redesign implemented; final device qualification remains**. [PROJECT.md](PROJECT.md) is the product source of truth. The user chose to delete the old unit suite and replace per-increment testing with a few basic tests in the last increment.
 
-## Delivery rules
+## Completed increments
 
-Work in the order below. Each increment must leave the app buildable and the original-safe session path coherent. Use focused tests while developing, then verify the increment in an iOS simulator before starting the next. Run `make verify` before each code integration; it includes unit/UI tests, static analysis, and an optimized device-SDK Release build. Device-SDK compilation is not iPhone verification. Test on an iPhone only after the last functional increment if simulator evidence cannot establish provider, signing, resource, or interaction behavior. Keep README current-use instructions synchronized only with shipped behavior.
+- [x] **I0 — Cutover:** Record the old simulator baseline (44 unit tests), isolate new settings from `pipelines.v1`, and remove the legacy pipeline UI, configuration reader, template interpreter, unattended execution, and their old tests. Old data was not migrated or retained as a requirement.
+- [x] **I1 — Automatic OCR:** Run Vision on every imported page, preserve embedded text, add missing OCR text as an invisible selectable layer, and keep readable PDFs available when modification is unsafe or OCR fails. A focused mixed-page simulator test checks selectable new text and unchanged source bytes.
+- [x] **I2 — Naming:** Rank document dates and words, show a processing-date fallback, and compose a name from ordered chips. Each new part captures the active `-` or `_` separator. Manual editing, Undo, validation, and automatic `.pdf` are implemented without rerunning OCR.
+- [x] **I3 — One-flow UI:** Replace the pipeline list/Run workflow with direct import, automatic processing, preview, OCR status, date and word chips, and an explicit filename. The app and share extension use the same workbench. A simulator UI smoke test covers import through user naming and discard.
+- [x] **I4 — Explicit export and cleanup:** Offer Share, Save to Files, and an optional configured quick-save folder only after a valid user-chosen name. Reuse the protected temporary session and collision-safe writer; remove the old pipeline sources and long UI suite.
+- [x] **I5 — Basic tests:** Add two focused unit tests and one short UI smoke test, instead of the previous broad suites. Simulator tests, Release static analysis, and optimized unsigned device build pass. A signed Release was installed and launched on Christians iPhone 14 Pro.
 
-## Architecture transition
+## Remaining qualification
 
-Refactor along the new user journey rather than wrapping the old pipeline engine in a permanent single-pipeline facade. Keep proven boundaries for staged import, temporary-session ownership, analysis, PDF preview, and collision-safe export. Give automatic recognition, non-destructive PDF text overlay, session-scoped filename composition, and explicit export distinct responsibilities. The app and share extension should use the same session coordinator and naming model. Keep only the legacy configuration reader needed for safe migration; remove old runtime pipeline execution after the new path is verified. Update [ARCHITECTURE.md](ARCHITECTURE.md) as ownership changes, not only at the end.
+- [ ] Exercise a real scanned PDF, searchable PDF, and mixed PDF on the iPhone, including the share extension, OCR time/memory, selecting words, manual naming, and cancellation.
+- [ ] Check Files and third-party folder providers, bookmark reuse/revocation, collisions, and share-sheet cancellation on the iPhone. An install and launch alone do not establish provider behavior.
+- [ ] Review light/dark and larger text sizes on the final UI; record any accessibility or layout issue found.
 
-## I0 — Baseline and safe migration boundary
-
-- [ ] Record the current simulator baseline and characterize existing OCR and naming behavior before changing it.
-- [ ] Map the existing import, OCR, session, naming, settings, and export responsibilities. Identify reusable services, legacy-only code, and test coverage before moving ownership.
-- [ ] Add single-flow preferences without deleting or rewriting `pipelines.v1`. Define how a sole or explicit-default destination can seed a one-tap save choice; require user choice when several destinations compete.
-- [ ] Ensure no old unattended default can execute once the new flow is active. Add migration/compatibility tests for one, many, corrupt, and absent legacy configurations.
-
-**Acceptance:** existing documents and settings remain safe, old data can be recovered, and a new import cannot silently save through an old default. Verify in the simulator.
-
-## I1 — Automatic, non-destructive OCR
-
-- [ ] Start OCR from every import, including text-bearing PDFs, with progress and cancellation; keep the original and existing embedded text intact.
-- [ ] Separate text recognition from PDF text-layer writing so analysis can use OCR results even when a PDF cannot safely be modified. Keep rendering and Vision work off the UI actor.
-- [ ] Add OCR text only where selectable text is missing. For mixed pages, compare recognition regions with existing text coverage and avoid duplicate searchable text. Do not rasterize and replace an existing text layer.
-- [ ] Preserve a readable preview/manual naming path when OCR cannot add text, including annotated/form/signed PDFs where re-emission is unsafe; show a specific limitation.
-- [ ] Cover image-only, text-only, mixed single-page, rotated, multilingual/noisy, failed, and canceled cases, including text extraction, selection, visible appearance, and source bytes.
-
-**Acceptance:** OCR is attempted automatically; existing text remains selectable and unchanged; newly recognized image text becomes searchable where supported. The simulator tests prove mixed-page behavior, not merely separate text and scan pages.
-
-## I2 — Session naming model
-
-- [ ] Produce ranked date candidates and significance-ordered word candidates after OCR without storing content persistently.
-- [ ] Represent the filename as ordered parts with the separator captured at each append. Implement remove/re-add, processing-date fallback, manual word, live filename validation, automatic `.pdf`, and a direct custom-name mode with Undo.
-- [ ] Move naming rules out of pipeline templates and view callbacks into a session-scoped model with one validation/rendering path. Keep compatibility parsing only where migration requires it.
-- [ ] Keep analysis and selections session-scoped. Changing a name or separator must not rerun OCR.
-- [ ] Test tap order, separator switching, deletion of first/middle parts, custom edits followed by chips, empty/ambiguous suggestions, Unicode, and invalid/long filenames.
-
-**Acceptance:** one pure naming model produces the same preview and export name; previous joins never change when the active separator changes. Verify model and a small UI harness in the simulator.
-
-## I3 — One-flow iPhone and share UI
-
-- [ ] Replace the home pipeline list and chooser with a clear import action and single-flow settings. File opening leads immediately to progress, then to one preview-and-naming screen.
-- [ ] Consolidate app and share-extension orchestration into one explicit import → processing → naming → export/cancel state flow. Remove parallel state flags and duplicated routing as each replacement becomes active.
-- [ ] Show a scrollable PDF preview, OCR status, date chips with an accessible suggested-date marker, and a weighted word cloud ordered by significance.
-- [ ] Show selected order, `-`/`_` control, live editable filename, manual entry, clear errors, and explicit share/save/discard actions. Keep light/dark, large text, VoiceOver, and non-color selection indicators usable.
-- [ ] Apply the same interaction to app import and share extension. UI tests cover scanned, searchable, mixed, no-word, and cancellation journeys.
-
-**Acceptance:** a user can open a file and complete content-based renaming quickly without seeing a pipeline or Run button. No naming/export choice happens automatically. Verify interactions and visual states in the simulator.
-
-## I4 — Export, cleanup, and legacy removal
-
-- [ ] Connect the chosen name to the existing safe share/Files/configured-folder writers. A configured folder is a user-triggered action only.
-- [ ] Remove obsolete pipeline/template/unattended UI and execution paths after I0 migration tests prove safety. Keep legacy data inert for recovery; do not remove it as a cleanup shortcut.
-- [ ] Remove unused models, views, configuration writes, target membership, and tests tied only to deleted behavior. Retain narrowly scoped migration decoding and tests; do not retain a hidden second processing path.
-- [ ] Verify collisions, provider errors, canceled sheets, retry, session cleanup, source bytes, and absence of persisted recognized content.
-
-**Acceptance:** the only output is explicitly user-directed, final filenames match the live preview, and no legacy default can run. A code and dependency audit finds no reachable pipeline/template/unattended execution path or duplicate app/extension naming logic. Verify in the simulator and pass `make verify`.
-
-## I5 — Final qualification
-
-- [ ] Run the complete simulator integration gate, optimized-code tests where relevant, and visual/accessibility review in light/dark and large text.
-- [ ] Exercise representative real scanned, searchable, and mixed PDFs within supported bounds; record recognition quality and resource limits honestly.
-- [ ] Perform targeted iPhone checks only for unresolved device-specific evidence, after I4: share extension, Files providers/bookmarks, OCR memory/time, and the final user journey.
-- [ ] Update README, ARCHITECTURE, and PROJECT to match delivered behavior; record any open limitations.
-- [ ] Review the final module boundaries, concurrency ownership, temporary-file lifecycle, and remaining legacy migration code. Remove stale documentation and development fixtures that no longer serve the new flow.
-
-**Acceptance:** every required check has a recorded pass or explicit outstanding limit. No claim of device or provider support rests solely on simulator evidence.
+Before integrating further code, run `make verify`. This plan does not authorize App Store distribution or deployment.

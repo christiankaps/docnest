@@ -7,7 +7,7 @@ Maturity: MVP
 
 **Main user story:** Quickly rename a PDF from its content while retaining full control. PDF Pipe offers smart suggestions; it never chooses the final name or exports a file without a user action.
 
-PDF Pipe is an iPhone-first, on-device document workbench for iOS 26+. One configurable processing flow replaces multiple named pipelines. The target flow is accepted but **not yet implemented**. The current MVP still has pipeline selection, optional OCR, templates, and unattended saving; [README.md](README.md) describes what the installed app does today. [ARCHITECTURE.md](ARCHITECTURE.md) describes its current implementation. [PLAN.md](PLAN.md) tracks the redesign.
+PDF Pipe is an iPhone-first, on-device document workbench for iOS 26+. The single automatic OCR flow with user-controlled naming and export is implemented in the current app and share extension. [README.md](README.md) describes how to use it, [ARCHITECTURE.md](ARCHITECTURE.md) records ownership, and [PLAN.md](PLAN.md) tracks final qualification.
 
 ## Target journey
 
@@ -34,11 +34,11 @@ Automatic OCR is preparation, not an automatic naming or export decision. The us
 - Process on-device without an account or backend. Do not persist document text, word/date candidates, or selection history in settings or logs.
 - Preserve existing bounded import/OCR limits until deliberately revised. Encrypted or unreadable input remains rejected. If adding an OCR layer would damage annotations, forms, or signatures, keep the readable copy available for naming/export and explain the OCR limitation.
 - Keep light/dark support, the light/dark/tinted icon family, native iPhone controls, accessibility labels and non-color selection indicators. Show processing progress and permit cancellation.
-- A migration must preserve existing saved pipeline data without silent deletion. Retain the old configuration as an inert backup while the new single-flow settings are introduced. An unambiguous prior destination may seed the one-tap destination, but never unattended execution; ambiguous destinations require user choice.
+- The new single-flow settings start fresh. Old pipeline definitions and destinations do not need migration or preservation. At cutover, disable legacy unattended execution before removing obsolete settings and code; no old destination is selected automatically.
 - Apple Shortcuts integration remains a later milestone. iPad optimization, arbitrary Office/web conversion, cloud processing, document archive, conditional scripting, and automatic routing remain outside this redesign.
 
 ## Acceptance
 
 The end-to-end app and share-extension journey is import → automatic OCR → preview with ranked date/word suggestions → user-composed or typed filename → explicit share/save/discard. Searchable original text survives, scanned text becomes searchable when recognition succeeds, and mixed pages gain only missing text. Separator changes affect future joins only. No legacy default can silently save a document. Empty or uncertain suggestions never strand the user. Source preservation, collision handling, cancellation, cleanup, and accurate errors remain regression requirements.
 
-Verify every functional increment in the simulator before the next. Run the project integration gate (`make verify`) before integrating code. Perform targeted iPhone verification, if needed, after the last functional increment. Current-use instructions in README change only when corresponding behavior is implemented and verified.
+The user chose a short final test suite instead of per-increment tests. Run `make verify` before integrating code. Targeted iPhone verification of the full share, provider, bookmark, and OCR journey remains necessary before claiming device qualification; a signed Release has been installed and launched on an iPhone 14 Pro.

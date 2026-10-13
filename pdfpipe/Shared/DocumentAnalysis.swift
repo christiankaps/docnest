@@ -7,6 +7,13 @@ struct RankedWord: Identifiable, Sendable, Equatable {
     var id: String { text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current) }
 }
 
+struct DateSuggestion: Identifiable, Sendable, Equatable {
+    var value: String
+    var score: Int
+    var isAmbiguous: Bool
+    var id: String { value }
+}
+
 enum DocumentDate: Sendable, Equatable {
     case found(String)
     case fallback
@@ -17,9 +24,10 @@ enum DocumentDate: Sendable, Equatable {
 
 struct DocumentAnalysis: Sendable {
     var date: DocumentDate
+    var dates: [DateSuggestion]
     var words: [RankedWord]
     var hasText: Bool
-    static let empty = DocumentAnalysis(date: .fallback, words: [], hasText: false)
+    static let empty = DocumentAnalysis(date: .fallback, dates: [], words: [], hasText: false)
 }
 
 enum DocumentAnalyzer {
@@ -38,11 +46,12 @@ enum DocumentAnalyzer {
 
     static func analyze(pages: [String]) -> DocumentAnalysis {
         let text = pages.joined(separator: "\n")
-        return .init(date: resolveDate(text), words: rankWords(pages),
+        let resolved = resolveDates(text)
+        return .init(date: resolved.date, dates: resolved.suggestions, words: rankWords(pages),
             hasText: !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
-    private static func resolveDate(_ text: String) -> DocumentDate {
+    private static func resolveDates(_ text: String) -> (date: DocumentDate, suggestions: [DateSuggestion]) {
         let patterns = [
             #"\b((?:19|20)\d{2})[-./](\d{1,2})[-./](\d{1,2})\b"#,
             #"\b(\d{1,2})[./](\d{1,2})[./]((?:19|20)\d{2})\b"#
@@ -74,12 +83,23 @@ enum DocumentAnalyzer {
                 }
             }
         }
-        guard !candidates.isEmpty else { return .fallback }
+        guard !candidates.isEmpty else { return (.fallback, []) }
         let top = candidates.map(\.score).max() ?? 0
         let best = candidates.filter { $0.score == top }.sorted { $0.order < $1.order }
         let dates = Array(Set(best.map(\.value))).sorted()
-        if dates.count == 1, !best.contains(where: \.ambiguous), let only = dates.first { return .found(only) }
-        return .ambiguous(dates)
+        let ranked = Dictionary(grouping: candidates, by: \.value).map { value, matches in
+            (suggestion: DateSuggestion(value: value, score: matches.map(\.score).max() ?? 0,
+                isAmbiguous: matches.contains(where: \.ambiguous)),
+             first: matches.map(\.order).min() ?? Int.max)
+        }.sorted { lhs, rhs in
+            if lhs.suggestion.score != rhs.suggestion.score { return lhs.suggestion.score > rhs.suggestion.score }
+            if lhs.first != rhs.first { return lhs.first < rhs.first }
+            return lhs.suggestion.value < rhs.suggestion.value
+        }.map(\.suggestion)
+        if dates.count == 1, !best.contains(where: \.ambiguous), let only = dates.first {
+            return (.found(only), ranked)
+        }
+        return (.ambiguous(dates), ranked)
     }
 
     private static func validDate(year: Int, month: Int, day: Int) -> String? {

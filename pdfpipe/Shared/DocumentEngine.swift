@@ -1,8 +1,6 @@
 import Foundation
 import PDFKit
-import Vision
 import ImageIO
-import CoreText
 import UniformTypeIdentifiers
 
 struct DocumentFacts: Sendable {
@@ -21,11 +19,10 @@ struct SessionDocument: Sendable {
     var report: [String]
 }
 
-struct PreparedRun: Sendable {
-    var url: URL
-    var report: [String]
-    var processedAt: Date
+struct AutomaticResult: Sendable {
+    var document: SessionDocument
     var analysis: DocumentAnalysis
+    var status: String
 }
 
 actor DocumentEngine {
@@ -139,148 +136,29 @@ actor DocumentEngine {
             hasText: (0..<pdf.pageCount).contains { !(pdf.page(at: $0)?.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }), report: report)
     }
 
-    func process(_ pipeline: Pipeline, text: String, date: Date = Date(),
-                 progress: @Sendable (String) async -> Void) async throws -> SessionDocument {
-        let prepared = try await prepareRun(pipeline, text: text, date: date, progress: progress)
-        return try finishRun(prepared, pipeline: pipeline,
-            values: .init(original: sourceName, manualText: text, processedAt: date,
-                documentDate: prepared.analysis.date.value,
-                dateAmbiguous: prepared.analysis.date.isAmbiguous,
-                words: prepared.analysis.words.map(\.text)))
-    }
-
-    func prepareRun(_ pipeline: Pipeline, text: String = "", date: Date = Date(),
-                    progress: @Sendable (String) async -> Void) async throws -> PreparedRun {
-        try pipeline.validate()
+    func processAutomatically(_ imported: SessionDocument,
+        progress: @Sendable (String) async -> Void) async throws -> AutomaticResult {
         guard let input else { throw PipeError.message("Import a document first.") }
-        if !pipeline.needsAnalysis {
-            _ = try pipeline.outputFilename(original: sourceName, text: text, date: date)
-        }
-        var output = input
-        var report = sourceFormat == "PDF" ? [] : ["Converted \(sourceFormat) to PDF"]
-        let deadline = Date().addingTimeInterval(120)
-        for step in pipeline.steps where step.kind == .ocr {
-            try Task.checkCancellation()
-            let next = session.directory.appendingPathComponent("ocr-\(UUID().uuidString).pdf")
-            let count = try await ocr(output, to: next, deadline: deadline,
-                skipExistingText: step.skipExistingText, progress: progress)
-            output = next
-            report.append("OCR processed \(count) pages" + (step.skipExistingText ? "; existing text pages kept" : "; all pages recognized"))
-        }
-        try Task.checkCancellation()
-        let analysis = pipeline.needsAnalysis ? try DocumentAnalyzer.analyze(output) : .empty
-        return .init(url: output, report: report, processedAt: date, analysis: analysis)
+        let target = session.directory.appendingPathComponent("searchable.pdf")
+        let outcome = try await AutomaticOCR.process(input, to: target, progress: progress)
+        let report = imported.report + [outcome.status]
+        return AutomaticResult(document: try describe(outcome.url, filename: imported.facts.filename, report: report),
+            analysis: DocumentAnalyzer.analyze(pages: outcome.pages), status: outcome.status)
     }
 
-    func finishRun(_ prepared: PreparedRun, pipeline: Pipeline, values: NamingValues,
-                   overrideFilename: String? = nil) throws -> SessionDocument {
-        try Task.checkCancellation()
-        let filename = try overrideFilename.map(FilenameTemplate.filename) ?? pipeline.outputFilename(values: values)
-        let resultDirectory = session.directory.appendingPathComponent("output-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: resultDirectory, withIntermediateDirectories: true)
-        let result = resultDirectory.appendingPathComponent(filename)
-        try FileManager.default.copyItem(at: prepared.url, to: result)
-        let report = prepared.report + (pipeline.steps.contains { $0.kind == .rename } ? ["Renamed to \(filename)"] : [])
-        return try describe(result, filename: filename, report: report)
+    func readableFallback(_ imported: SessionDocument, reason: String) throws -> AutomaticResult {
+        let analysis = try DocumentAnalyzer.analyze(imported.url)
+        return AutomaticResult(document: imported, analysis: analysis,
+            status: "OCR could not add searchable text: \(reason)")
     }
 
-    func preview(_ prepared: PreparedRun) throws -> SessionDocument {
-        try describe(prepared.url, filename: sourceName + ".pdf", report: prepared.report)
+    func exportCopy(_ document: SessionDocument, named name: String) throws -> URL {
+        let filename = try SafeFilename.pdf(name)
+        let folder = session.directory.appendingPathComponent("export-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent(filename)
+        try FileManager.default.copyItem(at: document.url, to: url)
+        return url
     }
 
-    func renameResult(_ document: SessionDocument, name: String) throws -> SessionDocument {
-        let filename = try FilenameTemplate.filename(name)
-        let target = document.url.deletingLastPathComponent().appendingPathComponent(filename)
-        if target != document.url { try FileManager.default.moveItem(at: document.url, to: target) }
-        return try describe(target, filename: filename, report: document.report)
-    }
-
-    private func ocr(_ source: URL, to target: URL, deadline: Date, skipExistingText: Bool,
-                     progress: @Sendable (String) async -> Void) async throws -> Int {
-        guard let pdf = PDFDocument(url: source) else { throw PipeError.message("Cannot open the PDF for OCR.") }
-        try validate(pdf)
-        // Re-emitting pages cannot preserve editable annotations/forms or signatures.
-        for index in 0..<pdf.pageCount {
-            if !(pdf.page(at: index)?.annotations.isEmpty ?? true) {
-                throw PipeError.message("OCR of annotated, signed, or form PDFs is not supported. Use a pipeline without OCR or share a flattened copy.")
-            }
-        }
-        guard let cgDocument = CGPDFDocument(source as CFURL) else { throw PipeError.message("Cannot render this PDF.") }
-        if let catalog = cgDocument.catalog {
-            var form: CGPDFDictionaryRef?
-            if CGPDFDictionaryGetDictionary(catalog, "AcroForm", &form) {
-                throw PipeError.message("OCR of form or signed PDFs is not supported. Use a pipeline without OCR.")
-            }
-        }
-        var initial = CGRect(x: 0, y: 0, width: 612, height: 792)
-        guard let context = CGContext(target as CFURL, mediaBox: &initial, [kCGPDFContextCreator: "PDF Pipe"] as CFDictionary) else {
-            throw PipeError.message("Cannot write the searchable PDF.")
-        }
-        var completed = false
-        defer { context.closePDF(); if !completed { try? FileManager.default.removeItem(at: target) } }
-        var recognizedPages = 0
-        for index in 0..<pdf.pageCount {
-            try Task.checkCancellation()
-            guard Date() < deadline else { throw PipeError.message("OCR reached its two-minute time limit. Try a shorter document.") }
-            await progress("Making page \(index + 1) of \(pdf.pageCount) searchable…")
-            guard let cgPage = cgDocument.page(at: index + 1), let page = pdf.page(at: index) else { throw PipeError.message("Cannot read a PDF page.") }
-            try autoreleasepool {
-                let crop = cgPage.getBoxRect(.cropBox)
-                let rotated = abs(cgPage.rotationAngle) % 180 == 90
-                let box = CGRect(x: 0, y: 0, width: rotated ? crop.height : crop.width, height: rotated ? crop.width : crop.height)
-                context.beginPDFPage([kCGPDFContextMediaBox: NSData(bytes: [box], length: MemoryLayout<CGRect>.size)] as CFDictionary)
-                let hasText = !(page.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-                if skipExistingText || !hasText {
-                    context.saveGState()
-                    context.concatenate(cgPage.getDrawingTransform(.cropBox, rect: box, rotate: 0, preserveAspectRatio: true))
-                    context.drawPDFPage(cgPage)
-                    context.restoreGState()
-                }
-                if !skipExistingText || !hasText {
-                    let scale = min(2.5, sqrt(4_000_000 / (box.width * box.height)))
-                    let width = max(1, Int(box.width * scale)), height = max(1, Int(box.height * scale))
-                    guard let bitmap = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
-                        bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
-                        throw PipeError.message("Not enough memory to render this page.")
-                    }
-                    bitmap.setFillColor(CGColor(gray: 1, alpha: 1))
-                    bitmap.fill(CGRect(x: 0, y: 0, width: width, height: height))
-                    bitmap.concatenate(cgPage.getDrawingTransform(.cropBox,
-                        rect: CGRect(x: 0, y: 0, width: width, height: height), rotate: 0, preserveAspectRatio: true))
-                    bitmap.drawPDFPage(cgPage)
-                    guard let image = bitmap.makeImage() else { throw PipeError.message("Cannot render the OCR page.") }
-                    // Flatten an existing text layer before replacement so it is not duplicated.
-                    if hasText { context.draw(image, in: box) }
-                    let request = VNRecognizeTextRequest()
-                    request.recognitionLevel = .accurate
-                    request.usesLanguageCorrection = true
-                    request.automaticallyDetectsLanguage = true
-                    try VNImageRequestHandler(cgImage: image).perform([request])
-                    try Task.checkCancellation()
-                    guard Date() < deadline else { throw PipeError.message("OCR reached its two-minute time limit.") }
-                    for observation in request.results ?? [] {
-                        guard let candidate = observation.topCandidates(1).first else { continue }
-                        let bounds = observation.boundingBox
-                        let font = CTFontCreateWithName("Helvetica" as CFString, max(1, bounds.height * box.height), nil)
-                        let line = CTLineCreateWithAttributedString(NSAttributedString(string: candidate.string,
-                            attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font]))
-                        let lineWidth = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
-                        guard lineWidth > 0 else { continue }
-                        context.saveGState()
-                        context.textMatrix = .identity
-                        context.translateBy(x: bounds.minX * box.width, y: bounds.minY * box.height)
-                        context.scaleBy(x: bounds.width * box.width / lineWidth, y: 1)
-                        context.setTextDrawingMode(.invisible)
-                        context.textPosition = .zero
-                        CTLineDraw(line, context)
-                        context.restoreGState()
-                    }
-                    recognizedPages += 1
-                }
-                context.endPDFPage()
-            }
-        }
-        completed = true
-        return recognizedPages
-    }
 }

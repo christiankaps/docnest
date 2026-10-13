@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help generate build build-debug build-device build-release build-release-simulator analyze-release test test-unit test-ui test-release verify clean
+.PHONY: help generate build build-debug build-device build-release build-release-simulator analyze-release test test-unit test-ui verify clean
 
 DESTINATION ?= platform=iOS Simulator,name=iPhone 18 Pro,OS=27.0
 CONFIGURATION ?= Debug
@@ -18,11 +18,10 @@ help:
 	@echo "make build-release           Analyze and build optimized unsigned iOS Release"
 	@echo "make build-release-simulator Analyze and build optimized Simulator Release"
 	@echo "make analyze-release         Run Xcode static analysis in Release configuration"
-	@echo "make test                    Run all unit and UI tests"
-	@echo "make test-unit               Run processing, export, persistence, cleanup tests"
-	@echo "make test-ui                 Run app and share-extension UI checks"
-	@echo "make test-release            Run unit tests against optimized Release code"
-	@echo "make verify                  Generate, run all tests, analyze/build iOS Release"
+	@echo "make test                    Run the short unit and UI smoke suite"
+	@echo "make test-unit               Run basic model and OCR tests"
+	@echo "make test-ui                 Run the single import-to-naming UI smoke test"
+	@echo "make verify                  Generate, test, analyze/build iOS Release"
 	@echo "make clean                   Remove local build products and test results"
 	@echo "Override DESTINATION for a different simulator; no target changes provisioning."
 
@@ -56,9 +55,6 @@ test-unit:
 
 test-ui:
 	$(XCODEBUILD) $(TEST_ARGUMENTS) -only-testing:PdfPipeUITests test
-
-test-release:
-	$(RELEASE_SIMULATOR) $(TEST_ARGUMENTS) ENABLE_TESTABILITY=YES -only-testing:PdfPipeTests test
 
 # Keep these sequential even under make -j: Xcode shares build databases.
 verify: generate
