@@ -1,10 +1,33 @@
 import Foundation
 import PDFKit
+import UIKit
+
+enum TextSource: Hashable, Sendable { case embedded, ocr, plain }
+
+struct AnalysisToken: Sendable {
+    var text: String
+    var size: Double?
+    var bold: Bool
+    var italic: Bool
+    var confidence: Float
+    var source: TextSource
+}
+
+struct AnalysisLine: Sendable {
+    var text: String
+    var tokens: [AnalysisToken]
+    var topFraction: Double?
+}
+
+struct AnalysisPage: Sendable {
+    var text: String
+    var lines: [AnalysisLine]
+}
 
 struct RankedWord: Identifiable, Sendable, Equatable {
     var text: String
     var score: Double
-    var id: String { text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current) }
+    var id: String { text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX")) }
 }
 
 struct DateSuggestion: Identifiable, Sendable, Equatable {
@@ -31,6 +54,8 @@ struct DocumentAnalysis: Sendable {
 }
 
 enum DocumentAnalyzer {
+    private static let wordPattern = try! NSRegularExpression(pattern: #"[\p{L}][\p{L}\p{M}]{2,}"#)
+
     private struct DateCandidate {
         var value: String
         var score: Int
@@ -40,15 +65,112 @@ enum DocumentAnalyzer {
 
     static func analyze(_ url: URL) throws -> DocumentAnalysis {
         guard let document = PDFDocument(url: url) else { throw PipeError.message("Cannot read the PDF text for filename analysis.") }
-        let pages = (0..<document.pageCount).map { String((document.page(at: $0)?.string ?? "").prefix(200_000)) }
+        let pages = (0..<document.pageCount).map { index in
+            document.page(at: index).map(extractPage) ?? AnalysisPage(text: "", lines: [])
+        }
         return analyze(pages: pages)
     }
 
     static func analyze(pages: [String]) -> DocumentAnalysis {
-        let text = pages.joined(separator: "\n")
+        analyze(pages: pages.map { page in
+            AnalysisPage(text: page, lines: page.split(separator: "\n").map { line in
+                let value = String(line)
+                return AnalysisLine(text: value, tokens: tokens(in: value, source: .plain), topFraction: nil)
+            })
+        })
+    }
+
+    static func analyze(pages: [AnalysisPage]) -> DocumentAnalysis {
+        let text = pages.map(\.text).joined(separator: "\n")
         let resolved = resolveDates(text)
         return .init(date: resolved.date, dates: resolved.suggestions, words: rankWords(pages),
             hasText: !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    static func extractPage(_ page: PDFPage) -> AnalysisPage {
+        let fullText = page.string ?? ""
+        let text = String(fullText.prefix(200_000))
+        let attributed = page.attributedString
+        let stylesAligned = attributed?.string == fullText
+        let nsText = text as NSString
+        let box = page.bounds(for: .cropBox)
+        var lines: [AnalysisLine] = []
+        // Keep dense pages bounded while retaining their text for date detection.
+        var remainingWords = 4_000
+        nsText.enumerateSubstrings(in: NSRange(location: 0, length: nsText.length), options: .byLines) { substring, range, _, stop in
+            guard remainingWords > 0 else { stop.pointee = true; return }
+            guard let substring, !substring.isEmpty else { return }
+            let nsLine = substring as NSString
+            let matches = Array(wordPattern.matches(in: substring, range: NSRange(location: 0, length: nsLine.length)).prefix(remainingWords))
+            remainingWords -= matches.count
+            var tokens = matches.map { match in
+                AnalysisToken(text: nsLine.substring(with: match.range), size: nil, bold: false,
+                    italic: false, confidence: 1, source: .embedded)
+            }
+            var topFraction: Double?
+            for (index, match) in matches.enumerated() {
+                let offset = range.location + match.range.location
+                if offset < page.numberOfCharacters {
+                    let bounds = page.characterBounds(at: offset)
+                    if bounds.height.isFinite, bounds.height > 0 {
+                        tokens[index].size = Double(bounds.height)
+                        if topFraction == nil, box.height > 0 {
+                            topFraction = Double((box.maxY - bounds.maxY) / box.height)
+                        }
+                    }
+                }
+                if stylesAligned, let attributed, offset < attributed.length,
+                   let font = attributed.attribute(.font, at: offset, effectiveRange: nil) as? UIFont {
+                    if tokens[index].size == nil { tokens[index].size = Double(font.pointSize) }
+                    let traits = font.fontDescriptor.symbolicTraits
+                    let name = font.fontName.lowercased()
+                    tokens[index].bold = traits.contains(.traitBold) || name.contains("bold") || name.contains("heavy")
+                    tokens[index].italic = traits.contains(.traitItalic) || name.contains("italic") || name.contains("oblique")
+                }
+            }
+            lines.append(AnalysisLine(text: substring, tokens: tokens, topFraction: topFraction))
+        }
+        return AnalysisPage(text: text, lines: lines)
+    }
+
+    static func ocrLine(_ text: String, bounds: CGRect, pageHeight: CGFloat, confidence: Float) -> AnalysisLine {
+        let size = Double(bounds.height * pageHeight)
+        let usableSize = size.isFinite && size > 0 ? size : nil
+        let tokens = tokens(in: text, source: .ocr).map { token in
+            AnalysisToken(text: token.text, size: usableSize, bold: false, italic: false,
+                confidence: confidence, source: .ocr)
+        }
+        return AnalysisLine(text: text, tokens: tokens, topFraction: Double(1 - bounds.maxY))
+    }
+
+    static func usingOCRGeometry(_ observed: [AnalysisLine], for native: AnalysisPage) -> AnalysisPage {
+        var result = native
+        let indexes = Dictionary(grouping: result.lines.indices, by: { lineKey(result.lines[$0].text) })
+        for line in observed {
+            let key = lineKey(line.text)
+            guard let matches = indexes[key], matches.count == 1, let index = matches.first,
+                  let sample = line.tokens.first, sample.confidence >= 0.5, sample.size != nil else { continue }
+            result.lines[index].topFraction = line.topFraction
+            for tokenIndex in result.lines[index].tokens.indices {
+                result.lines[index].tokens[tokenIndex].size = sample.size
+                result.lines[index].tokens[tokenIndex].confidence = sample.confidence
+                result.lines[index].tokens[tokenIndex].source = .ocr
+            }
+        }
+        return result
+    }
+
+    private static func lineKey(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    private static func tokens(in text: String, source: TextSource) -> [AnalysisToken] {
+        let nsText = text as NSString
+        return wordPattern.matches(in: text, range: NSRange(location: 0, length: nsText.length)).map { match in
+            AnalysisToken(text: nsText.substring(with: match.range), size: nil, bold: false,
+                italic: false, confidence: 1, source: source)
+        }
     }
 
     private static func resolveDates(_ text: String) -> (date: DocumentDate, suggestions: [DateSuggestion]) {
@@ -111,44 +233,77 @@ enum DocumentAnalyzer {
         return String(format: "%04d-%02d-%02d", year, month, day)
     }
 
+    // Do not hard-exclude document topics or field labels; ranking can demote boilerplate.
     private static let stopwords: Set<String> = Set("""
         the and for with from this that your you are was were have has had but not all can will would should one two three
         der die das den dem des ein eine einer eines einem und oder mit von vom zur zum aus auf bei für ist sind war wurden
         sie wir ihr ihre ihren nicht auch über unter durch nach vor bis als am im in an zu du de la le les et en un une
-        page seite www http https com net org bank iban bic ust id kundenservice telefon phone email info
-        invoice date number total datum nummer betrag
+        page seite www http https com net org
         """.split(whereSeparator: \.isWhitespace).map(String.init))
 
-    private static func rankWords(_ pages: [String]) -> [RankedWord] {
-        guard let wordPattern = try? NSRegularExpression(pattern: #"[\p{L}][\p{L}\p{M}]{2,}"#) else { return [] }
+    // A narrow hint for common document types, never a substitute for prominence.
+    private static let documentTypeWords: Set<String> = ["rechnung", "mahnung", "invoice"]
+
+    private struct SizeGroup: Hashable {
+        var page: Int
+        var source: TextSource
+    }
+
+    private static func median(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        let middle = sorted.count / 2
+        return sorted.count.isMultiple(of: 2) ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
+    }
+
+    private static func rankWords(_ pages: [AnalysisPage]) -> [RankedWord] {
         var counts: [String: (display: String, count: Int, bonus: Double, first: Int)] = [:]
         var order = 0
-        var repeatedLines: [String: Int] = [:]
-        for page in pages {
-            for line in page.split(separator: "\n") {
-                let key = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if !key.isEmpty { repeatedLines[key, default: 0] += 1 }
+        var linePages: [String: Set<Int>] = [:]
+        var sizesByGroup: [SizeGroup: [Double]] = [:]
+        var sizesBySource: [TextSource: [Double]] = [:]
+        for (pageIndex, page) in pages.enumerated() {
+            for line in page.lines {
+                let key = lineKey(line.text)
+                if !key.isEmpty { linePages[key, default: []].insert(pageIndex) }
+                for token in line.tokens {
+                    guard let size = token.size, size.isFinite, size > 0, size < 1_000,
+                          token.confidence >= 0.5 else { continue }
+                    sizesByGroup[SizeGroup(page: pageIndex, source: token.source), default: []].append(size)
+                    sizesBySource[token.source, default: []].append(size)
+                }
             }
         }
+        let groupMedians = sizesByGroup.compactMapValues(median)
+        let sourceMedians = sizesBySource.compactMapValues(median)
         for (pageIndex, page) in pages.enumerated() {
-            for (lineIndex, line) in page.split(separator: "\n").enumerated() {
-                let normalizedLine = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if repeatedLines[normalizedLine, default: 0] > 1 && pages.count > 1 { continue }
-                let lineText = String(line)
-                let nsLine = lineText as NSString
+            for (lineIndex, line) in page.lines.enumerated() {
+                let normalizedLine = lineKey(line.text)
+                if (linePages[normalizedLine]?.count ?? 0) > 1 { continue }
                 var wordsOnLine: Set<String> = []
-                for match in wordPattern.matches(in: lineText, range: NSRange(location: 0, length: nsLine.length)) {
-                    let display = nsLine.substring(with: match.range)
+                for token in line.tokens {
+                    let display = token.text
                     let key = display.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
                     guard !stopwords.contains(key), display.count <= 36, wordsOnLine.insert(key).inserted else { continue }
-                    let heading = pageIndex == 0 && lineIndex < 4 ? 2.5 : 0
-                    let uppercase = display.count > 3 && display == display.uppercased() ? 0.3 : 0
+                    let heading = pageIndex == 0 && lineIndex < 4 && (line.topFraction ?? 0) < 0.45 ? 0.65 : 0
+                    let footer = (line.topFraction ?? 0) > 0.85 ? -0.35 : 0
+                    let uppercase = display.count > 3 && display == display.uppercased() ? 0.12 : 0
+                    let group = SizeGroup(page: pageIndex, source: token.source)
+                    let baseline = (sizesByGroup[group]?.count ?? 0) >= 4 ? groupMedians[group] : sourceMedians[token.source]
+                    var sizeBonus = 0.0
+                    if let size = token.size, let baseline, baseline > 0, token.confidence >= 0.5 {
+                        sizeBonus = min(0.9, max(0, log2(size / baseline)) * 0.65)
+                    }
+                    let styleBonus = (token.bold ? 0.3 : 0) + (token.italic ? 0.08 : 0)
+                    let prominent = (heading > 0 && line.tokens.count <= 6) || sizeBonus >= 0.25 || token.bold
+                    let typeBonus = documentTypeWords.contains(key) && prominent ? 0.25 : 0
+                    let bonus = heading + footer + uppercase + sizeBonus + styleBonus + typeBonus
                     if var item = counts[key] {
                         item.count += 1
-                        item.bonus = max(item.bonus, heading + uppercase)
+                        item.bonus = max(item.bonus, bonus)
                         counts[key] = item
                     } else {
-                        counts[key] = (display, 1, heading + uppercase, order)
+                        counts[key] = (display, 1, bonus, order)
                     }
                     order += 1
                 }

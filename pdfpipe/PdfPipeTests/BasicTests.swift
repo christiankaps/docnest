@@ -5,6 +5,89 @@ import UIKit
 
 @MainActor
 final class BasicTests: XCTestCase {
+    func testWordSuggestionsKeepDocumentTermsButFilterFiller() {
+        let analysis = DocumentAnalyzer.analyze(pages: [
+            "Invoice Rechnung Mahnung Bank Kundenservice Total Betrag IBAN Telefon Email Date Datum Number Nummer",
+            "the und www"
+        ])
+        let suggestions = Set(analysis.words.map { $0.text.lowercased() })
+        for term in ["invoice", "rechnung", "mahnung", "bank", "kundenservice", "total", "betrag",
+                     "iban", "telefon", "email", "date", "datum", "number", "nummer"] {
+            XCTAssertTrue(suggestions.contains(term), "Missing document term: \(term)")
+        }
+        for filler in ["the", "und", "www"] {
+            XCTAssertFalse(suggestions.contains(filler), "Unexpected filler: \(filler)")
+        }
+    }
+
+    func testWordRankingUsesCappedSizeAndStyleWithoutPromotingRepeatedHeaders() {
+        func token(_ text: String, size: Double?, bold: Bool = false, italic: Bool = false) -> AnalysisToken {
+            AnalysisToken(text: text, size: size, bold: bold, italic: italic, confidence: 1, source: .embedded)
+        }
+        func line(_ word: String, size: Double?, top: Double, bold: Bool = false, italic: Bool = false) -> AnalysisLine {
+            AnalysisLine(text: word, tokens: [token(word, size: size, bold: bold, italic: italic)], topFraction: top)
+        }
+        let first = AnalysisPage(text: "", lines: [
+            line("Giantlogo", size: 80, top: 0.02),
+            line("Subject", size: 22, top: 0.12, bold: true),
+            line("Ordinary", size: 11, top: 0.20),
+            line("Details", size: 11, top: 0.25),
+            line("Emphasis", size: 11, top: 0.50, italic: true),
+            line("Baseline", size: 11, top: 0.55),
+            line("Confidential", size: 11, top: 0.95)
+        ])
+        let second = AnalysisPage(text: "", lines: [
+            line("Context", size: 11, top: 0.20),
+            line("Another", size: 11, top: 0.25),
+            line("Confidential", size: 11, top: 0.95)
+        ])
+        let ranked = DocumentAnalyzer.analyze(pages: [first, second]).words
+        let scores = Dictionary(uniqueKeysWithValues: ranked.map { ($0.id, $0.score) })
+        XCTAssertGreaterThan(scores["subject"] ?? 0, scores["giantlogo"] ?? 0)
+        XCTAssertGreaterThan(scores["emphasis"] ?? 0, scores["baseline"] ?? 0)
+        XCTAssertNil(scores["confidential"])
+        XCTAssertEqual(DocumentAnalyzer.analyze(pages: ["Alpha Beta"]).words.map(\.text), ["Alpha", "Beta"])
+
+        let types = AnalysisPage(text: "", lines: [
+            line("Invoice", size: nil, top: 0.10),
+            line("Contract", size: nil, top: 0.12),
+            line("Context", size: nil, top: 0.20),
+            line("Details", size: nil, top: 0.25),
+            line("Mahnung", size: nil, top: 0.60),
+            line("Reminder", size: nil, top: 0.65)
+        ])
+        let typeScores = Dictionary(uniqueKeysWithValues: DocumentAnalyzer.analyze(pages: [types]).words.map { ($0.id, $0.score) })
+        XCTAssertGreaterThan(typeScores["invoice"] ?? 0, typeScores["contract"] ?? 0)
+        XCTAssertEqual(typeScores["mahnung"], typeScores["reminder"])
+
+        let native = AnalysisPage(text: "Invoice", lines: [line("Invoice", size: 10, top: 0.50)])
+        let recognized = DocumentAnalyzer.ocrLine("Invoice", bounds: CGRect(x: 0.1, y: 0.8, width: 0.3, height: 0.05),
+            pageHeight: 600, confidence: 0.9)
+        let enriched = DocumentAnalyzer.usingOCRGeometry([recognized], for: native)
+        XCTAssertEqual(enriched.lines[0].tokens[0].size, 30)
+        XCTAssertEqual(enriched.lines[0].tokens[0].source, .ocr)
+    }
+
+    func testNativePDFTextCarriesVisualSize() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792))
+        try renderer.writePDF(to: url) { context in
+            context.beginPage()
+            ("Ordinary details" as NSString).draw(at: CGPoint(x: 40, y: 60),
+                withAttributes: [.font: UIFont.systemFont(ofSize: 12)])
+            ("Subject" as NSString).draw(at: CGPoint(x: 40, y: 150),
+                withAttributes: [.font: UIFont.boldSystemFont(ofSize: 28)])
+            ("Emphasis" as NSString).draw(at: CGPoint(x: 40, y: 240),
+                withAttributes: [.font: UIFont.italicSystemFont(ofSize: 12)])
+        }
+        let page = try XCTUnwrap(PDFDocument(url: url)?.page(at: 0))
+        let tokens = DocumentAnalyzer.extractPage(page).lines.flatMap(\.tokens)
+        let ordinary = try XCTUnwrap(tokens.first { $0.text == "Ordinary" })
+        let subject = try XCTUnwrap(tokens.first { $0.text == "Subject" })
+        XCTAssertGreaterThan(subject.size ?? 0, ordinary.size ?? 0)
+    }
+
     func testFilenameJoinsKeepEarlierSeparatorsAndManualEditCanUndo() throws {
         var name = FilenameComposer()
         name.append(id: "date", value: "2026-10-05")
@@ -51,6 +134,9 @@ final class BasicTests: XCTestCase {
         let selected = page.selection(for: page.bounds(for: .cropBox))?.string ?? ""
         XCTAssertTrue(selected.localizedCaseInsensitiveContains("ACME"),
             "OCR status: \(result.status); PDFKit page text: \(extracted); selection: \(selected)")
+        let suggestedWords = Set(result.analysis.words.map(\.id))
+        XCTAssertTrue(suggestedWords.contains("acme"))
+        XCTAssertTrue(suggestedWords.contains("invoice"))
         XCTAssertEqual(try Data(contentsOf: source), original)
     }
 }

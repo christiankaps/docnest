@@ -5,13 +5,14 @@ import CoreText
 
 struct OCRPayload {
     var url: URL
-    var pages: [String]
+    var pages: [AnalysisPage]
     var status: String
 }
 
 private struct OCRLine {
     var text: String
     var bounds: CGRect
+    var confidence: Float
 }
 
 /// Recognition always runs. PDF re-emission happens only when missing text can be
@@ -23,7 +24,7 @@ enum AutomaticOCR {
             throw PipeError.message("Cannot open the PDF for OCR.")
         }
         let deadline = Date().addingTimeInterval(120)
-        var pages: [String] = []
+        var pages: [AnalysisPage] = []
         var missingByPage: [[OCRLine]] = []
         for index in 0..<pdf.pageCount {
             try Task.checkCancellation()
@@ -61,9 +62,15 @@ enum AutomaticOCR {
                 request.automaticallyDetectsLanguage = true
                 try VNImageRequestHandler(cgImage: image).perform([request])
                 return (request.results ?? []).compactMap { observation in
-                    guard let text = observation.topCandidates(1).first?.string,
-                          !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-                    return OCRLine(text: text, bounds: observation.boundingBox)
+                    guard let candidate = observation.topCandidates(1).first else { return nil }
+                    let text = candidate.string
+                    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+                    return OCRLine(text: text, bounds: observation.boundingBox, confidence: candidate.confidence)
+                }.sorted { left, right in
+                    if abs(left.bounds.midY - right.bounds.midY) > 0.02 {
+                        return left.bounds.midY > right.bounds.midY
+                    }
+                    return left.bounds.minX < right.bounds.minX
                 }
             }
             try Task.checkCancellation()
@@ -82,7 +89,17 @@ enum AutomaticOCR {
                     return !overlap.isNull && overlap.width * overlap.height > observed.width * observed.height * 0.35
                 }
             }
-            pages.append(embedded + "\n" + missing.map(\.text).joined(separator: "\n"))
+            let observed = lines.map {
+                DocumentAnalyzer.ocrLine($0.text, bounds: $0.bounds, pageHeight: height,
+                    confidence: $0.confidence)
+            }
+            let native = DocumentAnalyzer.usingOCRGeometry(observed, for: DocumentAnalyzer.extractPage(page))
+            let missingAnalysis = missing.map {
+                DocumentAnalyzer.ocrLine($0.text, bounds: $0.bounds, pageHeight: height,
+                    confidence: $0.confidence)
+            }
+            pages.append(AnalysisPage(text: native.text + "\n" + missing.map(\.text).joined(separator: "\n"),
+                lines: native.lines + missingAnalysis))
             missingByPage.append(missing)
         }
 
