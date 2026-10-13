@@ -5,6 +5,25 @@ import UIKit
 
 @MainActor
 final class BasicTests: XCTestCase {
+    func testEarlyAndRepeatedWordsRemainVisibleInCrowdedDocuments() {
+        let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        let bodyWords = (0..<35).map { "Fachwort\(alphabet[$0 / 26])\(alphabet[$0 % 26])" }
+        let crowded = (["Absender", "Anschrift", "Kontakt", "Kundennummer", "Referenz", "Datum", "Betreff: Rechnung"]
+            + bodyWords + bodyWords + bodyWords).joined(separator: "\n")
+        XCTAssertTrue(DocumentAnalyzer.analyze(pages: [crowded]).words.contains { $0.id == "rechnung" })
+        let splitSubject = (["Absender", "Anschrift", "Kontakt", "Kundennummer", "Referenz", "Datum", "Thema:", "Lieferumfang"]
+            + bodyWords + bodyWords + bodyWords).joined(separator: "\n")
+        XCTAssertTrue(DocumentAnalyzer.analyze(pages: [splitSubject]).words.contains { $0.id == "lieferumfang" })
+        XCTAssertTrue(DocumentAnalyzer.analyze(pages: ["Wartungsplan\nInhalt", "Wartungsplan\nWeitere Details"])
+            .words.contains { $0.id == "wartungsplan" })
+
+        let opening = Array(repeating: "Filler", count: 12).joined(separator: "\n") + "\nEinleitung"
+        let pages = [opening] + Array(repeating: "Zwischenseite", count: 4) + ["Anhang"]
+        let pageScores = Dictionary(uniqueKeysWithValues: DocumentAnalyzer.analyze(pages: pages)
+            .words.map { ($0.id, $0.score) })
+        XCTAssertGreaterThan((pageScores["einleitung"] ?? 0) - (pageScores["anhang"] ?? 0), 0.8)
+    }
+
     func testWordSuggestionsKeepDocumentTermsButFilterFiller() {
         let analysis = DocumentAnalyzer.analyze(pages: [
             "Invoice Rechnung Mahnung Bank Kundenservice Total Betrag IBAN Telefon Email Date Datum Number Nummer",
@@ -45,10 +64,10 @@ final class BasicTests: XCTestCase {
         let scores = Dictionary(uniqueKeysWithValues: ranked.map { ($0.id, $0.score) })
         XCTAssertGreaterThan(scores["subject"] ?? 0, scores["giantlogo"] ?? 0)
         XCTAssertGreaterThan(scores["emphasis"] ?? 0, scores["baseline"] ?? 0)
-        XCTAssertNil(scores["confidential"])
+        XCTAssertLessThan(scores["confidential"] ?? 0, scores["baseline"] ?? 0)
         XCTAssertEqual(DocumentAnalyzer.analyze(pages: ["Alpha Beta"]).words.map(\.text), ["Alpha", "Beta"])
 
-        let types = AnalysisPage(text: "", lines: [
+        let neutralTerms = AnalysisPage(text: "", lines: [
             line("Invoice", size: nil, top: 0.10),
             line("Contract", size: nil, top: 0.12),
             line("Context", size: nil, top: 0.20),
@@ -56,16 +75,26 @@ final class BasicTests: XCTestCase {
             line("Mahnung", size: nil, top: 0.60),
             line("Reminder", size: nil, top: 0.65)
         ])
-        let typeScores = Dictionary(uniqueKeysWithValues: DocumentAnalyzer.analyze(pages: [types]).words.map { ($0.id, $0.score) })
-        XCTAssertGreaterThan(typeScores["invoice"] ?? 0, typeScores["contract"] ?? 0)
-        XCTAssertEqual(typeScores["mahnung"], typeScores["reminder"])
+        let neutralScores = Dictionary(uniqueKeysWithValues: DocumentAnalyzer.analyze(pages: [neutralTerms]).words.map { ($0.id, $0.score) })
+        XCTAssertEqual(neutralScores["invoice"], neutralScores["contract"])
+        XCTAssertEqual(neutralScores["mahnung"], neutralScores["reminder"])
 
         let native = AnalysisPage(text: "Invoice", lines: [line("Invoice", size: 10, top: 0.50)])
         let recognized = DocumentAnalyzer.ocrLine("Invoice", bounds: CGRect(x: 0.1, y: 0.8, width: 0.3, height: 0.05),
             pageHeight: 600, confidence: 0.9)
-        let enriched = DocumentAnalyzer.usingOCRGeometry([recognized], for: native)
+        let enriched = DocumentAnalyzer.mergingOCR([recognized], into: native)
         XCTAssertEqual(enriched.lines[0].tokens[0].size, 30)
         XCTAssertEqual(enriched.lines[0].tokens[0].source, .ocr)
+
+        let fragmented = AnalysisPage(text: "Rech nung", lines: [
+            AnalysisLine(text: "Rech nung", tokens: [token("Rech", size: 10), token("nung", size: 10)],
+                topFraction: 0.15)
+        ])
+        let corrected = DocumentAnalyzer.ocrLine("Rechnung", bounds: CGRect(x: 0.1, y: 0.8, width: 0.3, height: 0.05),
+            pageHeight: 600, confidence: 0.9)
+        let merged = DocumentAnalyzer.mergingOCR([corrected], into: fragmented)
+        XCTAssertTrue(DocumentAnalyzer.analyze(pages: [merged]).words.contains { $0.id == "rechnung" })
+        XCTAssertEqual(enriched.lines.count, 1, "Matching OCR must not count an existing line twice")
     }
 
     func testNativePDFTextCarriesVisualSize() throws {

@@ -143,26 +143,43 @@ enum DocumentAnalyzer {
         return AnalysisLine(text: text, tokens: tokens, topFraction: Double(1 - bounds.maxY))
     }
 
-    static func usingOCRGeometry(_ observed: [AnalysisLine], for native: AnalysisPage) -> AnalysisPage {
+    static func mergingOCR(_ observed: [AnalysisLine], into native: AnalysisPage) -> AnalysisPage {
         var result = native
         let indexes = Dictionary(grouping: result.lines.indices, by: { lineKey(result.lines[$0].text) })
         for line in observed {
             let key = lineKey(line.text)
-            guard let matches = indexes[key], matches.count == 1, let index = matches.first,
-                  let sample = line.tokens.first, sample.confidence >= 0.5, sample.size != nil else { continue }
-            result.lines[index].topFraction = line.topFraction
-            for tokenIndex in result.lines[index].tokens.indices {
-                result.lines[index].tokens[tokenIndex].size = sample.size
-                result.lines[index].tokens[tokenIndex].confidence = sample.confidence
-                result.lines[index].tokens[tokenIndex].source = .ocr
+            if let matches = indexes[key], matches.count == 1, let index = matches.first,
+               !result.lines[index].tokens.isEmpty {
+                if let sample = line.tokens.first, sample.confidence >= 0.5, sample.size != nil {
+                    result.lines[index].topFraction = line.topFraction
+                    for tokenIndex in result.lines[index].tokens.indices {
+                        result.lines[index].tokens[tokenIndex].size = sample.size
+                        result.lines[index].tokens[tokenIndex].confidence = sample.confidence
+                        result.lines[index].tokens[tokenIndex].source = .ocr
+                    }
+                }
+                continue
+            }
+            let nearbyWords = Set(native.lines.filter { nativeLine in
+                guard let first = nativeLine.topFraction, let second = line.topFraction else { return false }
+                return abs(first - second) < 0.04
+            }.flatMap(\.tokens).map { wordKey($0.text) })
+            let extra = line.tokens.filter { $0.confidence >= 0.5 && !nearbyWords.contains(wordKey($0.text)) }
+            if !extra.isEmpty {
+                result.lines.append(AnalysisLine(text: line.text, tokens: extra, topFraction: line.topFraction))
             }
         }
+        result.text += "\n" + observed.map(\.text).joined(separator: "\n")
         return result
     }
 
     private static func lineKey(_ text: String) -> String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    private static func wordKey(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
     private static func tokens(in text: String, source: TextSource) -> [AnalysisToken] {
@@ -241,9 +258,6 @@ enum DocumentAnalyzer {
         page seite www http https com net org
         """.split(whereSeparator: \.isWhitespace).map(String.init))
 
-    // A narrow hint for common document types, never a substitute for prominence.
-    private static let documentTypeWords: Set<String> = ["rechnung", "mahnung", "invoice"]
-
     private struct SizeGroup: Hashable {
         var page: Int
         var source: TextSource
@@ -276,16 +290,20 @@ enum DocumentAnalyzer {
         }
         let groupMedians = sizesByGroup.compactMapValues(median)
         let sourceMedians = sizesBySource.compactMapValues(median)
+        var countedRepeatedLines: Set<String> = []
         for (pageIndex, page) in pages.enumerated() {
+            let pageBonus = 1.2 / (1 + 0.6 * Double(pageIndex))
             for (lineIndex, line) in page.lines.enumerated() {
                 let normalizedLine = lineKey(line.text)
-                if (linePages[normalizedLine]?.count ?? 0) > 1 { continue }
+                if (linePages[normalizedLine]?.count ?? 0) > 1,
+                   !countedRepeatedLines.insert(normalizedLine).inserted { continue }
                 var wordsOnLine: Set<String> = []
                 for token in line.tokens {
                     let display = token.text
-                    let key = display.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+                    let key = wordKey(display)
                     guard !stopwords.contains(key), display.count <= 36, wordsOnLine.insert(key).inserted else { continue }
-                    let heading = pageIndex == 0 && lineIndex < 4 && (line.topFraction ?? 0) < 0.45 ? 0.65 : 0
+                    let heading = pageIndex == 0 && lineIndex < 12 && (line.topFraction ?? 0) < 0.45 &&
+                        line.tokens.count <= 10 ? 0.85 : 0
                     let footer = (line.topFraction ?? 0) > 0.85 ? -0.35 : 0
                     let uppercase = display.count > 3 && display == display.uppercased() ? 0.12 : 0
                     let group = SizeGroup(page: pageIndex, source: token.source)
@@ -295,9 +313,7 @@ enum DocumentAnalyzer {
                         sizeBonus = min(0.9, max(0, log2(size / baseline)) * 0.65)
                     }
                     let styleBonus = (token.bold ? 0.3 : 0) + (token.italic ? 0.08 : 0)
-                    let prominent = (heading > 0 && line.tokens.count <= 6) || sizeBonus >= 0.25 || token.bold
-                    let typeBonus = documentTypeWords.contains(key) && prominent ? 0.25 : 0
-                    let bonus = heading + footer + uppercase + sizeBonus + styleBonus + typeBonus
+                    let bonus = pageBonus + heading + footer + uppercase + sizeBonus + styleBonus
                     if var item = counts[key] {
                         item.count += 1
                         item.bonus = max(item.bonus, bonus)
@@ -310,7 +326,8 @@ enum DocumentAnalyzer {
             }
         }
         return counts.map { _, item in
-            (word: RankedWord(text: item.display, score: 1 + log(Double(item.count)) + item.bonus), first: item.first)
+            (word: RankedWord(text: item.display,
+                score: 1 + min(0.75, log(Double(item.count)) * 0.45) + item.bonus), first: item.first)
         }.sorted { a, b in
             if a.word.score != b.word.score { return a.word.score > b.word.score }
             if a.first != b.first { return a.first < b.first }

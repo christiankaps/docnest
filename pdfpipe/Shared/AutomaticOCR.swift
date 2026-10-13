@@ -93,13 +93,7 @@ enum AutomaticOCR {
                 DocumentAnalyzer.ocrLine($0.text, bounds: $0.bounds, pageHeight: height,
                     confidence: $0.confidence)
             }
-            let native = DocumentAnalyzer.usingOCRGeometry(observed, for: DocumentAnalyzer.extractPage(page))
-            let missingAnalysis = missing.map {
-                DocumentAnalyzer.ocrLine($0.text, bounds: $0.bounds, pageHeight: height,
-                    confidence: $0.confidence)
-            }
-            pages.append(AnalysisPage(text: native.text + "\n" + missing.map(\.text).joined(separator: "\n"),
-                lines: native.lines + missingAnalysis))
+            pages.append(DocumentAnalyzer.mergingOCR(observed, into: DocumentAnalyzer.extractPage(page)))
             missingByPage.append(missing)
         }
 

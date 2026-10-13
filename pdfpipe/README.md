@@ -30,9 +30,10 @@ make build
 make test
 make verify
 make build-release
+make flash DEVICE_ID=<paired-iPhone-id>
 ```
 
-`make test` runs two focused unit tests and one simulator UI smoke test. `make verify` regenerates the project, runs that suite, then performs static analysis and an optimized unsigned device Release build. Swift and C-family compiler warnings are errors; Clang analyzer findings are errors. Override `DESTINATION` to use another simulator. `make build-device` checks unsigned device compilation; installing on an iPhone requires Apple development signing for the app, share extension, and App Group.
+`make test` runs a short unit suite and one simulator UI smoke test. `make verify` regenerates the project, runs that suite, then performs static analysis and an optimized unsigned device Release build. `make flash` performs the same Release analysis with development signing, then installs and launches the app on the specified paired iPhone (`xcrun devicectl list devices` shows its ID). Swift and C-family compiler warnings are errors; Clang analyzer findings are errors. Override `DESTINATION` to use another simulator. `make build-device` checks unsigned device compilation; installing on an iPhone requires Apple development signing for the app, share extension, and App Group.
 
 The one-flow redesign passed the simulator smoke suite and Release analysis/build on 13 October 2026. A signed Release was installed and launched on Christians iPhone 14 Pro. Real-file share-extension, Files-provider, OCR resource, and configured-folder checks on the iPhone remain the final device qualification; installation and launch alone do not prove those paths.
 
