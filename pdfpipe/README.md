@@ -1,5 +1,7 @@
 # PDF Pipe
 
+This README describes the current installed MVP. The accepted single-flow, user-controlled naming redesign is specified in [PROJECT.md](PROJECT.md), with implementation increments in [PLAN.md](PLAN.md).
+
 An iPhone document workbench: share a PDF or image, process a temporary copy through a saved pipeline, then share or save the result. Originals stay unchanged. There is no document library.
 
 Requires iOS 26 or later. Built with SwiftUI, PDFKit, Vision, Core Graphics, and native system pickers, with no third-party runtime dependencies.
@@ -70,6 +72,6 @@ No credentials, signing identities, or invented team identifiers are included. D
 
 Before distribution, test real-device sharing from Files and other host apps, app-to-extension folder access, iCloud/third-party destinations, revoked permissions, extension memory/termination behavior, cancellation and interrupted-session cleanup. Simulator checks do not establish this physical-device feasibility gate.
 
-Current simulator verification and remaining targeted physical-device checks are recorded in PLAN.md. The prior iPhone baseline covered installation, 27 unit tests, app/share-extension interaction, actual Inbox import, and abandoned-session cleanup on an iPhone 14 Pro running iOS 27.0.1. It predates the document-derived naming implementation. Provider/resource behavior remains to be verified where simulator evidence is insufficient.
+The current MVP passed its simulator integration gate, including unit/UI tests, static analysis, and an optimized unsigned device Release build. Prior targeted iPhone checks covered installation, app/share-extension interaction, Inbox import, and abandoned-session cleanup; provider/resource behavior still needs targeted proof. The new flow has not yet been implemented or installed.
 
-See [PROJECT.md](PROJECT.md) for product scope and verification status, [ARCHITECTURE.md](ARCHITECTURE.md) for implementation ownership, and [PLAN.md](PLAN.md) for remaining work.
+See [PROJECT.md](PROJECT.md) for the accepted product direction, [ARCHITECTURE.md](ARCHITECTURE.md) for current implementation ownership, and [PLAN.md](PLAN.md) for the staged redesign.

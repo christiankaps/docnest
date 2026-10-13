@@ -1,5 +1,7 @@
 # PDF Pipe architecture
 
+This records the current MVP implementation. The accepted one-flow redesign and its staged replacement are defined in [PROJECT.md](PROJECT.md) and [PLAN.md](PLAN.md).
+
 ## Targets and shared implementation
 
 - `PdfPipe/`: SwiftUI app, chip-based pipeline editor, native Files import, selected v1 light/dark/tinted icon family, and explicit DEBUG-only synthetic UI-test fixture.
