@@ -2,12 +2,12 @@ import SwiftUI
 
 struct OneFlowWorkbenchView: View {
     @ObservedObject var model: OneFlowSessionModel
-    @ObservedObject var settings: OneFlowSettingsStore
     @State private var shareURL: URL?
     @State private var exportURL: URL?
     @State private var exportedName: String?
     @State private var preparingExport = false
     @State private var showingDetails = false
+    @State private var showingTextInspection = false
     @ScaledMetric(relativeTo: .body) private var cloudSize: CGFloat = 15
 
     var body: some View {
@@ -18,12 +18,10 @@ struct OneFlowWorkbenchView: View {
                     case .idle:
                         ContentUnavailableView("No document", systemImage: "doc",
                             description: Text("Open one PDF, JPEG, or PNG file to begin."))
-                    case .processing, .saving:
+                    case .processing:
                         VStack(alignment: .leading, spacing: 16) {
                             ProgressView(model.progress)
-                            if model.phase == .processing {
-                                Button("Cancel processing", role: .cancel) { model.discard() }
-                            }
+                            Button("Cancel processing", role: .cancel) { model.discard() }
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     case .ready:
                         if let document = model.document {
@@ -33,6 +31,7 @@ struct OneFlowWorkbenchView: View {
                                 .accessibilityLabel("PDF preview")
                             Label(model.ocrStatus, systemImage: "text.viewfinder")
                                 .font(.subheadline).foregroundStyle(.secondary)
+                            textSourceSection
                             DisclosureGroup("Document details", isExpanded: $showingDetails) {
                                 details(document.facts)
                             }
@@ -59,7 +58,7 @@ struct OneFlowWorkbenchView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     if case .finished = model.phase { } else {
                         Button("Discard", role: .destructive) { model.discard() }
-                            .disabled(preparingExport || model.phase == .saving)
+                            .disabled(preparingExport)
                     }
                 }
             }
@@ -91,6 +90,9 @@ struct OneFlowWorkbenchView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingTextInspection) {
+                TextInspectionView(model: model)
+            }
         }
         .tint(PipeAppearance.accent)
     }
@@ -102,6 +104,25 @@ struct OneFlowWorkbenchView: View {
             Text("Source: \(facts.sourceFormat) · \(facts.dimensions)")
             Text(facts.hasText ? "Embedded text available" : "No embedded text before OCR")
         }.font(.subheadline).foregroundStyle(.secondary)
+    }
+
+    private var textSourceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Text source · Debug", systemImage: "ladybug")
+                .font(.subheadline.weight(.semibold))
+            Picker("Suggestions from", selection: $model.inspectionSource) {
+                ForEach(InspectionSource.allCases) { source in
+                    Text(source.rawValue).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("textSourcePicker")
+            Text("Dates and words update with the selected text. Your filename stays as composed.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("View full text and diff", systemImage: "doc.text.magnifyingglass") {
+                showingTextInspection = true
+            }
+        }
     }
 
     private var dateSection: some View {
@@ -131,6 +152,8 @@ struct OneFlowWorkbenchView: View {
     private var wordSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Suggested words").font(.headline)
+            Text("Hold a word to rate it. Your rating changes future suggestions, not this document.")
+                .font(.caption).foregroundStyle(.secondary)
             if model.analysis.words.isEmpty {
                 Text("No useful words found. Type a word or a complete filename below.")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -139,17 +162,36 @@ struct OneFlowWorkbenchView: View {
                 FlowLayout(spacing: 8) {
                     ForEach(model.analysis.words) { word in
                         let order = model.composer.order(of: "word:\(word.id)")
-                        Button { model.toggleWord(word) } label: {
+                        let vote = model.vote(for: word)
+                        Menu {
+                            Button { model.setVote(.up, for: word) } label: {
+                                Label("More important", systemImage: vote == .up ? "hand.thumbsup.fill" : "hand.thumbsup")
+                            }
+                            Button { model.setVote(.down, for: word) } label: {
+                                Label("Less important", systemImage: vote == .down ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                            }
+                            if vote != nil {
+                                Button { model.setVote(nil, for: word) } label: {
+                                    Label("Remove rating", systemImage: "arrow.uturn.backward")
+                                }
+                            }
+                        } label: {
                             HStack(spacing: 5) {
                                 if let order { Text("\(order).").font(.caption.bold()) }
                                 Text(word.text)
+                                if let vote {
+                                    Image(systemName: vote == .up ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
+                                        .font(.caption2)
+                                }
                             }
                             .font(.system(size: cloudSize + CGFloat(3 * word.score / highest),
                                 weight: word.score / highest > 0.7 ? .semibold : .regular))
-                        }
+                        } primaryAction: { model.toggleWord(word) }
                         .buttonStyle(.bordered)
-                        .tint(order == nil ? .secondary : PipeAppearance.accent)
-                        .accessibilityLabel("\(word.text), \(order.map { "selected position \($0)" } ?? "not selected")")
+                        .tint(order != nil ? PipeAppearance.accent : vote == .up ? .green : vote == .down ? .orange : .secondary)
+                        .accessibilityLabel("\(word.text), \(order.map { "selected position \($0)" } ?? "not selected"), \(vote == .up ? "rated more important" : vote == .down ? "rated less important" : "not rated")")
+                        .accessibilityAction(named: "More important") { model.setVote(.up, for: word) }
+                        .accessibilityAction(named: "Less important") { model.setVote(.down, for: word) }
                     }
                 }
             }
@@ -199,24 +241,15 @@ struct OneFlowWorkbenchView: View {
     }
 
     private var exportActions: some View {
-        VStack(spacing: 10) {
-            HStack {
-                Button { prepareExport(share: true) } label: {
-                    Label("Share", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity)
-                }
-                Button { prepareExport(share: false) } label: {
-                    Label("Save to Files", systemImage: "folder").frame(maxWidth: .infinity)
-                }
+        HStack {
+            Button { prepareExport(share: true) } label: {
+                Label("Share", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            if let destination = settings.destination {
-                Button { model.save(destination) } label: {
-                    Label("Save to \(destination.name)", systemImage: "folder.badge.plus")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
+            Button { prepareExport(share: false) } label: {
+                Label("Save to Files", systemImage: "folder").frame(maxWidth: .infinity)
             }
         }
+        .buttonStyle(.borderedProminent)
         .disabled((try? model.composer.validFilename.get()) == nil || preparingExport)
     }
 
@@ -233,6 +266,95 @@ struct OneFlowWorkbenchView: View {
 
     private func finishExport() {
         if let exportedName { model.exported(exportedName); self.exportedName = nil }
+    }
+}
+
+private struct TextInspectionView: View {
+    private enum Tab: String, CaseIterable, Identifiable {
+        case text = "Full text"
+        case diff = "Diff"
+        var id: Self { self }
+    }
+
+    @ObservedObject var model: OneFlowSessionModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var tab: Tab = .text
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    Picker("View", selection: $tab) {
+                        ForEach(Tab.allCases) { tab in Text(tab.rawValue).tag(tab) }
+                    }
+                    .pickerStyle(.segmented)
+                    if tab == .text {
+                        Picker("Text source", selection: $model.inspectionSource) {
+                            ForEach(InspectionSource.allCases) { source in
+                                Text(source.rawValue).tag(source)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        fullText
+                    } else {
+                        Text("− PDF text   + Apple OCR")
+                            .font(.caption.monospaced()).foregroundStyle(.secondary)
+                        diffText
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Text inspection")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+
+    private var fullText: some View {
+        let pages = model.text.pages(for: model.inspectionSource)
+        return ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Page \(index + 1)").font(.headline)
+                Text(page.isEmpty ? "No text on this page." : page)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var diffText: some View {
+        let count = max(model.text.embedded.count, model.text.ocr.count)
+        return ForEach(0..<count, id: \.self) { index in
+            let embedded = index < model.text.embedded.count ? model.text.embedded[index] : ""
+            let ocr = index < model.text.ocr.count ? model.text.ocr[index] : ""
+            let rows = TextDiff.rows(embedded: embedded, ocr: ocr)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Page \(index + 1)").font(.headline)
+                if rows.isEmpty || rows.allSatisfy({ $0.kind == .unchanged }) {
+                    Text("No differences.").font(.subheadline).foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        diffLine(row)
+                    }
+                }
+            }
+        }
+    }
+
+    private func diffLine(_ row: TextDiffRow) -> some View {
+        let symbol: String
+        let color: Color
+        switch row.kind {
+        case .unchanged: symbol = " "; color = .secondary
+        case .removed: symbol = "−"; color = .red
+        case .added: symbol = "+"; color = .green
+        }
+        return Text("\(symbol) \(row.text)")
+            .font(.system(.footnote, design: .monospaced))
+            .foregroundStyle(color)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -5,6 +5,68 @@ import UIKit
 
 @MainActor
 final class BasicTests: XCTestCase {
+    func testOCRRasterTransformFillsRequestedPixels() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 612, height: 792))
+        try renderer.writePDF(to: url) { $0.beginPage() }
+        let pdf = try XCTUnwrap(CGPDFDocument(url as CFURL))
+        let page = try XCTUnwrap(pdf.page(at: 1))
+        let pixels = page.getBoxRect(.cropBox).applying(AutomaticOCR.rasterTransform(
+            for: page, pixelWidth: 1530, pixelHeight: 1980, scale: 2.5))
+        XCTAssertEqual(pixels.width, 1530, accuracy: 1)
+        XCTAssertEqual(pixels.height, 1980, accuracy: 1)
+        XCTAssertEqual(pixels.minX, 0, accuracy: 1)
+        XCTAssertEqual(pixels.minY, 0, accuracy: 1)
+    }
+
+    func testWordRatingsPersistAndAffectOnlyNewRanking() throws {
+        let suite = "WordFeedbackTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let rated = RankedWord(text: "Résumé", score: 2)
+        let other = RankedWord(text: "Invoice", score: 2.3)
+        let currentSuggestions = WordFeedback.suggestions(from: [other, rated], votes: [:])
+        XCTAssertEqual(currentSuggestions.map(\.id), ["invoice", "resume"])
+
+        let saved = try WordFeedback.set(.up, for: rated, in: defaults)
+        XCTAssertEqual(WordFeedback.load(from: defaults)["resume"], 1)
+        XCTAssertEqual(currentSuggestions.map(\.id), ["invoice", "resume"])
+        XCTAssertEqual(WordFeedback.suggestions(from: [other, rated], votes: saved).map(\.id),
+            ["resume", "invoice"])
+
+        let corrected = try WordFeedback.set(.down, for: rated, in: defaults)
+        XCTAssertEqual(corrected["resume"], -1)
+        XCTAssertEqual(WordFeedback.suggestions(from: [other, rated], votes: corrected).map(\.id),
+            ["invoice", "resume"])
+        XCTAssertEqual(WordFeedback.suggestions(from: [other], votes: corrected).map(\.id), ["invoice"])
+        try WordFeedback.clear(in: defaults)
+        XCTAssertTrue(WordFeedback.load(from: defaults).isEmpty)
+    }
+
+    func testOCRSelectsPhoneLanguageThenEnglish() {
+        let supported = ["fr-FR", "en-US", "de-DE", "es-ES"]
+        XCTAssertEqual(AutomaticOCR.prioritizedLanguages(supported, preferred: "de-AT"),
+            ["de-DE", "en-US"])
+        XCTAssertEqual(AutomaticOCR.prioritizedLanguages(supported, preferred: "en-GB"),
+            ["en-US"])
+        XCTAssertEqual(AutomaticOCR.prioritizedLanguages(["en-GB", "en-US", "de-DE"],
+            preferred: "en-GB"), ["en-GB"])
+        XCTAssertEqual(AutomaticOCR.prioritizedLanguages(supported, preferred: "ja-JP"),
+            ["en-US"])
+        XCTAssertEqual(AutomaticOCR.prioritizedLanguages(["zh-Hans", "zh-Hant", "en-US"],
+            preferred: "zh-TW"), ["zh-Hant", "en-US"])
+    }
+
+    func testTextDiffKeepsMatchingLinesAndMarksChanges() {
+        XCTAssertEqual(TextDiff.rows(embedded: "same\nold\nlast", ocr: "same\nnew\nlast"), [
+            .init(kind: .unchanged, text: "same"),
+            .init(kind: .removed, text: "old"),
+            .init(kind: .added, text: "new"),
+            .init(kind: .unchanged, text: "last")
+        ])
+    }
+
     func testEarlyAndRepeatedWordsRemainVisibleInCrowdedDocuments() {
         let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         let bodyWords = (0..<35).map { "Fachwort\(alphabet[$0 / 26])\(alphabet[$0 % 26])" }
@@ -79,12 +141,10 @@ final class BasicTests: XCTestCase {
         XCTAssertEqual(neutralScores["invoice"], neutralScores["contract"])
         XCTAssertEqual(neutralScores["mahnung"], neutralScores["reminder"])
 
-        let native = AnalysisPage(text: "Invoice", lines: [line("Invoice", size: 10, top: 0.50)])
         let recognized = DocumentAnalyzer.ocrLine("Invoice", bounds: CGRect(x: 0.1, y: 0.8, width: 0.3, height: 0.05),
             pageHeight: 600, confidence: 0.9)
-        let enriched = DocumentAnalyzer.mergingOCR([recognized], into: native)
-        XCTAssertEqual(enriched.lines[0].tokens[0].size, 30)
-        XCTAssertEqual(enriched.lines[0].tokens[0].source, .ocr)
+        XCTAssertEqual(recognized.tokens[0].size, 30)
+        XCTAssertEqual(recognized.tokens[0].source, .ocr)
 
         let fragmented = AnalysisPage(text: "Rech nung", lines: [
             AnalysisLine(text: "Rech nung", tokens: [token("Rech", size: 10), token("nung", size: 10)],
@@ -92,9 +152,9 @@ final class BasicTests: XCTestCase {
         ])
         let corrected = DocumentAnalyzer.ocrLine("Rechnung", bounds: CGRect(x: 0.1, y: 0.8, width: 0.3, height: 0.05),
             pageHeight: 600, confidence: 0.9)
-        let merged = DocumentAnalyzer.mergingOCR([corrected], into: fragmented)
-        XCTAssertTrue(DocumentAnalyzer.analyze(pages: [merged]).words.contains { $0.id == "rechnung" })
-        XCTAssertEqual(enriched.lines.count, 1, "Matching OCR must not count an existing line twice")
+        XCTAssertFalse(DocumentAnalyzer.analyze(pages: [fragmented]).words.contains { $0.id == "rechnung" })
+        XCTAssertTrue(DocumentAnalyzer.analyze(pages: [AnalysisPage(text: "Rechnung", lines: [corrected])])
+            .words.contains { $0.id == "rechnung" })
     }
 
     func testNativePDFTextCarriesVisualSize() throws {
@@ -150,6 +210,8 @@ final class BasicTests: XCTestCase {
             context.beginPage()
             ("Invoice date: 2026-10-05" as NSString).draw(at: CGPoint(x: 45, y: 50),
                 withAttributes: [.font: UIFont.systemFont(ofSize: 24)])
+            ("ACME INVOICE" as NSString).draw(at: CGPoint(x: 45, y: 100),
+                withAttributes: [.font: UIFont.systemFont(ofSize: 24)])
             image.draw(in: CGRect(x: 45, y: 250, width: 500, height: 120))
         }
         let original = try Data(contentsOf: source)
@@ -161,11 +223,14 @@ final class BasicTests: XCTestCase {
         XCTAssertTrue(extracted.contains("Invoice date: 2026-10-05"))
         let page = try XCTUnwrap(PDFDocument(url: result.document.url)?.page(at: 0))
         let selected = page.selection(for: page.bounds(for: .cropBox))?.string ?? ""
-        XCTAssertTrue(selected.localizedCaseInsensitiveContains("ACME"),
-            "OCR status: \(result.status); PDFKit page text: \(extracted); selection: \(selected)")
-        let suggestedWords = Set(result.analysis.words.map(\.id))
+        XCTAssertGreaterThanOrEqual(selected.uppercased().components(separatedBy: "ACME").count - 1, 2,
+            "OCR must add image text even when identical text exists elsewhere. Status: \(result.status); selection: \(selected)")
+        let suggestedWords = Set(result.ocrAnalysis.words.map(\.id))
         XCTAssertTrue(suggestedWords.contains("acme"))
         XCTAssertTrue(suggestedWords.contains("invoice"))
+        XCTAssertTrue(result.embeddedAnalysis.words.contains { $0.id == "acme" })
+        XCTAssertTrue(result.text.embedded[0].contains("Invoice date"))
+        XCTAssertTrue(result.text.ocr[0].contains("ACME"))
         XCTAssertEqual(try Data(contentsOf: source), original)
     }
 }

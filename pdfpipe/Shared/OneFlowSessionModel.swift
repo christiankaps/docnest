@@ -4,15 +4,19 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class OneFlowSessionModel: ObservableObject {
-    enum Phase: Equatable { case idle, processing, ready, saving, finished(String) }
+    enum Phase: Equatable { case idle, processing, ready, finished(String) }
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var document: SessionDocument?
-    @Published private(set) var analysis: DocumentAnalysis = .empty
+    @Published private(set) var embeddedAnalysis: DocumentAnalysis = .empty
+    @Published private(set) var ocrAnalysis: DocumentAnalysis = .empty
+    @Published private(set) var text = TextSnapshot.empty
+    @Published var inspectionSource: InspectionSource = .ocr
     @Published private(set) var ocrStatus = ""
     @Published private(set) var progress = ""
     @Published var composer = FilenameComposer()
     @Published var manualWord = ""
+    @Published private(set) var wordVotes: [String: Int] = WordFeedback.load()
     @Published var error: String?
     var onFinished: (() -> Void)?
 
@@ -37,6 +41,10 @@ final class OneFlowSessionModel: ObservableObject {
 
     var dateSuggestions: [DateSuggestion] {
         analysis.dates.isEmpty ? [.init(value: fallbackDate, score: 0, isAmbiguous: false)] : analysis.dates
+    }
+
+    var analysis: DocumentAnalysis {
+        inspectionSource == .embedded ? embeddedAnalysis : ocrAnalysis
     }
 
     func importFile(_ url: URL) {
@@ -114,7 +122,14 @@ final class OneFlowSessionModel: ObservableObject {
             try Task.checkCancellation()
             guard !discarding else { return }
             document = result.document
-            analysis = result.analysis
+            var embedded = result.embeddedAnalysis
+            var recognized = result.ocrAnalysis
+            embedded.words = WordFeedback.suggestions(from: embedded.words, votes: wordVotes)
+            recognized.words = WordFeedback.suggestions(from: recognized.words, votes: wordVotes)
+            embeddedAnalysis = embedded
+            ocrAnalysis = recognized
+            text = result.text
+            inspectionSource = result.ocrAnalysis.hasText ? .ocr : .embedded
             ocrStatus = result.status
             phase = .ready
         } catch { importFailed(error) }
@@ -130,6 +145,15 @@ final class OneFlowSessionModel: ObservableObject {
 
     func toggleDate(_ value: String) { toggle(id: "date:\(value)", value: value) }
     func toggleWord(_ word: RankedWord) { toggle(id: "word:\(word.id)", value: word.text) }
+
+    func vote(for word: RankedWord) -> WordFeedback.Vote? {
+        wordVotes[word.id].flatMap(WordFeedback.Vote.init(rawValue:))
+    }
+
+    func setVote(_ vote: WordFeedback.Vote?, for word: RankedWord) {
+        do { wordVotes = try WordFeedback.set(vote, for: word) }
+        catch { self.error = error.localizedDescription }
+    }
 
     private func toggle(id: String, value: String) {
         var next = composer
@@ -172,29 +196,6 @@ final class OneFlowSessionModel: ObservableObject {
         return try await engine.exportCopy(document, named: filename)
     }
 
-    func save(_ destination: Destination) {
-        guard phase == .ready else { return }
-        phase = .saving
-        progress = "Saving to \(destination.name)…"
-        task = Task {
-            do {
-                guard let document, let engine else { throw PipeError.message("No PDF is available.") }
-                let filename = try composer.validFilename.get()
-                let export = try await engine.exportCopy(document, named: filename)
-                let writer = Task.detached { try DestinationWriter.save(export, destination: destination) }
-                let saved = try await withTaskCancellationHandler { try await writer.value } onCancel: { writer.cancel() }
-                try Task.checkCancellation()
-                try cleanSession()
-                phase = .finished(saved.lastPathComponent)
-                finishOnce()
-            } catch {
-                guard !discarding else { return }
-                phase = .ready
-                self.error = error.localizedDescription
-            }
-        }
-    }
-
     func exported(_ filename: String) {
         do {
             try cleanSession()
@@ -225,6 +226,10 @@ final class OneFlowSessionModel: ObservableObject {
         engine = nil
         importProgress = nil
         document = nil
+        embeddedAnalysis = .empty
+        ocrAnalysis = .empty
+        text = .empty
+        inspectionSource = .ocr
     }
 
     private func finishOnce() {

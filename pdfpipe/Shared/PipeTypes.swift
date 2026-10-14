@@ -7,26 +7,6 @@ enum PipeError: LocalizedError, Sendable {
     }
 }
 
-struct Destination: Codable, Equatable, Sendable {
-    var bookmark: Data
-    var name: String
-
-    static func selected(_ url: URL) throws -> Destination {
-        let access = url.startAccessingSecurityScopedResource()
-        defer { if access { url.stopAccessingSecurityScopedResource() } }
-        return try Destination(bookmark: url.bookmarkData(options: .minimalBookmark,
-            includingResourceValuesForKeys: nil, relativeTo: nil), name: url.lastPathComponent)
-    }
-
-    func resolve() throws -> URL {
-        var stale = false
-        let url = try URL(resolvingBookmarkData: bookmark, options: .withoutUI, relativeTo: nil,
-            bookmarkDataIsStale: &stale)
-        guard !stale else { throw PipeError.message("Folder access expired. Choose the folder again in Settings.") }
-        return url
-    }
-}
-
 enum SafeFilename {
     static func pdf(_ value: String) throws -> String {
         let stem = value.lowercased().hasSuffix(".pdf") ? String(value.dropLast(4)) : value

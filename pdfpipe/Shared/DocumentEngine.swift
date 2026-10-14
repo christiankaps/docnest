@@ -21,7 +21,9 @@ struct SessionDocument: Sendable {
 
 struct AutomaticResult: Sendable {
     var document: SessionDocument
-    var analysis: DocumentAnalysis
+    var embeddedAnalysis: DocumentAnalysis
+    var ocrAnalysis: DocumentAnalysis
+    var text: TextSnapshot
     var status: String
 }
 
@@ -143,12 +145,26 @@ actor DocumentEngine {
         let outcome = try await AutomaticOCR.process(input, to: target, progress: progress)
         let report = imported.report + [outcome.status]
         return AutomaticResult(document: try describe(outcome.url, filename: imported.facts.filename, report: report),
-            analysis: DocumentAnalyzer.analyze(pages: outcome.pages), status: outcome.status)
+            embeddedAnalysis: DocumentAnalyzer.analyze(pages: outcome.embeddedPages),
+            ocrAnalysis: DocumentAnalyzer.analyze(pages: outcome.recognizedPages),
+            text: TextSnapshot(embedded: outcome.embeddedText, ocr: outcome.recognizedText),
+            status: outcome.status)
     }
 
     func readableFallback(_ imported: SessionDocument, reason: String) throws -> AutomaticResult {
-        let analysis = try DocumentAnalyzer.analyze(imported.url)
-        return AutomaticResult(document: imported, analysis: analysis,
+        guard let pdf = PDFDocument(url: imported.url) else {
+            throw PipeError.message("Cannot read the PDF text for filename analysis.")
+        }
+        let pages = try (0..<pdf.pageCount).map { index -> PDFPage in
+            guard let page = pdf.page(at: index) else {
+                throw PipeError.message("Cannot read a PDF page for filename analysis.")
+            }
+            return page
+        }
+        let analysis = DocumentAnalyzer.analyze(pages: pages.map(DocumentAnalyzer.extractPage))
+        return AutomaticResult(document: imported, embeddedAnalysis: analysis, ocrAnalysis: .empty,
+            text: TextSnapshot(embedded: pages.map { $0.string ?? "" },
+                ocr: Array(repeating: "", count: pdf.pageCount)),
             status: "OCR could not add searchable text: \(reason)")
     }
 

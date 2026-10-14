@@ -4,6 +4,67 @@ import UIKit
 
 enum TextSource: Hashable, Sendable { case embedded, ocr, plain }
 
+enum InspectionSource: String, CaseIterable, Identifiable, Sendable {
+    case embedded = "PDF text"
+    case ocr = "Apple OCR"
+    var id: Self { self }
+}
+
+struct TextSnapshot: Sendable {
+    var embedded: [String]
+    var ocr: [String]
+    static let empty = TextSnapshot(embedded: [], ocr: [])
+
+    func pages(for source: InspectionSource) -> [String] {
+        source == .embedded ? embedded : ocr
+    }
+}
+
+struct TextDiffRow: Equatable, Sendable {
+    enum Kind: Equatable, Sendable { case unchanged, removed, added }
+    var kind: Kind
+    var text: String
+}
+
+enum TextDiff {
+    static func rows(embedded: String, ocr: String) -> [TextDiffRow] {
+        let original = embedded.isEmpty ? [] : embedded.components(separatedBy: "\n")
+        let recognized = ocr.isEmpty ? [] : ocr.components(separatedBy: "\n")
+        let changes = recognized.difference(from: original)
+        let removed = Set(changes.removals.compactMap { change -> Int? in
+            if case .remove(let offset, _, _) = change { return offset }
+            return nil
+        })
+        let added = Set(changes.insertions.compactMap { change -> Int? in
+            if case .insert(let offset, _, _) = change { return offset }
+            return nil
+        })
+        var rows: [TextDiffRow] = []
+        var originalIndex = 0
+        var recognizedIndex = 0
+        while originalIndex < original.count || recognizedIndex < recognized.count {
+            if removed.contains(originalIndex), originalIndex < original.count {
+                rows.append(.init(kind: .removed, text: original[originalIndex]))
+                originalIndex += 1
+            } else if added.contains(recognizedIndex), recognizedIndex < recognized.count {
+                rows.append(.init(kind: .added, text: recognized[recognizedIndex]))
+                recognizedIndex += 1
+            } else if originalIndex < original.count, recognizedIndex < recognized.count {
+                rows.append(.init(kind: .unchanged, text: original[originalIndex]))
+                originalIndex += 1
+                recognizedIndex += 1
+            } else if originalIndex < original.count {
+                rows.append(.init(kind: .removed, text: original[originalIndex]))
+                originalIndex += 1
+            } else {
+                rows.append(.init(kind: .added, text: recognized[recognizedIndex]))
+                recognizedIndex += 1
+            }
+        }
+        return rows
+    }
+}
+
 struct AnalysisToken: Sendable {
     var text: String
     var size: Double?
@@ -141,36 +202,6 @@ enum DocumentAnalyzer {
                 confidence: confidence, source: .ocr)
         }
         return AnalysisLine(text: text, tokens: tokens, topFraction: Double(1 - bounds.maxY))
-    }
-
-    static func mergingOCR(_ observed: [AnalysisLine], into native: AnalysisPage) -> AnalysisPage {
-        var result = native
-        let indexes = Dictionary(grouping: result.lines.indices, by: { lineKey(result.lines[$0].text) })
-        for line in observed {
-            let key = lineKey(line.text)
-            if let matches = indexes[key], matches.count == 1, let index = matches.first,
-               !result.lines[index].tokens.isEmpty {
-                if let sample = line.tokens.first, sample.confidence >= 0.5, sample.size != nil {
-                    result.lines[index].topFraction = line.topFraction
-                    for tokenIndex in result.lines[index].tokens.indices {
-                        result.lines[index].tokens[tokenIndex].size = sample.size
-                        result.lines[index].tokens[tokenIndex].confidence = sample.confidence
-                        result.lines[index].tokens[tokenIndex].source = .ocr
-                    }
-                }
-                continue
-            }
-            let nearbyWords = Set(native.lines.filter { nativeLine in
-                guard let first = nativeLine.topFraction, let second = line.topFraction else { return false }
-                return abs(first - second) < 0.04
-            }.flatMap(\.tokens).map { wordKey($0.text) })
-            let extra = line.tokens.filter { $0.confidence >= 0.5 && !nearbyWords.contains(wordKey($0.text)) }
-            if !extra.isEmpty {
-                result.lines.append(AnalysisLine(text: line.text, tokens: extra, topFraction: line.topFraction))
-            }
-        }
-        result.text += "\n" + observed.map(\.text).joined(separator: "\n")
-        return result
     }
 
     private static func lineKey(_ text: String) -> String {
@@ -332,6 +363,6 @@ enum DocumentAnalyzer {
             if a.word.score != b.word.score { return a.word.score > b.word.score }
             if a.first != b.first { return a.first < b.first }
             return a.word.id < b.word.id
-        }.prefix(30).map(\.word)
+        }.map(\.word)
     }
 }

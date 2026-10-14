@@ -4,13 +4,12 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class ShareViewController: UIViewController {
-    private let settings = OneFlowSettingsStore()
     private let model = OneFlowSessionModel()
     private var started = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        let host = UIHostingController(rootView: OneFlowWorkbenchView(model: model, settings: settings))
+        let host = UIHostingController(rootView: OneFlowWorkbenchView(model: model))
         addChild(host)
         view.addSubview(host.view)
         host.view.translatesAutoresizingMaskIntoConstraints = false
@@ -32,7 +31,6 @@ final class ShareViewController: UIViewController {
         super.viewDidAppear(animated)
         guard !started else { return }
         started = true
-        settings.reload()
         let items = extensionContext?.inputItems.compactMap { $0 as? NSExtensionItem } ?? []
         let attachments = items.flatMap { $0.attachments ?? [] }
         guard attachments.count == 1, let provider = attachments.first else {

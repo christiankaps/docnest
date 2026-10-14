@@ -2,9 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct OneFlowHomeView: View {
-    @ObservedObject var settings: OneFlowSettingsStore
     @State private var importing = false
-    @State private var showingSettings = false
+    @State private var showingWordRatings = false
     @State private var session: OneFlowSessionModel?
     @State private var error: String?
     @Environment(\.scenePhase) private var scenePhase
@@ -36,9 +35,10 @@ struct OneFlowHomeView: View {
             .padding(24)
             .navigationTitle("PDF Pipe")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showingSettings = true } label: { Image(systemName: "gearshape") }
-                        .accessibilityLabel("Settings")
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showingWordRatings = true } label: {
+                        Label("Word ratings", systemImage: "slider.horizontal.3")
+                    }
                 }
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("--ui-testing") {
@@ -48,10 +48,10 @@ struct OneFlowHomeView: View {
                 }
                 #endif
             }
-            .sheet(isPresented: $showingSettings) { OneFlowSettingsView(settings: settings) }
             .sheet(isPresented: Binding(get: { session != nil }, set: { _ in })) {
-                if let session { OneFlowWorkbenchView(model: session, settings: settings) }
+                if let session { OneFlowWorkbenchView(model: session) }
             }
+            .sheet(isPresented: $showingWordRatings) { WordFeedbackSettingsView() }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .jpeg, .png]) { result in
                 switch result {
                 case .success(let url): open(url)
@@ -69,7 +69,6 @@ struct OneFlowHomeView: View {
                 } else { open(url) }
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { settings.reload() }
                 if phase == .background {
                     do { try InboxDelivery.removeUnclaimed() } catch { self.error = error.localizedDescription }
                 }
@@ -100,49 +99,4 @@ struct OneFlowHomeView: View {
         catch { self.error = error.localizedDescription }
     }
     #endif
-}
-
-private struct OneFlowSettingsView: View {
-    @ObservedObject var settings: OneFlowSettingsStore
-    @Environment(\.dismiss) private var dismiss
-    @State private var choosingFolder = false
-    @State private var error: String?
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    if let destination = settings.destination {
-                        Label(destination.name, systemImage: "folder")
-                        Button("Change folder") { choosingFolder = true }
-                        Button("Remove folder", role: .destructive) { settings.clear() }
-                    } else {
-                        Button("Choose a folder") { choosingFolder = true }
-                    }
-                } header: {
-                    Text("Quick save folder")
-                } footer: {
-                    Text("A folder gives you a one-tap Save action after naming. PDF Pipe never saves automatically.")
-                }
-                if let settingError = settings.error {
-                    Section { Label(settingError, systemImage: "exclamationmark.triangle") }
-                }
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
-                do { try settings.choose(result.get()) }
-                catch {
-                    let ns = error as NSError
-                    if ns.domain != NSCocoaErrorDomain || ns.code != NSUserCancelledError {
-                        self.error = error.localizedDescription
-                    }
-                }
-            }
-            .alert("Cannot choose folder", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-                Button("OK") { error = nil }
-            } message: { Text(error ?? "") }
-        }
-    }
 }
