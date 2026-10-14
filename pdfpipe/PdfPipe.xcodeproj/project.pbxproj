@@ -27,6 +27,7 @@
 		844870C8533A3E1BF245769C /* OneFlowSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52C723C1093241F87CD58AEA /* OneFlowSessionModel.swift */; };
 		87FA52E0F1027C7D3C17E48A /* DocumentSystemViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8254BB1046FAD1B221ECE8F9 /* DocumentSystemViews.swift */; };
 		8B73B47648C3F72D47D963D9 /* WordFeedbackSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0FFD24DB12B50B829F4C18E /* WordFeedbackSettingsView.swift */; };
+		8DC8DD7477969AC06437663C /* PDFPageOrigin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9289D1AFC5F6E4BE98F9F2EA /* PDFPageOrigin.swift */; };
 		8FB5E7B3E8787307AF967D23 /* AutomaticOCR.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A2A809D37DCEF0652C1822 /* AutomaticOCR.swift */; };
 		90D6B3F902647239F449258A /* InboxDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AE19EBE86477D1F8F7A71F6 /* InboxDelivery.swift */; };
 		9CDC08F54A929715458F2822 /* Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FF213F28AB558BC471A0BC4 /* Appearance.swift */; };
@@ -40,6 +41,7 @@
 		DE934DFE850AAEE3C9CA2F40 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAA4C44852198AF2E7EEC73B /* ShareViewController.swift */; };
 		E11F9C4AE634812F7B655F0F /* DevelopmentFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 923792F411570DE0F114D818 /* DevelopmentFixtures.swift */; };
 		F257A1A1FEE327E359DD69BA /* InboxDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AE19EBE86477D1F8F7A71F6 /* InboxDelivery.swift */; };
+		F28F895DFE31681463C5C756 /* PDFPageOrigin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9289D1AFC5F6E4BE98F9F2EA /* PDFPageOrigin.swift */; };
 		F4431190A9A4BD8966254E93 /* PipeTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8270DF606F77006F5CDA3973 /* PipeTypes.swift */; };
 		FCB64428D1AF23DF4D73E10E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 958AE0D9AC9052DD9BB67024 /* PrivacyInfo.xcprivacy */; };
 		FEAB6AE93D6EAC2B82F8AB9A /* DocumentEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2F1376BBCF2AA61FE45813C /* DocumentEngine.swift */; };
@@ -99,6 +101,7 @@
 		8254BB1046FAD1B221ECE8F9 /* DocumentSystemViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentSystemViews.swift; sourceTree = "<group>"; };
 		8270DF606F77006F5CDA3973 /* PipeTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipeTypes.swift; sourceTree = "<group>"; };
 		923792F411570DE0F114D818 /* DevelopmentFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevelopmentFixtures.swift; sourceTree = "<group>"; };
+		9289D1AFC5F6E4BE98F9F2EA /* PDFPageOrigin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPageOrigin.swift; sourceTree = "<group>"; };
 		958AE0D9AC9052DD9BB67024 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		966464DEDB55024BCE4B6C30 /* PdfPipeShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PdfPipeShare.entitlements; sourceTree = "<group>"; };
 		9FF213F28AB558BC471A0BC4 /* Appearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Appearance.swift; sourceTree = "<group>"; };
@@ -147,6 +150,7 @@
 				4AE19EBE86477D1F8F7A71F6 /* InboxDelivery.swift */,
 				52C723C1093241F87CD58AEA /* OneFlowSessionModel.swift */,
 				0015EAFB01AFCB155AD25EFA /* OneFlowWorkbenchView.swift */,
+				9289D1AFC5F6E4BE98F9F2EA /* PDFPageOrigin.swift */,
 				8270DF606F77006F5CDA3973 /* PipeTypes.swift */,
 				958AE0D9AC9052DD9BB67024 /* PrivacyInfo.xcprivacy */,
 				6FEF675F55BE68078FB97018 /* TemporarySession.swift */,
@@ -395,6 +399,7 @@
 				2013A95AC93D25A18727CAFA /* OneFlowHomeView.swift in Sources */,
 				844870C8533A3E1BF245769C /* OneFlowSessionModel.swift in Sources */,
 				0FEA0BEFBDCEECB150BF21C3 /* OneFlowWorkbenchView.swift in Sources */,
+				F28F895DFE31681463C5C756 /* PDFPageOrigin.swift in Sources */,
 				C56D62FDAC145EC6B4232A1A /* PdfPipeApp.swift in Sources */,
 				F4431190A9A4BD8966254E93 /* PipeTypes.swift in Sources */,
 				6ECF0DC5BA95A5E67DC59322 /* TemporarySession.swift in Sources */,
@@ -424,6 +429,7 @@
 				90D6B3F902647239F449258A /* InboxDelivery.swift in Sources */,
 				51E05B043698E0605B75FDEF /* OneFlowSessionModel.swift in Sources */,
 				00DD661121911DA2DD362D02 /* OneFlowWorkbenchView.swift in Sources */,
+				8DC8DD7477969AC06437663C /* PDFPageOrigin.swift in Sources */,
 				6C3EBA3B9A9F231214B51C68 /* PipeTypes.swift in Sources */,
 				DE934DFE850AAEE3C9CA2F40 /* ShareViewController.swift in Sources */,
 				444D46A7A05DD95A6D49EEB0 /* TemporarySession.swift in Sources */,

@@ -8,12 +8,10 @@ final class OneFlowSessionModel: ObservableObject {
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var document: SessionDocument?
-    @Published private(set) var embeddedAnalysis: DocumentAnalysis = .empty
-    @Published private(set) var ocrAnalysis: DocumentAnalysis = .empty
-    @Published private(set) var text = TextSnapshot.empty
-    @Published var inspectionSource: InspectionSource = .ocr
+    @Published private(set) var analysis: DocumentAnalysis = .empty
     @Published private(set) var ocrStatus = ""
     @Published private(set) var progress = ""
+    @Published private(set) var progressFraction: Double?
     @Published var composer = FilenameComposer()
     @Published var manualWord = ""
     @Published private(set) var wordVotes: [String: Int] = WordFeedback.load()
@@ -43,16 +41,13 @@ final class OneFlowSessionModel: ObservableObject {
         analysis.dates.isEmpty ? [.init(value: fallbackDate, score: 0, isAmbiguous: false)] : analysis.dates
     }
 
-    var analysis: DocumentAnalysis {
-        inspectionSource == .embedded ? embeddedAnalysis : ocrAnalysis
-    }
-
     func importFile(_ url: URL) {
         do {
             let session = try createSession()
             let source = try InboxDelivery.claim(url, into: session.directory, inbox: inboxDirectory)
             phase = .processing
             progress = "Making a temporary copy…"
+            progressFraction = nil
             task = Task {
                 do {
                     let importer = Task.detached { try DocumentEngine.stage(source, to: session.directory) }
@@ -73,6 +68,7 @@ final class OneFlowSessionModel: ObservableObject {
             let suggestedName = provider.suggestedName?.trimmingCharacters(in: .whitespacesAndNewlines)
             phase = .processing
             progress = "Making a temporary copy…"
+            progressFraction = nil
             task = Task {
                 do {
                     let incoming: (url: URL, name: String) = try await withCheckedThrowingContinuation { continuation in
@@ -108,38 +104,41 @@ final class OneFlowSessionModel: ObservableObject {
     private func process(_ staged: URL, originalName: String) async {
         guard let engine else { return }
         do {
+            setProgress("Preparing document…", fraction: nil)
             let imported = try await engine.prepare(staged: staged, originalName: originalName)
             try Task.checkCancellation()
             let result: AutomaticResult
             do {
-                result = try await engine.processAutomatically(imported) { [weak self] value in
-                    await self?.setProgress(value)
+                result = try await engine.processAutomatically(imported) { [weak self] message, fraction in
+                    await self?.setProgress(message, fraction: fraction)
                 }
             } catch {
                 if error is CancellationError { throw error }
+                setProgress("Preparing document…", fraction: nil)
                 result = try await engine.readableFallback(imported, reason: error.localizedDescription)
             }
             try Task.checkCancellation()
             guard !discarding else { return }
             document = result.document
-            var embedded = result.embeddedAnalysis
-            var recognized = result.ocrAnalysis
-            embedded.words = WordFeedback.suggestions(from: embedded.words, votes: wordVotes)
-            recognized.words = WordFeedback.suggestions(from: recognized.words, votes: wordVotes)
-            embeddedAnalysis = embedded
-            ocrAnalysis = recognized
-            text = result.text
-            inspectionSource = result.ocrAnalysis.hasText ? .ocr : .embedded
+            var suggestions = result.analysis
+            suggestions.words = WordFeedback.suggestions(from: suggestions.words, votes: wordVotes)
+            analysis = suggestions
             ocrStatus = result.status
+            progressFraction = nil
             phase = .ready
         } catch { importFailed(error) }
     }
 
-    private func setProgress(_ value: String) { progress = value }
+    private func setProgress(_ message: String, fraction: Double?) {
+        guard phase == .processing, !discarding else { return }
+        progress = message
+        progressFraction = fraction
+    }
 
     private func importFailed(_ failure: Error) {
         guard !discarding else { return }
         phase = .idle
+        progressFraction = nil
         error = failure is CancellationError ? "Import canceled." : failure.localizedDescription
     }
 
@@ -226,10 +225,7 @@ final class OneFlowSessionModel: ObservableObject {
         engine = nil
         importProgress = nil
         document = nil
-        embeddedAnalysis = .empty
-        ocrAnalysis = .empty
-        text = .empty
-        inspectionSource = .ocr
+        analysis = .empty
     }
 
     private func finishOnce() {

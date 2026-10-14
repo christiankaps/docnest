@@ -1,6 +1,7 @@
 import XCTest
 import PDFKit
 import UIKit
+import CoreText
 @testable import PdfPipe
 
 @MainActor
@@ -56,15 +57,6 @@ final class BasicTests: XCTestCase {
             ["en-US"])
         XCTAssertEqual(AutomaticOCR.prioritizedLanguages(["zh-Hans", "zh-Hant", "en-US"],
             preferred: "zh-TW"), ["zh-Hant", "en-US"])
-    }
-
-    func testTextDiffKeepsMatchingLinesAndMarksChanges() {
-        XCTAssertEqual(TextDiff.rows(embedded: "same\nold\nlast", ocr: "same\nnew\nlast"), [
-            .init(kind: .unchanged, text: "same"),
-            .init(kind: .removed, text: "old"),
-            .init(kind: .added, text: "new"),
-            .init(kind: .unchanged, text: "last")
-        ])
     }
 
     func testEarlyAndRepeatedWordsRemainVisibleInCrowdedDocuments() {
@@ -171,6 +163,8 @@ final class BasicTests: XCTestCase {
                 withAttributes: [.font: UIFont.italicSystemFont(ofSize: 12)])
         }
         let page = try XCTUnwrap(PDFDocument(url: url)?.page(at: 0))
+        let sourcePage = try XCTUnwrap(CGPDFDocument(url as CFURL)?.page(at: 1))
+        XCTAssertEqual(PDFPageOrigin.kind(on: sourcePage), .digital)
         let tokens = DocumentAnalyzer.extractPage(page).lines.flatMap(\.tokens)
         let ordinary = try XCTUnwrap(tokens.first { $0.text == "Ordinary" })
         let subject = try XCTUnwrap(tokens.first { $0.text == "Subject" })
@@ -218,19 +212,73 @@ final class BasicTests: XCTestCase {
         let session = try TemporarySession(root: root)
         let engine = DocumentEngine(session: session)
         let imported = try await engine.prepare(staged: source, originalName: "mixed.pdf")
-        let result = try await engine.processAutomatically(imported) { _ in }
+        let result = try await engine.processAutomatically(imported) { _, _ in }
         let extracted = try XCTUnwrap(PDFDocument(url: result.document.url)?.page(at: 0)?.string)
         XCTAssertTrue(extracted.contains("Invoice date: 2026-10-05"))
         let page = try XCTUnwrap(PDFDocument(url: result.document.url)?.page(at: 0))
         let selected = page.selection(for: page.bounds(for: .cropBox))?.string ?? ""
         XCTAssertGreaterThanOrEqual(selected.uppercased().components(separatedBy: "ACME").count - 1, 2,
             "OCR must add image text even when identical text exists elsewhere. Status: \(result.status); selection: \(selected)")
-        let suggestedWords = Set(result.ocrAnalysis.words.map(\.id))
+        let suggestedWords = Set(result.analysis.words.map(\.id))
         XCTAssertTrue(suggestedWords.contains("acme"))
         XCTAssertTrue(suggestedWords.contains("invoice"))
-        XCTAssertTrue(result.embeddedAnalysis.words.contains { $0.id == "acme" })
-        XCTAssertTrue(result.text.embedded[0].contains("Invoice date"))
-        XCTAssertTrue(result.text.ocr[0].contains("ACME"))
+        XCTAssertEqual(try Data(contentsOf: source), original)
+    }
+
+    func testScanOCRLayerIsReplacedButVisibleDigitalTextIsProtected() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("scan.pdf")
+        let pageBox = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 1200, height: 1600)).image { context in
+            UIColor.white.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 1200, height: 1600))
+            ("INVOICE ACME 2025" as NSString).draw(at: CGPoint(x: 90, y: 150),
+                withAttributes: [.font: UIFont.boldSystemFont(ofSize: 90),
+                    .foregroundColor: UIColor.black])
+        }
+        try UIGraphicsPDFRenderer(bounds: pageBox).writePDF(to: source) { renderer in
+            renderer.beginPage()
+            image.draw(in: pageBox)
+            let context = renderer.cgContext
+            let font = CTFontCreateWithName("Helvetica" as CFString, 20, nil)
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: "WRONGTOKEN",
+                attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font]))
+            context.saveGState()
+            context.setTextDrawingMode(.invisible)
+            context.textPosition = CGPoint(x: 40, y: 550)
+            CTLineDraw(line, context)
+            context.restoreGState()
+
+            renderer.beginPage()
+            image.draw(in: pageBox)
+            ("Native text" as NSString).draw(at: CGPoint(x: 45, y: 270),
+                withAttributes: [.font: UIFont.systemFont(ofSize: 24)])
+        }
+        let pdf = try XCTUnwrap(CGPDFDocument(source as CFURL))
+        XCTAssertTrue(PDFPageOrigin.hasReplaceableOCR(on: try XCTUnwrap(pdf.page(at: 1))))
+        XCTAssertFalse(PDFPageOrigin.hasReplaceableOCR(on: try XCTUnwrap(pdf.page(at: 2))))
+        XCTAssertEqual(PDFPageOrigin.kind(on: try XCTUnwrap(pdf.page(at: 1))), .scanned)
+        XCTAssertEqual(PDFPageOrigin.kind(on: try XCTUnwrap(pdf.page(at: 2))), .mixed)
+        XCTAssertEqual(DocumentOrigin.pdf(pdf).kind, .mixed)
+        let original = try Data(contentsOf: source)
+        let session = try TemporarySession(root: root)
+        let engine = DocumentEngine(session: session)
+        let imported = try await engine.prepare(staged: source, originalName: "scan.pdf")
+        let result = try await engine.processAutomatically(imported) { _, _ in }
+        XCTAssertEqual(result.document.facts.origin.kind, .mixed)
+        let output = try XCTUnwrap(PDFDocument(url: result.document.url))
+        let first = try XCTUnwrap(output.page(at: 0))
+        let selection = first.selection(for: first.bounds(for: .cropBox))?.string ?? ""
+        let sourcePage = try XCTUnwrap(PDFDocument(url: source)?.page(at: 0))
+        XCTAssertTrue(sourcePage.selection(for: sourcePage.bounds(for: .cropBox))?.string?.contains("WRONGTOKEN") == true)
+        XCTAssertFalse(selection.contains("WRONGTOKEN"), "Old OCR layer remained: \(selection)")
+        XCTAssertTrue(selection.localizedCaseInsensitiveContains("INVOICE"),
+            "Apple OCR was not added: \(selection)")
+        XCTAssertTrue(result.analysis.words.contains { $0.id == "invoice" })
+        XCTAssertTrue(result.status.contains("replaced"))
+        XCTAssertTrue(output.page(at: 1)?.string?.contains("Native text") == true)
         XCTAssertEqual(try Data(contentsOf: source), original)
     }
 }

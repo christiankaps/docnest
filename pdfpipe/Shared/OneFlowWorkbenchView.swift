@@ -7,56 +7,58 @@ struct OneFlowWorkbenchView: View {
     @State private var exportedName: String?
     @State private var preparingExport = false
     @State private var showingDetails = false
-    @State private var showingTextInspection = false
     @ScaledMetric(relativeTo: .body) private var cloudSize: CGFloat = 15
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    switch model.phase {
-                    case .idle:
-                        ContentUnavailableView("No document", systemImage: "doc",
-                            description: Text("Open one PDF, JPEG, or PNG file to begin."))
-                    case .processing:
-                        VStack(alignment: .leading, spacing: 16) {
-                            ProgressView(model.progress)
-                            Button("Cancel processing", role: .cancel) { model.discard() }
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                    case .ready:
-                        if let document = model.document {
-                            PDFPreview(url: document.url)
-                                .frame(height: 280)
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .accessibilityLabel("PDF preview")
-                            Label(model.ocrStatus, systemImage: "text.viewfinder")
-                                .font(.subheadline).foregroundStyle(.secondary)
-                            textSourceSection
-                            DisclosureGroup("Document details", isExpanded: $showingDetails) {
-                                details(document.facts)
+            Group {
+                if model.phase == .processing {
+                    processingView
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            switch model.phase {
+                            case .idle:
+                                ContentUnavailableView("No document", systemImage: "doc",
+                                    description: Text("Open one PDF, JPEG, or PNG file to begin."))
+                            case .processing:
+                                EmptyView()
+                            case .ready:
+                                if let document = model.document {
+                                    PDFPreview(url: document.url)
+                                        .frame(height: 280)
+                                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                                        .accessibilityLabel("PDF preview")
+                                    originCard(document.facts.origin)
+                                    Label(model.ocrStatus, systemImage: "text.viewfinder")
+                                        .font(.subheadline).foregroundStyle(.secondary)
+                                    DisclosureGroup("Document details", isExpanded: $showingDetails) {
+                                        details(document.facts)
+                                    }
+                                    dateSection
+                                    wordSection
+                                    namingSection
+                                }
+                            case .finished(let filename):
+                                ContentUnavailableView {
+                                    Label("Finished", systemImage: "checkmark.circle.fill")
+                                } description: {
+                                    Text(filename)
+                                } actions: {
+                                    Button("Done") { model.discard() }.buttonStyle(.borderedProminent)
+                                }
                             }
-                            dateSection
-                            wordSection
-                            namingSection
                         }
-                    case .finished(let filename):
-                        ContentUnavailableView {
-                            Label("Finished", systemImage: "checkmark.circle.fill")
-                        } description: {
-                            Text(filename)
-                        } actions: {
-                            Button("Done") { model.discard() }.buttonStyle(.borderedProminent)
-                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
             }
             .navigationTitle(model.phase == .ready ? "Name PDF" : "PDF Pipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if case .finished = model.phase { } else {
+                    if model.phase == .ready {
                         Button("Discard", role: .destructive) { model.discard() }
                             .disabled(preparingExport)
                     }
@@ -90,11 +92,30 @@ struct OneFlowWorkbenchView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingTextInspection) {
-                TextInspectionView(model: model)
-            }
         }
         .tint(PipeAppearance.accent)
+    }
+
+    private var processingView: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("Processing document", systemImage: "doc.text.viewfinder")
+                .font(.title3.weight(.semibold))
+            Text(model.progress)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("processingStatus")
+            ProgressView(value: model.progressFraction, total: 1)
+                .progressViewStyle(.linear)
+                .accessibilityLabel("Processing progress")
+                .accessibilityIdentifier("processingProgress")
+            Button("Cancel processing", role: .cancel) { model.discard() }
+                .buttonStyle(.bordered)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func details(_ facts: DocumentFacts) -> some View {
@@ -106,23 +127,23 @@ struct OneFlowWorkbenchView: View {
         }.font(.subheadline).foregroundStyle(.secondary)
     }
 
-    private var textSourceSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Text source · Debug", systemImage: "ladybug")
-                .font(.subheadline.weight(.semibold))
-            Picker("Suggestions from", selection: $model.inspectionSource) {
-                ForEach(InspectionSource.allCases) { source in
-                    Text(source.rawValue).tag(source)
-                }
+    private func originCard(_ origin: DocumentOrigin) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: origin.symbol)
+                .font(.title3)
+                .foregroundStyle(PipeAppearance.accent)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(origin.title).font(.subheadline.weight(.semibold))
+                Text(origin.detail).font(.caption).foregroundStyle(.secondary)
             }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("textSourcePicker")
-            Text("Dates and words update with the selected text. Your filename stays as composed.")
-                .font(.caption).foregroundStyle(.secondary)
-            Button("View full text and diff", systemImage: "doc.text.magnifyingglass") {
-                showingTextInspection = true
-            }
+            Spacer(minLength: 0)
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("documentOrigin")
     }
 
     private var dateSection: some View {
@@ -266,95 +287,6 @@ struct OneFlowWorkbenchView: View {
 
     private func finishExport() {
         if let exportedName { model.exported(exportedName); self.exportedName = nil }
-    }
-}
-
-private struct TextInspectionView: View {
-    private enum Tab: String, CaseIterable, Identifiable {
-        case text = "Full text"
-        case diff = "Diff"
-        var id: Self { self }
-    }
-
-    @ObservedObject var model: OneFlowSessionModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var tab: Tab = .text
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    Picker("View", selection: $tab) {
-                        ForEach(Tab.allCases) { tab in Text(tab.rawValue).tag(tab) }
-                    }
-                    .pickerStyle(.segmented)
-                    if tab == .text {
-                        Picker("Text source", selection: $model.inspectionSource) {
-                            ForEach(InspectionSource.allCases) { source in
-                                Text(source.rawValue).tag(source)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        fullText
-                    } else {
-                        Text("− PDF text   + Apple OCR")
-                            .font(.caption.monospaced()).foregroundStyle(.secondary)
-                        diffText
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("Text inspection")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-        }
-    }
-
-    private var fullText: some View {
-        let pages = model.text.pages(for: model.inspectionSource)
-        return ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Page \(index + 1)").font(.headline)
-                Text(page.isEmpty ? "No text on this page." : page)
-                    .font(.system(.footnote, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
-    private var diffText: some View {
-        let count = max(model.text.embedded.count, model.text.ocr.count)
-        return ForEach(0..<count, id: \.self) { index in
-            let embedded = index < model.text.embedded.count ? model.text.embedded[index] : ""
-            let ocr = index < model.text.ocr.count ? model.text.ocr[index] : ""
-            let rows = TextDiff.rows(embedded: embedded, ocr: ocr)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Page \(index + 1)").font(.headline)
-                if rows.isEmpty || rows.allSatisfy({ $0.kind == .unchanged }) {
-                    Text("No differences.").font(.subheadline).foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                        diffLine(row)
-                    }
-                }
-            }
-        }
-    }
-
-    private func diffLine(_ row: TextDiffRow) -> some View {
-        let symbol: String
-        let color: Color
-        switch row.kind {
-        case .unchanged: symbol = " "; color = .secondary
-        case .removed: symbol = "−"; color = .red
-        case .added: symbol = "+"; color = .green
-        }
-        return Text("\(symbol) \(row.text)")
-            .font(.system(.footnote, design: .monospaced))
-            .foregroundStyle(color)
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

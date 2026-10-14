@@ -11,6 +11,7 @@ struct DocumentFacts: Sendable {
     var pages: Int
     var dimensions: String
     var hasText: Bool
+    var origin: DocumentOrigin
 }
 
 struct SessionDocument: Sendable {
@@ -21,9 +22,7 @@ struct SessionDocument: Sendable {
 
 struct AutomaticResult: Sendable {
     var document: SessionDocument
-    var embeddedAnalysis: DocumentAnalysis
-    var ocrAnalysis: DocumentAnalysis
-    var text: TextSnapshot
+    var analysis: DocumentAnalysis
     var status: String
 }
 
@@ -79,8 +78,10 @@ actor DocumentEngine {
         sourceName = (originalName as NSString).deletingPathExtension
         if sourceName.isEmpty { sourceName = "Document" }
         let pdf = session.directory.appendingPathComponent("input.pdf")
+        let origin: DocumentOrigin
         if let document = PDFDocument(url: staged) {
             try validate(document)
+            origin = CGPDFDocument(staged as CFURL).map(DocumentOrigin.pdf) ?? .unclear
             try FileManager.default.copyItem(at: staged, to: pdf)
             sourceFormat = "PDF"
         } else {
@@ -108,10 +109,12 @@ actor DocumentEngine {
             context.endPDFPage()
             context.closePDF()
             sourceFormat = type == UTType.jpeg.identifier ? "JPEG" : "PNG"
+            origin = .image
         }
         try Task.checkCancellation()
         input = pdf
-        return try describe(pdf, filename: originalName, report: sourceFormat == "PDF" ? [] : ["Converted \(sourceFormat) to PDF"])
+        return try describe(pdf, filename: originalName, origin: origin,
+            report: sourceFormat == "PDF" ? [] : ["Converted \(sourceFormat) to PDF"])
     }
 
     private func validate(_ document: PDFDocument) throws {
@@ -129,25 +132,27 @@ actor DocumentEngine {
         }
     }
 
-    private func describe(_ url: URL, filename: String, report: [String]) throws -> SessionDocument {
+    private func describe(_ url: URL, filename: String, origin: DocumentOrigin,
+                          report: [String]) throws -> SessionDocument {
         guard let pdf = PDFDocument(url: url), let page = pdf.page(at: 0) else { throw PipeError.message("The PDF result could not be opened.") }
         let rect = page.bounds(for: .cropBox)
         let bytes = Int64(try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
         return .init(url: url, facts: .init(filename: filename, originalBasename: sourceName, sourceFormat: sourceFormat, bytes: bytes,
             pages: pdf.pageCount, dimensions: "\(Int(rect.width)) × \(Int(rect.height)) pt (first page)",
-            hasText: (0..<pdf.pageCount).contains { !(pdf.page(at: $0)?.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) }), report: report)
+            hasText: (0..<pdf.pageCount).contains { !(pdf.page(at: $0)?.string?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) },
+            origin: origin), report: report)
     }
 
     func processAutomatically(_ imported: SessionDocument,
-        progress: @Sendable (String) async -> Void) async throws -> AutomaticResult {
+        progress: @Sendable (String, Double?) async -> Void) async throws -> AutomaticResult {
         guard let input else { throw PipeError.message("Import a document first.") }
         let target = session.directory.appendingPathComponent("searchable.pdf")
         let outcome = try await AutomaticOCR.process(input, to: target, progress: progress)
+        await progress("Finding dates and words…", 0.95)
         let report = imported.report + [outcome.status]
-        return AutomaticResult(document: try describe(outcome.url, filename: imported.facts.filename, report: report),
-            embeddedAnalysis: DocumentAnalyzer.analyze(pages: outcome.embeddedPages),
-            ocrAnalysis: DocumentAnalyzer.analyze(pages: outcome.recognizedPages),
-            text: TextSnapshot(embedded: outcome.embeddedText, ocr: outcome.recognizedText),
+        return AutomaticResult(document: try describe(outcome.url, filename: imported.facts.filename,
+            origin: imported.facts.origin, report: report),
+            analysis: DocumentAnalyzer.analyze(pages: outcome.preferredPages),
             status: outcome.status)
     }
 
@@ -162,9 +167,7 @@ actor DocumentEngine {
             return page
         }
         let analysis = DocumentAnalyzer.analyze(pages: pages.map(DocumentAnalyzer.extractPage))
-        return AutomaticResult(document: imported, embeddedAnalysis: analysis, ocrAnalysis: .empty,
-            text: TextSnapshot(embedded: pages.map { $0.string ?? "" },
-                ocr: Array(repeating: "", count: pdf.pageCount)),
+        return AutomaticResult(document: imported, analysis: analysis,
             status: "OCR could not add searchable text: \(reason)")
     }
 
