@@ -14,11 +14,11 @@ final class OneFlowSessionModel: ObservableObject {
     @Published private(set) var progressFraction: Double?
     @Published var composer = FilenameComposer()
     @Published var manualWord = ""
-    @Published private(set) var wordVotes: [String: Int] = WordFeedback.load()
     @Published var error: String?
     var onFinished: (() -> Void)?
 
     private let inboxDirectory: URL
+    private let recoverable: Bool
     private var session: TemporarySession?
     private var engine: DocumentEngine?
     private var task: Task<Void, Never>?
@@ -27,7 +27,10 @@ final class OneFlowSessionModel: ObservableObject {
     private var discarding = false
     private var finished = false
 
-    init(inboxDirectory: URL = InboxDelivery.directory) { self.inboxDirectory = inboxDirectory }
+    init(inboxDirectory: URL = InboxDelivery.directory, recoverable: Bool = false) {
+        self.inboxDirectory = inboxDirectory
+        self.recoverable = recoverable
+    }
 
     var fallbackDate: String {
         let formatter = DateFormatter()
@@ -101,12 +104,51 @@ final class OneFlowSessionModel: ObservableObject {
         return session
     }
 
+    func restore(_ snapshot: ActiveSessionStore.Snapshot) async throws {
+        guard recoverable else { throw PipeError.message("This session cannot be restored here.") }
+        let root = try TemporarySession.root()
+        let restored = try TemporarySession(root: root, recovering: snapshot.id)
+        session = restored
+        let engine = DocumentEngine(session: restored)
+        self.engine = engine
+        processingDate = snapshot.processingDate
+        composer = snapshot.composer
+        manualWord = snapshot.manualWord
+        phase = .processing
+        progress = "Restoring document…"
+        progressFraction = nil
+        let imported = try await engine.resume(originalName: snapshot.originalName,
+            originalFormat: snapshot.sourceFormat)
+        document = imported
+        task = Task { await processPrepared(imported) }
+    }
+
+    func persistDraft() {
+        guard recoverable, let session, let document,
+              let id = UUID(uuidString: session.directory.lastPathComponent) else { return }
+        let snapshot = ActiveSessionStore.Snapshot(id: id, originalName: document.facts.filename,
+            sourceFormat: document.facts.sourceFormat, processingDate: processingDate,
+            composer: composer, manualWord: manualWord)
+        do { try ActiveSessionStore.save(snapshot, root: session.directory.deletingLastPathComponent()) }
+        catch { self.error = "Cannot keep this document available after restarting: \(error.localizedDescription)" }
+    }
+
     private func process(_ staged: URL, originalName: String) async {
         guard let engine else { return }
         do {
             setProgress("Preparing document…", fraction: nil)
             let imported = try await engine.prepare(staged: staged, originalName: originalName)
             try Task.checkCancellation()
+            guard !discarding else { return }
+            document = imported
+            persistDraft()
+            await processPrepared(imported)
+        } catch { importFailed(error) }
+    }
+
+    private func processPrepared(_ imported: SessionDocument) async {
+        guard let engine else { return }
+        do {
             let result: AutomaticResult
             do {
                 result = try await engine.processAutomatically(imported) { [weak self] message, fraction in
@@ -120,9 +162,7 @@ final class OneFlowSessionModel: ObservableObject {
             try Task.checkCancellation()
             guard !discarding else { return }
             document = result.document
-            var suggestions = result.analysis
-            suggestions.words = WordFeedback.suggestions(from: suggestions.words, votes: wordVotes)
-            analysis = suggestions
+            analysis = result.analysis
             ocrStatus = result.status
             progressFraction = nil
             phase = .ready
@@ -145,19 +185,11 @@ final class OneFlowSessionModel: ObservableObject {
     func toggleDate(_ value: String) { toggle(id: "date:\(value)", value: value) }
     func toggleWord(_ word: RankedWord) { toggle(id: "word:\(word.id)", value: word.text) }
 
-    func vote(for word: RankedWord) -> WordFeedback.Vote? {
-        wordVotes[word.id].flatMap(WordFeedback.Vote.init(rawValue:))
-    }
-
-    func setVote(_ vote: WordFeedback.Vote?, for word: RankedWord) {
-        do { wordVotes = try WordFeedback.set(vote, for: word) }
-        catch { self.error = error.localizedDescription }
-    }
-
     private func toggle(id: String, value: String) {
         var next = composer
         next.toggle(id: id, value: value)
         composer = next
+        persistDraft()
     }
 
     func addManualWord() {
@@ -167,24 +199,28 @@ final class OneFlowSessionModel: ObservableObject {
         next.append(value: value)
         composer = next
         manualWord = ""
+        persistDraft()
     }
 
     func editFilename(_ value: String) {
         var next = composer
         next.editCompleteName(value)
         composer = next
+        persistDraft()
     }
 
     func undoFilenameEdit() {
         var next = composer
         next.undoEdit()
         composer = next
+        persistDraft()
     }
 
     func setSeparator(_ value: FilenameComposer.Separator) {
         var next = composer
         next.separator = value
         composer = next
+        persistDraft()
     }
 
     func prepareExport() async throws -> URL {
@@ -220,7 +256,12 @@ final class OneFlowSessionModel: ObservableObject {
     }
 
     private func cleanSession() throws {
-        try session?.cleanup()
+        if let session {
+            try session.cleanup()
+            if recoverable, let id = UUID(uuidString: session.directory.lastPathComponent) {
+                try ActiveSessionStore.clear(id: id, root: session.directory.deletingLastPathComponent())
+            }
+        }
         session = nil
         engine = nil
         importProgress = nil

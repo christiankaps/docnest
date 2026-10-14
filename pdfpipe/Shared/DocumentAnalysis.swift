@@ -194,14 +194,18 @@ enum DocumentAnalyzer {
         }
         guard !candidates.isEmpty else { return (.fallback, []) }
         let top = candidates.map(\.score).max() ?? 0
-        let best = candidates.filter { $0.score == top }.sorted { $0.order < $1.order }
-        let dates = Array(Set(best.map(\.value))).sorted()
+        let best = candidates.filter { $0.score == top }.sorted {
+            if $0.value != $1.value { return $0.value > $1.value }
+            return $0.order < $1.order
+        }
+        let dates = Array(Set(best.map(\.value))).sorted(by: >)
         let ranked = Dictionary(grouping: candidates, by: \.value).map { value, matches in
             (suggestion: DateSuggestion(value: value, score: matches.map(\.score).max() ?? 0,
                 isAmbiguous: matches.contains(where: \.ambiguous)),
              first: matches.map(\.order).min() ?? Int.max)
         }.sorted { lhs, rhs in
             if lhs.suggestion.score != rhs.suggestion.score { return lhs.suggestion.score > rhs.suggestion.score }
+            if lhs.suggestion.value != rhs.suggestion.value { return lhs.suggestion.value > rhs.suggestion.value }
             if lhs.first != rhs.first { return lhs.first < rhs.first }
             return lhs.suggestion.value < rhs.suggestion.value
         }.map(\.suggestion)
@@ -296,12 +300,13 @@ enum DocumentAnalyzer {
             }
         }
         return counts.map { _, item in
-            (word: RankedWord(text: item.display,
-                score: 1 + min(0.75, log(Double(item.count)) * 0.45) + item.bonus), first: item.first)
+            let lengthBonus = min(0.12, 0.01 * Double(max(0, item.display.count - 4)))
+            return (word: RankedWord(text: item.display,
+                score: 1 + min(0.75, log(Double(item.count)) * 0.45) + item.bonus + lengthBonus), first: item.first)
         }.sorted { a, b in
             if a.word.score != b.word.score { return a.word.score > b.word.score }
             if a.first != b.first { return a.first < b.first }
             return a.word.id < b.word.id
-        }.map(\.word)
+        }.prefix(30).map(\.word)
     }
 }

@@ -117,6 +117,22 @@ actor DocumentEngine {
             report: sourceFormat == "PDF" ? [] : ["Converted \(sourceFormat) to PDF"])
     }
 
+    func resume(originalName: String, originalFormat: String) throws -> SessionDocument {
+        let pdf = session.directory.appendingPathComponent("input.pdf")
+        guard let document = PDFDocument(url: pdf) else {
+            throw PipeError.message("The previous temporary document is no longer readable.")
+        }
+        try validate(document)
+        sourceName = (originalName as NSString).deletingPathExtension
+        if sourceName.isEmpty { sourceName = "Document" }
+        sourceFormat = originalFormat
+        input = pdf
+        let origin: DocumentOrigin = originalFormat == "PDF"
+            ? (CGPDFDocument(pdf as CFURL).map(DocumentOrigin.pdf) ?? .unclear) : .image
+        return try describe(pdf, filename: originalName, origin: origin,
+            report: originalFormat == "PDF" ? [] : ["Converted \(originalFormat) to PDF"])
+    }
+
     private func validate(_ document: PDFDocument) throws {
         guard !document.isEncrypted, !document.isLocked else { throw PipeError.message("Encrypted PDFs are not supported in this MVP. Export an unlocked copy first.") }
         guard document.pageCount > 0, document.pageCount <= Self.maximumPages else {

@@ -1,8 +1,8 @@
 import Foundation
 
-struct FilenameComposer: Equatable, Sendable {
-    enum Separator: String, CaseIterable, Sendable { case dash = "-", underscore = "_" }
-    struct Part: Identifiable, Equatable, Sendable {
+struct FilenameComposer: Codable, Equatable, Sendable {
+    enum Separator: String, Codable, CaseIterable, Sendable { case dash = "-", underscore = "_" }
+    struct Part: Codable, Identifiable, Equatable, Sendable {
         var id: String
         var value: String
         var preceding: Separator?

@@ -11,54 +11,47 @@ struct OneFlowWorkbenchView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if model.phase == .processing {
-                    processingView
-                } else {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            switch model.phase {
-                            case .idle:
-                                ContentUnavailableView("No document", systemImage: "doc",
-                                    description: Text("Open one PDF, JPEG, or PNG file to begin."))
-                            case .processing:
-                                EmptyView()
-                            case .ready:
-                                if let document = model.document {
-                                    PDFPreview(url: document.url)
-                                        .frame(height: 280)
-                                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                                        .accessibilityLabel("PDF preview")
-                                    originCard(document.facts.origin)
-                                    Label(model.ocrStatus, systemImage: "text.viewfinder")
-                                        .font(.subheadline).foregroundStyle(.secondary)
-                                    DisclosureGroup("Document details", isExpanded: $showingDetails) {
-                                        details(document.facts)
-                                    }
-                                    dateSection
-                                    wordSection
-                                    namingSection
-                                }
-                            case .finished(let filename):
-                                ContentUnavailableView {
-                                    Label("Finished", systemImage: "checkmark.circle.fill")
-                                } description: {
-                                    Text(filename)
-                                } actions: {
-                                    Button("Done") { model.discard() }.buttonStyle(.borderedProminent)
-                                }
-                            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    switch model.phase {
+                    case .idle:
+                        ContentUnavailableView("No document", systemImage: "doc",
+                            description: Text("Open one PDF, JPEG, or PNG file to begin."))
+                    case .processing:
+                        processingProgress
+                        if let document = model.document {
+                            documentHeader(document)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
+                    case .ready:
+                        if let document = model.document {
+                            documentHeader(document)
+                            Label(model.ocrStatus, systemImage: "text.viewfinder")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                            DisclosureGroup("Document details", isExpanded: $showingDetails) {
+                                details(document.facts)
+                            }
+                            dateSection
+                            wordSection
+                            namingSection
+                        }
+                    case .finished(let filename):
+                        ContentUnavailableView {
+                            Label("Finished", systemImage: "checkmark.circle.fill")
+                        } description: {
+                            Text(filename)
+                        } actions: {
+                            Button("Done") { model.discard() }.buttonStyle(.borderedProminent)
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
             }
-            .navigationTitle(model.phase == .ready ? "Name PDF" : "PDF Pipe")
+            .navigationTitle(model.phase == .processing || model.phase == .ready ? "Name PDF" : "PDF Pipe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if model.phase == .ready {
+                    if model.phase == .ready || model.phase == .idle {
                         Button("Discard", role: .destructive) { model.discard() }
                             .disabled(preparingExport)
                     }
@@ -96,10 +89,18 @@ struct OneFlowWorkbenchView: View {
         .tint(PipeAppearance.accent)
     }
 
-    private var processingView: some View {
-        VStack(alignment: .leading, spacing: 18) {
+    @ViewBuilder private func documentHeader(_ document: SessionDocument) -> some View {
+        PDFPreview(url: document.url)
+            .frame(height: 280)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .accessibilityLabel("PDF preview")
+        originCard(document.facts.origin)
+    }
+
+    private var processingProgress: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Label("Processing document", systemImage: "doc.text.viewfinder")
-                .font(.title3.weight(.semibold))
+                .font(.headline)
             Text(model.progress)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -111,11 +112,9 @@ struct OneFlowWorkbenchView: View {
             Button("Cancel processing", role: .cancel) { model.discard() }
                 .buttonStyle(.bordered)
         }
-        .padding(20)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 14))
     }
 
     private func details(_ facts: DocumentFacts) -> some View {
@@ -154,17 +153,16 @@ struct OneFlowWorkbenchView: View {
                     .font(.subheadline).foregroundStyle(.secondary)
             }
             FlowLayout(spacing: 8) {
-                ForEach(Array(model.dateSuggestions.enumerated()), id: \.element.id) { index, date in
+                ForEach(model.dateSuggestions) { date in
                     let id = "date:\(date.value)"
                     let order = model.composer.order(of: id)
                     Button { model.toggleDate(date.value) } label: {
-                        Label(date.value + (index == 0 && !model.analysis.dates.isEmpty ? " · Suggested" :
-                            model.analysis.dates.isEmpty ? " · Fallback" : ""),
+                        Label(date.value + (model.analysis.dates.isEmpty ? " · Fallback" : ""),
                             systemImage: order == nil ? "calendar" : "\(order!).circle.fill")
                     }
                     .buttonStyle(.bordered)
-                    .tint(index == 0 && !model.analysis.dates.isEmpty ? .orange : PipeAppearance.accent)
-                    .accessibilityLabel("\(date.value), \(index == 0 && !model.analysis.dates.isEmpty ? "suggested date, " : "")\(order.map { "selected position \($0)" } ?? "not selected")")
+                    .tint(order != nil ? .orange : PipeAppearance.accent)
+                    .accessibilityLabel("\(date.value), \(order.map { "selected position \($0)" } ?? "not selected")")
                 }
             }
         }
@@ -173,8 +171,6 @@ struct OneFlowWorkbenchView: View {
     private var wordSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Suggested words").font(.headline)
-            Text("Hold a word to rate it. Your rating changes future suggestions, not this document.")
-                .font(.caption).foregroundStyle(.secondary)
             if model.analysis.words.isEmpty {
                 Text("No useful words found. Type a word or a complete filename below.")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -183,36 +179,17 @@ struct OneFlowWorkbenchView: View {
                 FlowLayout(spacing: 8) {
                     ForEach(model.analysis.words) { word in
                         let order = model.composer.order(of: "word:\(word.id)")
-                        let vote = model.vote(for: word)
-                        Menu {
-                            Button { model.setVote(.up, for: word) } label: {
-                                Label("More important", systemImage: vote == .up ? "hand.thumbsup.fill" : "hand.thumbsup")
-                            }
-                            Button { model.setVote(.down, for: word) } label: {
-                                Label("Less important", systemImage: vote == .down ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                            }
-                            if vote != nil {
-                                Button { model.setVote(nil, for: word) } label: {
-                                    Label("Remove rating", systemImage: "arrow.uturn.backward")
-                                }
-                            }
-                        } label: {
+                        Button { model.toggleWord(word) } label: {
                             HStack(spacing: 5) {
                                 if let order { Text("\(order).").font(.caption.bold()) }
                                 Text(word.text)
-                                if let vote {
-                                    Image(systemName: vote == .up ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
-                                        .font(.caption2)
-                                }
                             }
                             .font(.system(size: cloudSize + CGFloat(3 * word.score / highest),
                                 weight: word.score / highest > 0.7 ? .semibold : .regular))
-                        } primaryAction: { model.toggleWord(word) }
+                        }
                         .buttonStyle(.bordered)
-                        .tint(order != nil ? PipeAppearance.accent : vote == .up ? .green : vote == .down ? .orange : .secondary)
-                        .accessibilityLabel("\(word.text), \(order.map { "selected position \($0)" } ?? "not selected"), \(vote == .up ? "rated more important" : vote == .down ? "rated less important" : "not rated")")
-                        .accessibilityAction(named: "More important") { model.setVote(.up, for: word) }
-                        .accessibilityAction(named: "Less important") { model.setVote(.down, for: word) }
+                        .tint(order != nil ? PipeAppearance.accent : .secondary)
+                        .accessibilityLabel("\(word.text), \(order.map { "selected position \($0)" } ?? "not selected")")
                     }
                 }
             }

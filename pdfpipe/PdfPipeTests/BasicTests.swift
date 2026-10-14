@@ -6,6 +6,14 @@ import CoreText
 
 @MainActor
 final class BasicTests: XCTestCase {
+    func testDatesPreferNewerValuesWithinTheSameContext() {
+        let neutral = DocumentAnalyzer.analyze(pages: ["Datum 2024-01-01\nDatum 2025-02-01"])
+        XCTAssertEqual(neutral.dates.map(\.value), ["2025-02-01", "2024-01-01"])
+
+        let labeled = DocumentAnalyzer.analyze(pages: ["Rechnungsdatum 2024-01-01\nFällig 2025-02-01"])
+        XCTAssertEqual(labeled.dates.first?.value, "2024-01-01")
+    }
+
     func testOCRRasterTransformFillsRequestedPixels() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -19,30 +27,6 @@ final class BasicTests: XCTestCase {
         XCTAssertEqual(pixels.height, 1980, accuracy: 1)
         XCTAssertEqual(pixels.minX, 0, accuracy: 1)
         XCTAssertEqual(pixels.minY, 0, accuracy: 1)
-    }
-
-    func testWordRatingsPersistAndAffectOnlyNewRanking() throws {
-        let suite = "WordFeedbackTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let rated = RankedWord(text: "Résumé", score: 2)
-        let other = RankedWord(text: "Invoice", score: 2.3)
-        let currentSuggestions = WordFeedback.suggestions(from: [other, rated], votes: [:])
-        XCTAssertEqual(currentSuggestions.map(\.id), ["invoice", "resume"])
-
-        let saved = try WordFeedback.set(.up, for: rated, in: defaults)
-        XCTAssertEqual(WordFeedback.load(from: defaults)["resume"], 1)
-        XCTAssertEqual(currentSuggestions.map(\.id), ["invoice", "resume"])
-        XCTAssertEqual(WordFeedback.suggestions(from: [other, rated], votes: saved).map(\.id),
-            ["resume", "invoice"])
-
-        let corrected = try WordFeedback.set(.down, for: rated, in: defaults)
-        XCTAssertEqual(corrected["resume"], -1)
-        XCTAssertEqual(WordFeedback.suggestions(from: [other, rated], votes: corrected).map(\.id),
-            ["invoice", "resume"])
-        XCTAssertEqual(WordFeedback.suggestions(from: [other], votes: corrected).map(\.id), ["invoice"])
-        try WordFeedback.clear(in: defaults)
-        XCTAssertTrue(WordFeedback.load(from: defaults).isEmpty)
     }
 
     func testOCRSelectsPhoneLanguageThenEnglish() {
@@ -64,7 +48,9 @@ final class BasicTests: XCTestCase {
         let bodyWords = (0..<35).map { "Fachwort\(alphabet[$0 / 26])\(alphabet[$0 % 26])" }
         let crowded = (["Absender", "Anschrift", "Kontakt", "Kundennummer", "Referenz", "Datum", "Betreff: Rechnung"]
             + bodyWords + bodyWords + bodyWords).joined(separator: "\n")
-        XCTAssertTrue(DocumentAnalyzer.analyze(pages: [crowded]).words.contains { $0.id == "rechnung" })
+        let ranked = DocumentAnalyzer.analyze(pages: [crowded]).words
+        XCTAssertLessThanOrEqual(ranked.count, 30)
+        XCTAssertTrue(ranked.contains { $0.id == "rechnung" })
         let splitSubject = (["Absender", "Anschrift", "Kontakt", "Kundennummer", "Referenz", "Datum", "Thema:", "Lieferumfang"]
             + bodyWords + bodyWords + bodyWords).joined(separator: "\n")
         XCTAssertTrue(DocumentAnalyzer.analyze(pages: [splitSubject]).words.contains { $0.id == "lieferumfang" })
@@ -91,6 +77,14 @@ final class BasicTests: XCTestCase {
         for filler in ["the", "und", "www"] {
             XCTAssertFalse(suggestions.contains(filler), "Unexpected filler: \(filler)")
         }
+    }
+
+    func testLongerWordsGetOnlyASmallRankingBonus() throws {
+        let words = DocumentAnalyzer.analyze(pages: ["Haus Hausverwaltung"]).words
+        let short = try XCTUnwrap(words.first { $0.id == "haus" })
+        let long = try XCTUnwrap(words.first { $0.id == "hausverwaltung" })
+        XCTAssertGreaterThan(long.score, short.score)
+        XCTAssertLessThan(long.score - short.score, 0.13)
     }
 
     func testWordRankingUsesCappedSizeAndStyleWithoutPromotingRepeatedHeaders() {
@@ -130,8 +124,8 @@ final class BasicTests: XCTestCase {
             line("Reminder", size: nil, top: 0.65)
         ])
         let neutralScores = Dictionary(uniqueKeysWithValues: DocumentAnalyzer.analyze(pages: [neutralTerms]).words.map { ($0.id, $0.score) })
-        XCTAssertEqual(neutralScores["invoice"], neutralScores["contract"])
-        XCTAssertEqual(neutralScores["mahnung"], neutralScores["reminder"])
+        XCTAssertLessThan(abs((neutralScores["invoice"] ?? 0) - (neutralScores["contract"] ?? 0)), 0.02)
+        XCTAssertLessThan(abs((neutralScores["mahnung"] ?? 0) - (neutralScores["reminder"] ?? 0)), 0.02)
 
         let recognized = DocumentAnalyzer.ocrLine("Invoice", bounds: CGRect(x: 0.1, y: 0.8, width: 0.3, height: 0.05),
             pageHeight: 600, confidence: 0.9)

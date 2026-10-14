@@ -6,7 +6,6 @@ final class SmokeTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing"]
         app.launch()
-        XCTAssertFalse(app.buttons["Settings"].exists)
         app.buttons["openFixture"].tap()
         XCTAssertTrue(app.navigationBars["Name PDF"].waitForExistence(timeout: 40))
         let origin = app.descendants(matching: .any)["documentOrigin"]
@@ -19,17 +18,28 @@ final class SmokeTests: XCTestCase {
         app.scrollViews.firstMatch.swipeUp()
         let invoice = app.buttons.matching(NSPredicate(format: "label CONTAINS[cd] %@", "invoice, not selected")).firstMatch
         XCTAssertTrue(invoice.exists)
-        invoice.press(forDuration: 1)
-        app.buttons["More important"].tap()
-        XCTAssertTrue(invoice.label.contains("rated more important"))
-        invoice.press(forDuration: 1)
-        app.buttons["Remove rating"].tap()
-        XCTAssertTrue(invoice.label.contains("not rated"))
+        invoice.tap()
+        let selectedInvoice = app.buttons.matching(NSPredicate(format: "label CONTAINS[cd] %@", "invoice, selected position 1")).firstMatch
+        XCTAssertTrue(selectedInvoice.exists)
         let date = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "2026-10-05")).firstMatch
         XCTAssertTrue(date.exists)
+        XCTAssertFalse(date.label.contains("suggested date"))
         date.tap()
         XCTAssertTrue(app.buttons["Share"].isEnabled)
+        let chosenName = app.staticTexts["proposedFilename"].label
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(app.navigationBars["Name PDF"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["proposedFilename"].label, chosenName)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.navigationBars["Name PDF"].waitForExistence(timeout: 40))
+        XCTAssertTrue(app.staticTexts["proposedFilename"].waitForExistence(timeout: 40))
+        XCTAssertEqual(app.staticTexts["proposedFilename"].label, chosenName)
         app.buttons["Discard"].tap()
+        XCTAssertTrue(app.buttons["importDocument"].waitForExistence(timeout: 10))
+        app.terminate()
+        app.launch()
         XCTAssertTrue(app.buttons["importDocument"].waitForExistence(timeout: 10))
     }
 }

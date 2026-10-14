@@ -40,6 +40,21 @@ final class TemporarySession: @unchecked Sendable {
         }
     }
 
+    init(root: URL, recovering id: UUID) throws {
+        directory = root.appendingPathComponent(id.uuidString, isDirectory: true)
+        let directory = self.directory
+        descriptor = try Self.withMaintenanceLock(root: root) {
+            let lock = directory.appendingPathComponent("active.lock")
+            let fd = open(lock.path, O_RDWR | O_CLOEXEC)
+            guard fd >= 0 else { throw PipeError.message("The previous temporary document is no longer available.") }
+            guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+                close(fd)
+                throw PipeError.message("The previous document is already open.")
+            }
+            return fd
+        }
+    }
+
     private static func withMaintenanceLock<T>(root: URL, _ action: () throws -> T) throws -> T {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let fd = open(root.appendingPathComponent("maintenance.lock").path,
@@ -60,8 +75,9 @@ final class TemporarySession: @unchecked Sendable {
     static func removeAbandoned(root: URL) throws {
         guard FileManager.default.fileExists(atPath: root.path) else { return }
         try withMaintenanceLock(root: root) {
+            let preserved = (try? ActiveSessionStore.load(root: root))?.id.uuidString
             let children = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey])
-            for child in children where UUID(uuidString: child.lastPathComponent) != nil {
+            for child in children where UUID(uuidString: child.lastPathComponent) != nil && child.lastPathComponent != preserved {
                 let lock = child.appendingPathComponent("active.lock")
                 let fd = open(lock.path, O_RDWR | O_CLOEXEC)
                 if fd < 0 {
